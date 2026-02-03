@@ -1,9 +1,9 @@
 {
   "version": "1.0.0",
-  "generated_at": "2026-01-31T03:48:43.534973+00:00",
+  "generated_at": "2026-02-03T08:12:48.505274+00:00",
   "repository": "https://github.com/copyleftdev/sk1llz",
   "raw_base_url": "https://raw.githubusercontent.com/copyleftdev/sk1llz/master",
-  "skill_count": 96,
+  "skill_count": 97,
   "skills": [
     {
       "id": "fielding-rest",
@@ -948,6 +948,24 @@
         "languages",
         "rust",
         "klabnik"
+      ]
+    },
+    {
+      "id": "levien-native-ui-mastery",
+      "name": "levien",
+      "description": "Build native UIs in the style of Raph Levien, architect of Druid, Xilem, and Vello. Emphasizes declarative reactive architecture, synchronized tree transformations, GPU-accelerated rendering, and idiomatic Rust patterns. Use when designing responsive, beautiful native UIs or 2D graphics systems.",
+      "category": "languages",
+      "subcategory": "rust",
+      "path": "languages/rust/levien",
+      "files": [
+        "SKILL.md",
+        "philosophy.md",
+        "references.md"
+      ],
+      "tags": [
+        "languages",
+        "rust",
+        "levien"
       ]
     },
     {
