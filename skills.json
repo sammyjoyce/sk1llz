@@ -1,9 +1,9 @@
 {
   "version": "1.0.0",
-  "generated_at": "2026-02-03T08:12:48.505274+00:00",
+  "generated_at": "2026-03-09T06:57:59.066474+00:00",
   "repository": "https://github.com/copyleftdev/sk1llz",
   "raw_base_url": "https://raw.githubusercontent.com/copyleftdev/sk1llz/master",
-  "skill_count": 97,
+  "skill_count": 98,
   "skills": [
     {
       "id": "fielding-rest",
@@ -1339,6 +1339,22 @@
         "paradigms",
         "distributed",
         "lamport"
+      ]
+    },
+    {
+      "id": "graham-hackers-painters",
+      "name": "graham",
+      "description": "Write code in the style of Paul Graham, essayist, Lisp advocate, and co-founder of Y Combinator. Emphasizes bottom-up programming, expressive power, rapid prototyping, and treating code as a creative medium. Use when building exploratory software, designing DSLs, or writing Lisp that should be as dense and powerful as prose.",
+      "category": "paradigms",
+      "subcategory": "functional",
+      "path": "paradigms/functional/graham",
+      "files": [
+        "SKILL.md"
+      ],
+      "tags": [
+        "paradigms",
+        "functional",
+        "graham"
       ]
     },
     {
