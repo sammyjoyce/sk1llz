@@ -1,140 +1,156 @@
-# Raymond Hettinger Philosophy⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌‌​​​‌​‍​​​​‌​​​‍‌‌​​​​​‌‍​‌‌​​‌‌​‍​​​​‌​‌​‍​‌‌‌‌​‌‌⁠‍⁠
+# Hettinger Patterns — Code Reference
 
-## Core Beliefs
+Load this file when you need specific before/after code transformations.
 
-### "There Should Be One Obvious Way"
-
-> "Python is a language optimized for code reading, not code writing."
-
-Hettinger champions Python's readability over cleverness. Code is read far more often than written.
-
-### The Transformation Pipeline
-
-Hettinger's signature teaching approach: show the progression from naive to Pythonic code.
+## Iterator Algebra Patterns
 
 ```python
-# Level 0: C-style
-i = 0
-while i < len(items):
-    print(items[i])
-    i += 1
+from itertools import chain, groupby, product, combinations, islice, accumulate, starmap, repeat, tee
 
-# Level 1: Range
-for i in range(len(items)):
-    print(items[i])
+# Flatten one level (not recursive — use recursion or more_itertools for deep)
+nested = [[1, 2], [3, 4], [5, 6]]
+flat = list(chain.from_iterable(nested))  # [1, 2, 3, 4, 5, 6]
 
-# Level 2: Direct iteration
-for item in items:
-    print(item)
+# Running totals — accumulate replaces manual running-sum loops
+from itertools import accumulate
+balances = list(accumulate([100, -20, 50, -10]))  # [100, 80, 130, 120]
 
-# Level 3: With index if needed
-for i, item in enumerate(items):
-    print(i, item)
+# starmap: apply function to pre-packed argument tuples
+from itertools import starmap
+coords = [(2, 5), (3, 2), (10, 3)]
+areas = list(starmap(pow, coords))  # [32, 9, 1000]
+
+# tee: split a single iterator into N independent copies
+# WARNING: if one copy advances far ahead, tee buffers everything — can OOM
+it1, it2 = tee(range(1_000_000), 2)
+# Safe: consume both in lockstep. Dangerous: consume it1 fully, then it2.
+
+# Product replaces nested loops — but watch the cardinality:
+# product(range(100), range(100), range(100)) = 1M iterations, easy to miss
+for x, y, z in product(xs, ys, zs):
+    process(x, y, z)
 ```
 
-## Key Principles
-
-### 1. Use the Right Tool
+## collections Patterns
 
 ```python
-# Bad: Manual dictionary building
-d = {}
-for item in items:
-    key = get_key(item)
-    if key not in d:
-        d[key] = []
-    d[key].append(item)
+from collections import Counter, defaultdict, deque, namedtuple, ChainMap
 
-# Good: defaultdict
-from collections import defaultdict
-d = defaultdict(list)
-for item in items:
-    d[get_key(item)].append(item)
+# Counter arithmetic — the non-obvious parts
+a = Counter(cats=3, dogs=1)
+b = Counter(cats=1, dogs=4)
+a - b          # Counter({'cats': 2}) — drops zero/negative
+a + b          # Counter({'dogs': 5, 'cats': 4})
+a & b          # Counter({'cats': 1, 'dogs': 1}) — min per key
+a | b          # Counter({'dogs': 4, 'cats': 3}) — max per key
++a             # Strips non-positive counts
 
-# Best: groupby (if sorted)
-from itertools import groupby
-d = {k: list(g) for k, g in groupby(sorted(items, key=get_key), key=get_key)}
+# deque as sliding window (maxlen is the trick)
+from collections import deque
+def sliding_window(iterable, n):
+    it = iter(iterable)
+    window = deque(maxlen=n)
+    for _ in range(n):
+        window.append(next(it))
+    yield tuple(window)
+    for item in it:
+        window.append(item)  # auto-evicts leftmost
+        yield tuple(window)
+
+# deque.rotate — O(1) rotation vs O(n) list slice
+d = deque([1, 2, 3, 4, 5])
+d.rotate(2)   # deque([4, 5, 1, 2, 3]) — right rotation
+d.rotate(-1)  # deque([5, 1, 2, 3, 4]) — left rotation
+
+# ChainMap for layered config (CLI > env > file > defaults)
+defaults = {'color': 'blue', 'user': 'guest'}
+env = {'user': 'admin'}
+cli = {'color': 'red'}
+config = ChainMap(cli, env, defaults)
+config['user']   # 'admin' — falls through cli to env
+config['color']  # 'red'   — found in first map
+# Mutations only hit the first map:
+config['new_key'] = 'val'  # goes into cli, not defaults
 ```
 
-### 2. Named Tuples Over Tuples
+## Generator Pipeline Pattern
 
 ```python
-# Bad: Mysterious indices
-point = (10, 20)
-x = point[0]
+# The canonical Hettinger pipeline: each stage is a generator,
+# no intermediate lists, memory stays flat regardless of data size.
+def read_lines(path):
+    with open(path) as f:
+        yield from f
 
-# Good: Self-documenting
-from collections import namedtuple
-Point = namedtuple('Point', ['x', 'y'])
-point = Point(10, 20)
-x = point.x
+def strip_comments(lines):
+    for line in lines:
+        if not line.startswith('#'):
+            yield line.strip()
+
+def parse_records(lines):
+    for line in lines:
+        fields = line.split(',')
+        if len(fields) == 3:
+            yield {'name': fields[0], 'age': int(fields[1]), 'city': fields[2]}
+
+# Compose:
+records = parse_records(strip_comments(read_lines('data.csv')))
+for rec in records:  # Processes one line at a time
+    process(rec)
 ```
 
-### 3. Context Managers for Resource Management
+## Sorting Idioms
 
 ```python
-# Bad: Manual cleanup
-f = open('file.txt')
-try:
-    data = f.read()
-finally:
-    f.close()
+from operator import itemgetter, attrgetter
 
-# Good: Context manager
-with open('file.txt') as f:
-    data = f.read()
+# Multi-key sort: operator functions are faster than lambda
+students = [('Alice', 85), ('Bob', 90), ('Charlie', 85)]
+
+# For descending on one key: negate works for ints, not strings
+sorted(students, key=lambda s: (-s[1], s[0]))
+
+# For objects — attrgetter is ~30% faster than lambda for attribute access
+sorted(users, key=attrgetter('last_name', 'first_name'))
+
+# itemgetter returns tuple for multiple keys — works as sort key directly
+sorted(rows, key=itemgetter(2, 0))  # sort by col 2, then col 0
 ```
 
-### 4. Generators for Memory Efficiency
+## Cooperative super() Patterns
 
 ```python
-# Bad: Build entire list in memory
-def get_squares(n):
-    result = []
-    for i in range(n):
-        result.append(i ** 2)
-    return result
+# Root class stops the chain
+class Root:
+    def draw(self):
+        pass  # Terminates super() chain — no call to super()
 
-# Good: Yield one at a time
-def get_squares(n):
-    for i in range(n):
-        yield i ** 2
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+class Shape(Root):
+    def __init__(self, color='black', **kwargs):
+        self.color = color
+        super().__init__(**kwargs)  # Forward unknown kwargs
+
+    def draw(self):
+        print(f'Drawing in {self.color}')
+        super().draw()
+
+class Moveable(Root):
+    def __init__(self, x=0, y=0, **kwargs):
+        self.x, self.y = x, y
+        super().__init__(**kwargs)
+
+    def draw(self):
+        print(f'At ({self.x}, {self.y})')
+        super().draw()
+
+# Composition via MRO — no code changes to Shape or Moveable:
+class MoveableShape(Shape, Moveable):
+    pass
+
+# MRO: MoveableShape -> Shape -> Moveable -> Root -> object
+ms = MoveableShape(color='red', x=5, y=10)
+ms.draw()  # "Drawing in red" then "At (5, 10)"
 ```
-
-## Famous Talks
-
-1. **"Transforming Code into Beautiful, Idiomatic Python"** (PyCon 2013)
-   - The canonical "Pythonic code" talk
-   - Shows before/after transformations
-
-2. **"Beyond PEP 8"** (PyCon 2015)
-   - Style isn't just formatting
-   - Focus on readability, not rules
-
-3. **"Super Considered Super"** (PyCon 2015)
-   - Proper use of `super()` in Python 3
-   - Cooperative multiple inheritance
-
-4. **"Dataclasses: The Code Generator"** (PyCon 2018)
-   - Modern Python data classes
-   - Reducing boilerplate
-
-## Hettinger's Standard Library Contributions
-
-- `collections` module (Counter, defaultdict, deque, namedtuple, OrderedDict)
-- `itertools` module (chain, groupby, islice, etc.)
-- `functools` module (lru_cache, partial, reduce)
-- Set operations and frozenset
-- Decimal module improvements
-
-## Quotes Collection
-
-> "There's an important distinction between code that runs and code that is correct."
-
-> "If you want to go fast, first focus on going correctly."
-
-> "The art of programming is the art of organizing complexity."
-
-> "Beautiful is better than ugly. Explicit is better than implicit."
-
-> "Don't use classes when a simple function will do."

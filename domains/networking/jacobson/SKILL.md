@@ -1,615 +1,90 @@
 ---
 name: jacobson-network-performance
-description: Engineer network systems in the style of Van Jacobson, the architect of TCP congestion control who saved the internet from collapse. Emphasizes congestion avoidance, RTT-based adaptation, queue management, and understanding network dynamics. Use when optimizing network performance, implementing congestion control, or diagnosing latency issues.
-tags: networking, performance, measurement, protocols, tcp, congestion, monitoring, throughput, latency
+description: Diagnose and fix TCP/IP throughput, latency, bufferbloat, and congestion-control problems the way Van Jacobson would. Use when investigating a fast link that feels slow, choosing or tuning a congestion control (CUBIC/BBR/BBRv3/Hybla/DCTCP), configuring fq_codel/CoDel/CAKE, sizing TCP socket buffers (rmem/wmem/tcp_notsent_lowat), interpreting RTT-under-load and packet captures, or debugging latency spikes on Wi-Fi, satellite, LFNs, datacenters, and CDN edge. Trigger keywords - bufferbloat, congestion control, BBR, CUBIC, fq_codel, CoDel, CAKE, AQM, RTT, BDP, slow start, retransmit, ssthresh, tc qdisc, sysctl tcp_, RACK, PRR, Karn, Wi-Fi latency, satellite TCP, head-of-line blocking, HTTP/2 prioritization.
+tags: networking, tcp, congestion-control, bufferbloat, aqm, latency, performance, bbr, fq_codel
 ---
 
-# Van Jacobson Network Performance Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​​​‌‌‌‍‌​‌​‌‌‌‌‍​​‌​​​​‌‍​‌​‌​​‌‌‍​​​​‌​‌​‍​​​‌​‌​​⁠‍⁠
+# Jacobson Network Performance
 
-## Overview
+## The mental model that beats every checklist
 
-Van Jacobson is the most influential network performance engineer in history. In 1988, when the internet was experiencing "congestion collapse" (throughput dropping to 0.1% of capacity), Jacobson developed the congestion control algorithms that saved it. His slow start, congestion avoidance, fast retransmit, and fast recovery algorithms are still the foundation of TCP today. He also created traceroute, tcpdump, and later CoDel—tools and algorithms that define how we understand and manage networks.
+Jacobson-style work rests on four sentences that take years to internalize:
 
-## Core Philosophy
+1. **The bottleneck has a queue, and the queue's depth is the latency you feel.** Throughput is what's left over.
+2. **RTT under load minus min RTT is the only honest bufferbloat number.** Speed-test "scores" lie because the queue may live in the modem, not in you.
+3. **You only control AQM at the bottleneck.** If a slower device is downstream of your shaper, you've shaped nothing — the queue moved one hop.
+4. **Reordering is not loss, application-limit is not congestion, and a retransmit's RTT is undefined.** Confusing any of these will silently halve your throughput.
 
-> "The network is a shared resource. Every packet you send affects everyone else."
+Before touching a knob, ask yourself: *which of those four am I currently violating, and where is the actual bottleneck queue?* If you can't name the queue, stop and capture before tuning.
 
-> "Congestion is not a problem to be avoided—it's information to be used."
+## The decision that matters most: which congestion control
 
-> "Measure, don't guess. The network will tell you what's happening if you listen."
+Choosing wrong here outweighs every sysctl. Use this table — it encodes findings practitioners learn the hard way.
 
-Jacobson's insight was that the network itself provides feedback about congestion through packet loss and delay. By responding to this feedback correctly, endpoints can cooperatively share bandwidth without central coordination. The key is measuring Round-Trip Time (RTT) accurately and responding to congestion signals promptly.
+| Path characteristic | Pick | Why (and what NOT to use) |
+|---|---|---|
+| Datacenter, sub-ms RTT, ECN-capable fabric | DCTCP (or BBRv3 with ECN) | CUBIC's MD halving is catastrophic at µs RTTs; needs ECN marking, not drops. |
+| LAN / wired internet, deep buffers, low loss | CUBIC | BBR over-runs deep buffers and starves CUBIC neighbors. |
+| Shallow-buffer + large BDP (CDN edge, transit) | BBRv2/v3 | CUBIC misreads shallow drops as congestion and collapses. BBRv1 here causes **100× the retransmits** of CUBIC — never ship BBRv1. |
+| Lossy Wi-Fi / cellular last mile | BBRv3 + RACK-TLP | CUBIC treats wireless retransmits as congestion and never recovers. |
+| GEO satellite, RTT ≈ 600 ms | Hybla, or BBR with `initial_cwnd` raised | CUBIC's slow-start takes minutes to reach line rate at 600 ms RTT; Hybla scales by ρ²/cwnd. |
+| Mixed traffic with CUBIC neighbors you must be fair to | CUBIC, *not* BBR | BBRv3 still has documented fairness/convergence problems with CUBIC, especially with ECN enabled where BBR can starve CUBIC. |
 
-## Design Principles
+**Never enable BBR globally as a "performance upgrade"** — it shifts retransmit cost and bandwidth share onto your neighbors. Test on representative paths first.
 
-1. **Conservation of Packets**: In equilibrium, inject a new packet only when one leaves.
+## Critical numbers practitioners memorize
 
-2. **Additive Increase, Multiplicative Decrease (AIMD)**: Probe for bandwidth slowly, back off quickly.
+These are the values you'll otherwise rediscover by causing an outage:
 
-3. **RTT is Truth**: Round-trip time tells you the network's state.
+- **Jacobson RTO** (RFC 6298): `RTO = SRTT + max(G, 4·RTTVAR)`, with `α=1/8`, `β=1/4`, clock granularity G. The constant 4 is empirical; lowering it increases spurious RTOs sharply.
+- **Linux IW** is 10 segments (RFC 6928). Raising it past 10 risks bursty loss inside the first RTT — only do it for known-clean paths.
+- **CoDel target/interval = 5 ms / 100 ms** is valid only above ~4 Mbit. Below that, target must exceed one MTU's serialization time (≈13 ms at 1 Mbit) or CoDel drops everything.
+- **fq_codel default packet limit (10 000) is insane below 1 Gbit**. Use 1000–1200 at gigE, 600 at 10 Mbit. Quantum 300 below 100 Mbit, MTU+14 at higher rates.
+- **Shaper rate must be 5–15% below the ISP's actual rate**, otherwise the bottleneck queue lives in the modem and AQM has nothing to manage. Yes, you give up bandwidth to win latency. That trade is the whole point.
+- **`tcp_notsent_lowat = 16384`** is the missing piece for HTTP/2, gRPC, and any multiplexed protocol. The default lets megabytes commit to the kernel send buffer, defeating per-stream prioritization.
+- **`net.ipv4.tcp_slow_start_after_idle = 0`** — the default of 1 silently restarts slow-start on long-lived idle keep-alive connections, killing the first response after every pause.
+- **Receive buffer max ≠ "set it high and forget"**. Linux <6.5 had a bug where the autotuner could exceed `tcp_rmem max` and trigger `tcp_collapse`/OFO pruning, dropping throughput sitewide. Cap maximum at 2–3× BDP, never "as big as possible".
+- **BDP** = `bandwidth × min_RTT`. Use **min** RTT, not average — averages already include queueing you're trying to remove.
 
-4. **Self-Clocking**: Use ACKs to pace transmission, not timers.
+Before you load `references/tuning-recipes.md`, the rule of thumb is: change one knob, measure RTT-under-load, repeat. Never change three at once.
 
-5. **Respond to Congestion, Don't Cause It**: Detect early, react appropriately.
+## The diagnosis loop (run this before any fix)
 
-## The Congestion Control Algorithms
+1. `ping` while idle → record `min_rtt` (the only ground truth).
+2. Saturate the link in one direction with `iperf3` or a long download.
+3. `ping` again *during load*. The increase is your bufferbloat budget. >100 ms = severe; >30 ms = uncomfortable for VoIP/games; <5 ms = healthy.
+4. If RTT spikes, the queue is somewhere. Walk hops with `mtr --tcp` or `tcpdump` from each side until the inflated hop appears. **The hop where RTT inflates is the bottleneck queue — that is where AQM must live.**
+5. If you control that hop, apply AQM. If you don't, shape *upstream of it* at 5–15% below its true rate.
 
-### Slow Start
+For deeper interpretation (sojourn time, ACK aggregation on Wi-Fi, packet-pair BW estimation, distinguishing reorder from loss), **READ `references/diagnosis-playbook.md` before you trust your numbers**.
 
-```
-On connection start or after timeout:
-    cwnd = 1 MSS (or IW = 10 in modern TCP)
-    
-On each ACK received:
-    cwnd = cwnd + MSS  (exponential growth)
-    
-Until:
-    cwnd >= ssthresh  →  enter Congestion Avoidance
-    OR packet loss    →  enter Fast Recovery
-```
+## Anti-patterns: each one has burned a senior engineer
 
-```
-Slow Start Visualization:
+**NEVER set `tcp_rmem`/`tcp_wmem` max to "as big as possible".** It looks free but the autotuner can exceed it under bursty receivers, triggering `tcp_collapse` and OFO pruning that drops *new arriving packets across the whole socket* (Cloudflare 2023). Instead cap at `2 × BDP` and monitor `nstat TcpExtTCPRcvCollapsed`/`TcpExtRcvPruned`.
 
-RTT 1:  [1]                           cwnd = 1
-RTT 2:  [2][3]                        cwnd = 2
-RTT 3:  [4][5][6][7]                  cwnd = 4
-RTT 4:  [8][9][10][11][12][13][14][15] cwnd = 8
-        ↑
-        Exponential growth: doubles each RTT
-```
+**NEVER measure RTT from a retransmitted segment (Karn's rule).** It is seductive because you have the data, but you cannot tell whether the ACK is for the original or the retransmit — feeding ambiguous samples into Jacobson's smoother corrupts SRTT permanently and causes retransmit storms. Instead skip the sample and double the RTO on every consecutive timeout until a clean ACK arrives.
 
-### Congestion Avoidance
+**NEVER trust 3-dupack as your loss signal on a fast or reordering path.** The "3" was chosen for 1988 networks. On modern paths reorder >3 is routine, so dupack-based recovery causes spurious half-windows and tanks throughput. Instead enable RACK-TLP (RFC 8985, Linux 4.18+, FreeBSD `tcp_rack`) which uses per-segment timestamps and survives reorder, application-limited senders, and lost retransmits.
 
-```
-When cwnd >= ssthresh:
-    
-On each ACK received:
-    cwnd = cwnd + MSS * (MSS / cwnd)  (linear growth)
-    
-    Equivalently: cwnd increases by 1 MSS per RTT
-    
-On packet loss (3 duplicate ACKs):
-    ssthresh = cwnd / 2
-    cwnd = ssthresh + 3 MSS
-    Enter Fast Recovery
-    
-On timeout:
-    ssthresh = cwnd / 2
-    cwnd = 1 MSS
-    Enter Slow Start
-```
+**NEVER run `netem` and another qdisc on the same machine.** netem's 1000-packet default queue silently becomes the bottleneck and your "200 ms emulated link" is actually a tail-drop FIFO. Instead run netem on a dedicated middle box.
 
-```
-Congestion Avoidance Visualization:
+**NEVER test bufferbloat through a switch you didn't characterize.** Some gigE switches have *50 ms* of internal buffering; your fq_codel results reflect the switch, not your qdisc. Instead either remove the switch or measure its buffering under saturating cross-traffic first.
 
-cwnd
-  ^
-  |         /\
-  |        /  \        /\
-  |       /    \      /  \
-  |      /      \    /    \
-  |     /        \  /      \
-  |    /          \/        \
-  |   /                      ↓ loss: cwnd = cwnd/2
-  |  / ← slow start
-  | /
-  +---------------------------------> time
-     ssthresh
-```
+**NEVER leave TSO/GSO/GRO on at sub-100 Mbit AQM points.** "Superpackets" of up to 64 KB defeat CoDel's head-drop and inflate per-packet sojourn time invisibly. Instead disable on the bottleneck NIC (`ethtool -K eth0 tso off gso off gro off`) or use CAKE which performs offload-peeling.
 
-### Fast Retransmit and Fast Recovery
+**NEVER raise the initial congestion window past 10 because "more is faster".** It is faster *only* when there is no loss in the first RTT; on shallow-buffer paths it causes a burst loss before any feedback exists, pushing the connection straight into RTO. Instead leave IW10 unless you have measured your path's first-RTT loss profile.
 
-```
-On receiving 3 duplicate ACKs (same ACK number):
-    # Packet was likely lost, not delayed
-    
-    ssthresh = cwnd / 2
-    cwnd = ssthresh + 3 MSS  (inflate for packets in flight)
-    Retransmit the missing segment
-    
-On each additional duplicate ACK:
-    cwnd = cwnd + MSS  (keep inflating)
-    
-On new ACK (acknowledges new data):
-    cwnd = ssthresh  (deflate to new window)
-    Enter Congestion Avoidance
-```
+**NEVER disable Nagle (`TCP_NODELAY`) on bulk transfers "to be safe".** It interacts with delayed-ACK to cause the famous 200 ms write-write-read stall pattern only on small interactive writes; on bulk transfers Nagle does nothing harmful and disabling it just wastes packets. Instead disable Nagle only on request/response sockets, and prefer `TCP_CORK`/`MSG_MORE` for "I have more coming".
 
-## RTT Estimation
+**NEVER fix bufferbloat by "increasing buffer size".** It is the literal opposite of the cure. Larger buffers absorb more packets before signaling congestion, raising the standing queue and the latency. Instead reduce buffers, install AQM, and shape below the bottleneck rate.
 
-### Jacobson's Algorithm
+## Freedom calibration
 
-```python
-# Jacobson's RTT estimator (RFC 6298)
+The diagnosis loop is high-freedom: think, measure, hypothesize, repeat — there is no script that works for every path. The numeric knobs (sysctls, qdisc parameters, RTO constants) are low-freedom: use the values above or in `references/tuning-recipes.md` exactly, change one at a time, and measure RTT under load after each change. Mixing the two — being scripted about diagnosis or creative about RTO constants — is how outages happen.
 
-class RTTEstimator:
-    """
-    Jacobson's algorithm for RTT estimation.
-    The foundation of all TCP timing.
-    """
-    
-    def __init__(self):
-        self.srtt = None      # Smoothed RTT
-        self.rttvar = None    # RTT variance
-        self.rto = 1.0        # Retransmission timeout
-        
-        # Constants (from RFC 6298)
-        self.alpha = 1/8      # SRTT smoothing factor
-        self.beta = 1/4       # RTTVAR smoothing factor
-        self.K = 4            # RTO variance multiplier
-        self.G = 0.001        # Clock granularity (1ms)
-    
-    def update(self, measured_rtt: float):
-        """
-        Update RTT estimate with new measurement.
-        """
-        if self.srtt is None:
-            # First measurement
-            self.srtt = measured_rtt
-            self.rttvar = measured_rtt / 2
-        else:
-            # Jacobson's algorithm
-            # RTTVAR = (1 - beta) * RTTVAR + beta * |SRTT - R'|
-            self.rttvar = (1 - self.beta) * self.rttvar + \
-                          self.beta * abs(self.srtt - measured_rtt)
-            
-            # SRTT = (1 - alpha) * SRTT + alpha * R'
-            self.srtt = (1 - self.alpha) * self.srtt + \
-                        self.alpha * measured_rtt
-        
-        # RTO = SRTT + max(G, K * RTTVAR)
-        self.rto = self.srtt + max(self.G, self.K * self.rttvar)
-        
-        # Clamp RTO to reasonable bounds
-        self.rto = max(1.0, min(60.0, self.rto))
-        
-        return self.rto
-    
-    def timeout_occurred(self):
-        """
-        Double RTO on timeout (exponential backoff).
-        """
-        self.rto = min(60.0, self.rto * 2)
-```
+## Loading triggers
 
-### Karn's Algorithm
-
-```python
-# Karn's algorithm: Don't update RTT from retransmitted segments
-
-class KarnRTTEstimator(RTTEstimator):
-    """
-    Karn's algorithm: only measure RTT from non-retransmitted segments.
-    Avoids ambiguity about which transmission the ACK is for.
-    """
-    
-    def __init__(self):
-        super().__init__()
-        self.retransmitted = set()
-    
-    def send_segment(self, seq_num: int, is_retransmit: bool):
-        """Track which segments are retransmits."""
-        if is_retransmit:
-            self.retransmitted.add(seq_num)
-        else:
-            self.retransmitted.discard(seq_num)
-    
-    def receive_ack(self, ack_num: int, measured_rtt: float):
-        """
-        Only update RTT if segment wasn't retransmitted.
-        """
-        if ack_num in self.retransmitted:
-            # Ambiguous: was this ACK for original or retransmit?
-            # Don't update RTT, but do clear the retransmit flag
-            self.retransmitted.discard(ack_num)
-            return None
-        else:
-            # Safe to update RTT
-            return self.update(measured_rtt)
-```
-
-## When Engineering Networks
-
-### Always
-
-- Measure RTT continuously—it's your primary signal
-- Respond to packet loss by reducing rate
-- Use AIMD for stable convergence
-- Implement exponential backoff on timeouts
-- Consider the network as a shared resource
-- Test under realistic congestion conditions
-
-### Never
-
-- Send faster than ACKs arrive (violates self-clocking)
-- Ignore packet loss (the network is telling you something)
-- Use fixed timeouts (RTT varies enormously)
-- Assume the network is empty (others share it)
-- Measure RTT from retransmits (Karn's algorithm)
-- React to single events (smooth your signals)
-
-### Prefer
-
-- RTT-based signals over loss-based (less destructive)
-- Gradual probing over aggressive sending
-- Self-clocking over timer-based pacing
-- Smooth estimates over instantaneous values
-- Multiplicative decrease over additive (stability)
-- End-to-end measurement over assumptions
-
-## Code Patterns
-
-### TCP Congestion Control Implementation
-
-```python
-class JacobsonCongestionControl:
-    """
-    Jacobson's TCP congestion control.
-    The algorithm that saved the internet.
-    """
-    
-    def __init__(self, mss: int = 1460):
-        self.mss = mss
-        self.cwnd = mss  # Congestion window
-        self.ssthresh = 65535  # Slow start threshold
-        self.state = 'SLOW_START'
-        self.dup_ack_count = 0
-        self.rtt_estimator = RTTEstimator()
-    
-    def on_ack(self, bytes_acked: int, is_duplicate: bool, rtt: float = None):
-        """
-        Process an ACK.
-        """
-        if rtt is not None:
-            self.rtt_estimator.update(rtt)
-        
-        if is_duplicate:
-            return self._on_duplicate_ack()
-        else:
-            self.dup_ack_count = 0
-            return self._on_new_ack(bytes_acked)
-    
-    def _on_new_ack(self, bytes_acked: int):
-        """Handle new ACK (acknowledges new data)."""
-        
-        if self.state == 'SLOW_START':
-            # Exponential growth
-            self.cwnd += self.mss
-            
-            if self.cwnd >= self.ssthresh:
-                self.state = 'CONGESTION_AVOIDANCE'
-                
-        elif self.state == 'CONGESTION_AVOIDANCE':
-            # Linear growth: +1 MSS per RTT
-            # Approximated as: cwnd += MSS * (MSS / cwnd) per ACK
-            self.cwnd += self.mss * self.mss // self.cwnd
-            
-        elif self.state == 'FAST_RECOVERY':
-            # Exit fast recovery
-            self.cwnd = self.ssthresh
-            self.state = 'CONGESTION_AVOIDANCE'
-        
-        return {'cwnd': self.cwnd, 'state': self.state}
-    
-    def _on_duplicate_ack(self):
-        """Handle duplicate ACK."""
-        self.dup_ack_count += 1
-        
-        if self.state == 'FAST_RECOVERY':
-            # Inflate cwnd for each dup ACK
-            self.cwnd += self.mss
-            
-        elif self.dup_ack_count == 3:
-            # Enter fast recovery
-            self.ssthresh = max(self.cwnd // 2, 2 * self.mss)
-            self.cwnd = self.ssthresh + 3 * self.mss
-            self.state = 'FAST_RECOVERY'
-            return {'retransmit': True, 'cwnd': self.cwnd}
-        
-        return {'cwnd': self.cwnd, 'state': self.state}
-    
-    def on_timeout(self):
-        """Handle retransmission timeout."""
-        # Timeout is severe: go back to slow start
-        self.ssthresh = max(self.cwnd // 2, 2 * self.mss)
-        self.cwnd = self.mss
-        self.state = 'SLOW_START'
-        self.dup_ack_count = 0
-        self.rtt_estimator.timeout_occurred()
-        
-        return {'retransmit': True, 'cwnd': self.cwnd, 'rto': self.rtt_estimator.rto}
-    
-    def bytes_in_flight_limit(self) -> int:
-        """Maximum bytes allowed in flight."""
-        return self.cwnd
-```
-
-### Traceroute Implementation
-
-```python
-class Traceroute:
-    """
-    Jacobson's traceroute: discover the path packets take.
-    Uses TTL expiration to elicit ICMP responses from routers.
-    """
-    
-    def __init__(self, 
-                 target: str,
-                 max_hops: int = 30,
-                 probes_per_hop: int = 3,
-                 timeout: float = 5.0):
-        self.target = target
-        self.max_hops = max_hops
-        self.probes = probes_per_hop
-        self.timeout = timeout
-    
-    def trace(self) -> List[Hop]:
-        """
-        Trace the route to target.
-        """
-        hops = []
-        target_reached = False
-        
-        for ttl in range(1, self.max_hops + 1):
-            hop_results = []
-            
-            for probe in range(self.probes):
-                result = self._send_probe(ttl)
-                hop_results.append(result)
-                
-                if result.reached_target:
-                    target_reached = True
-            
-            hops.append(Hop(
-                ttl=ttl,
-                probes=hop_results,
-                addr=self._most_common_addr(hop_results),
-            ))
-            
-            if target_reached:
-                break
-        
-        return hops
-    
-    def _send_probe(self, ttl: int) -> ProbeResult:
-        """
-        Send a single probe with given TTL.
-        """
-        # Create UDP or ICMP packet with specified TTL
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
-        sock.settimeout(self.timeout)
-        
-        # Use high port unlikely to be in use
-        dest_port = 33434 + ttl
-        
-        start_time = time.time()
-        
-        try:
-            sock.sendto(b'', (self.target, dest_port))
-            
-            # Wait for ICMP response
-            icmp_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, 
-                                      socket.IPPROTO_ICMP)
-            icmp_sock.settimeout(self.timeout)
-            
-            data, addr = icmp_sock.recvfrom(1024)
-            rtt = (time.time() - start_time) * 1000  # ms
-            
-            icmp_type = data[20]  # ICMP type in IP payload
-            
-            if icmp_type == 11:  # Time Exceeded
-                return ProbeResult(addr=addr[0], rtt=rtt, reached_target=False)
-            elif icmp_type == 3:  # Destination Unreachable (we reached it!)
-                return ProbeResult(addr=addr[0], rtt=rtt, reached_target=True)
-            
-        except socket.timeout:
-            return ProbeResult(addr=None, rtt=None, reached_target=False)
-        
-        finally:
-            sock.close()
-```
-
-### Network Diagnostic Tools
-
-```python
-class NetworkDiagnostics:
-    """
-    Jacobson-style network diagnostics.
-    Measure, don't guess.
-    """
-    
-    def measure_bandwidth_delay_product(self, 
-                                         rtt_ms: float, 
-                                         bandwidth_mbps: float) -> int:
-        """
-        Calculate BDP: the amount of data "in flight" for full utilization.
-        
-        BDP = RTT × Bandwidth
-        
-        This determines optimal buffer and window sizes.
-        """
-        rtt_seconds = rtt_ms / 1000
-        bandwidth_bytes_per_sec = bandwidth_mbps * 1_000_000 / 8
-        
-        bdp_bytes = int(rtt_seconds * bandwidth_bytes_per_sec)
-        
-        return bdp_bytes
-    
-    def diagnose_congestion(self, 
-                             samples: List[RTTSample]) -> CongestionDiagnosis:
-        """
-        Diagnose network congestion from RTT samples.
-        """
-        if len(samples) < 10:
-            return CongestionDiagnosis(status='insufficient_data')
-        
-        rtts = [s.rtt for s in samples]
-        min_rtt = min(rtts)
-        avg_rtt = sum(rtts) / len(rtts)
-        max_rtt = max(rtts)
-        
-        # Buffering = avg_rtt - min_rtt
-        buffering_delay = avg_rtt - min_rtt
-        
-        # Jitter = variance in RTT
-        variance = sum((r - avg_rtt) ** 2 for r in rtts) / len(rtts)
-        jitter = variance ** 0.5
-        
-        # Diagnose
-        if buffering_delay > min_rtt:
-            status = 'severe_buffering'
-            recommendation = 'Reduce buffer sizes or apply AQM'
-        elif buffering_delay > min_rtt * 0.5:
-            status = 'moderate_buffering'
-            recommendation = 'Consider AQM (CoDel/fq_codel)'
-        elif jitter > min_rtt * 0.3:
-            status = 'high_jitter'
-            recommendation = 'Check for competing traffic or poor link'
-        else:
-            status = 'healthy'
-            recommendation = 'Network performing well'
-        
-        return CongestionDiagnosis(
-            status=status,
-            min_rtt=min_rtt,
-            avg_rtt=avg_rtt,
-            buffering_delay=buffering_delay,
-            jitter=jitter,
-            recommendation=recommendation,
-        )
-    
-    def estimate_available_bandwidth(self,
-                                      packet_pairs: List[PacketPair]) -> float:
-        """
-        Estimate available bandwidth using packet pair technique.
-        """
-        # Dispersion = time between arrivals of back-to-back packets
-        # Bandwidth = packet_size / dispersion
-        
-        bandwidths = []
-        for pair in packet_pairs:
-            if pair.dispersion > 0:
-                bw = pair.packet_size / pair.dispersion
-                bandwidths.append(bw)
-        
-        if not bandwidths:
-            return 0.0
-        
-        # Use median to filter outliers
-        bandwidths.sort()
-        median_idx = len(bandwidths) // 2
-        return bandwidths[median_idx]
-```
-
-### CoDel (Controlled Delay)
-
-```python
-class CoDel:
-    """
-    CoDel: Controlled Delay AQM.
-    Jacobson & Nichols' solution to bufferbloat.
-    
-    Key insight: control delay, not queue length.
-    """
-    
-    def __init__(self,
-                 target_delay_ms: float = 5.0,
-                 interval_ms: float = 100.0):
-        self.target = target_delay_ms
-        self.interval = interval_ms
-        
-        self.first_above_time = None
-        self.drop_next = 0
-        self.count = 0
-        self.dropping = False
-    
-    def should_drop(self, packet: Packet, now_ms: float) -> bool:
-        """
-        Decide whether to drop a packet.
-        
-        CoDel only drops when queue delay persistently exceeds target.
-        """
-        sojourn_time = now_ms - packet.enqueue_time
-        
-        if sojourn_time < self.target:
-            # Good: delay below target
-            self.first_above_time = None
-            return False
-        
-        # Delay exceeds target
-        if self.first_above_time is None:
-            # First time above target
-            self.first_above_time = now_ms
-            return False
-        
-        if now_ms - self.first_above_time < self.interval:
-            # Haven't been above target long enough
-            return False
-        
-        # Persistent high delay: start/continue dropping
-        if not self.dropping:
-            self.dropping = True
-            self.count = 1
-            self.drop_next = now_ms + self.interval
-            return True
-        
-        if now_ms >= self.drop_next:
-            self.count += 1
-            # Decrease interval: drop more aggressively
-            self.drop_next = now_ms + self.interval / (self.count ** 0.5)
-            return True
-        
-        return False
-    
-    def dequeue(self, queue: Queue, now_ms: float) -> Optional[Packet]:
-        """
-        Dequeue with CoDel logic.
-        """
-        packet = queue.peek()
-        if packet is None:
-            self.dropping = False
-            return None
-        
-        if self.should_drop(packet, now_ms):
-            queue.pop()  # Drop this packet
-            # Try next packet
-            return self.dequeue(queue, now_ms)
-        
-        return queue.pop()
-```
-
-## Mental Model
-
-Jacobson approaches network performance by asking:
-
-1. **What does the RTT tell me?** It's the network's heartbeat
-2. **Is there packet loss?** The network signaling congestion
-3. **Am I being fair?** Others share this resource
-4. **Am I measuring or guessing?** Always measure
-5. **What's the delay vs. throughput tradeoff?** Optimize for the use case
-
-## The Network Performance Checklist
-
-```
-□ Measure RTT continuously and accurately
-□ Respond to congestion signals (loss, delay)
-□ Use AIMD for stable convergence
-□ Implement proper timeout calculation (Jacobson's algorithm)
-□ Follow Karn's algorithm for retransmit RTT
-□ Understand your bandwidth-delay product
-□ Check for bufferbloat (RTT under load vs idle)
-□ Use appropriate queue management (CoDel/fq_codel)
-```
-
-## Signature Jacobson Moves
-
-- Slow start and congestion avoidance
-- Fast retransmit and fast recovery
-- RTT estimation with variance (Jacobson's algorithm)
-- Self-clocking via ACK pacing
-- AIMD (Additive Increase, Multiplicative Decrease)
-- CoDel active queue management
-- traceroute and tcpdump
-- Conservation of packets principle
+- For exact `sysctl`, `tc`, and `ethtool` recipes per environment (Wi-Fi router, datacenter ToR, CDN edge, GEO satellite, home gateway): **READ `references/tuning-recipes.md`**.
+- For packet-capture interpretation, sojourn-time math, ACK-aggregation on Wi-Fi, packet-pair bandwidth estimation, and deciding "reorder vs loss vs policer": **READ `references/diagnosis-playbook.md`**.
+- **Do NOT load** either reference for a pure conceptual question ("explain BBR vs CUBIC") — the table above is sufficient.
+- **Do NOT load** `tuning-recipes.md` until you have completed the diagnosis loop and identified the bottleneck queue. Tuning before diagnosis is the #1 cause of regressions.

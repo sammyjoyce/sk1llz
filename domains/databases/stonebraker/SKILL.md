@@ -1,250 +1,188 @@
 ---
 name: stonebraker-database-architecture
-description: Design databases in the style of Michael Stonebraker, Turing Award winner and creator of Ingres, Postgres, VoltDB, and Vertica. Emphasizes clean architecture, separation of OLTP/OLAP, and building systems that last decades. Use when designing database internals, storage engines, or making fundamental architectural decisions.
-tags: databases, relational, acid, transactions, query-processing, storage, schema-design, sql, distributed-db
+description: >-
+  Design database systems applying Michael Stonebraker's architectural principles:
+  workload-specific engine selection, OLTP/OLAP separation, main-memory optimization,
+  shared-nothing partitioning, and extensible type systems. Use when making fundamental
+  database architecture decisions, choosing between row-store and column-store,
+  designing partitioning schemes, evaluating NewSQL vs traditional RDBMS, building
+  storage engines, or deciding whether to specialize or use a general-purpose database.
+  Use when user mentions "database architecture", "OLTP vs OLAP", "column store",
+  "partition strategy", "VoltDB", "Vertica", "H-Store", "C-Store", "storage engine design",
+  "one size fits all", or "specialized database".
 ---
 
-# Michael Stonebraker Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​​​‌​​‍​​​‌‌​‌‌‍​​‌​‌​​​‍​‌‌‌​‌‌‌‍​​​​‌​​‌‍​‌‌​‌​​​⁠‍⁠
+# Stonebraker Database Architecture
 
-## Overview
+## Thinking Framework
 
-Michael Stonebraker is a Turing Award winner (2014) who has created more influential database systems than anyone in history: Ingres, Postgres, VoltDB, Vertica, C-Store, H-Store, and SciDB. His work spans five decades and continues to shape how we think about data management.
+Before any database architecture decision, ask yourself:
 
-## Core Philosophy
+1. **What is the actual workload shape?** Count the ratio of reads to writes, average
+   rows touched per query, and concurrency level. A workload touching <100 rows per
+   transaction with >10K TPS is OLTP. Scanning >10K rows with aggregations is OLAP.
+   Mixing them in one engine is the #1 architectural mistake.
 
-> "One size fits all is a thing of the past."
+2. **Where does the overhead actually live?** In a traditional RDBMS under OLTP load,
+   the 2008 "Looking Glass" study found useful work was <12% of CPU time—the rest was
+   buffer management, locking, latching, and logging. The 2025 follow-up found that
+   after eliminating those (as VoltDB does), communication/networking becomes the new
+   bottleneck: 51–68% of server CPU in stored-procedure mode, higher with client-side
+   transactions. Know which era your system lives in before optimizing.
 
-> "The database market is fragmenting. Different workloads need different architectures."
+3. **Can you partition such that >95% of transactions are single-partition?** If yes,
+   single-threaded partitions (H-Store model) eliminate locking entirely. If multi-partition
+   transactions exceed ~10%, performance collapses because they serialize through a
+   global coordinator—only one multi-partition transaction executes at a time across
+   the entire cluster.
 
-> "If you want performance, you have to know your workload."
+4. **Is this a data-fits-in-memory problem?** If your working set fits in RAM, disk-oriented
+   structures (buffer pool, page-level locking, ARIES recovery) are pure overhead. But
+   if data exceeds memory, anti-caching or tiered storage is essential—don't pretend
+   everything is in-memory when it isn't.
 
-Stonebraker believes that specialized databases will always outperform general-purpose ones. The era of the monolithic RDBMS serving all needs is over.
-
-## Design Principles
-
-1. **Workload-Specific Design**: OLTP, OLAP, streaming, and scientific data need different architectures.
-
-2. **Main Memory is the New Disk**: Design for RAM-resident data; disk is for durability, not performance.
-
-3. **Shared-Nothing Scales**: Horizontal partitioning beats shared-disk for scalability.
-
-4. **The Log is the Database**: Write-ahead logging is fundamental; the log can be the source of truth.
-
-5. **Clean Abstractions Endure**: Postgres has lasted 30+ years because of its extensible, clean design.
-
-## When Writing Database Code
-
-### Always
-
-- Design for a specific workload first, generalize later
-- Separate storage engine from query processing
-- Make the common case fast, even at cost to edge cases
-- Build extensibility points (types, operators, indexes, languages)
-- Use write-ahead logging for durability
-- Consider column vs row storage based on access patterns
-
-### Never
-
-- Assume one architecture fits all workloads
-- Ignore the memory hierarchy (L1 → L2 → L3 → RAM → SSD → HDD)
-- Mix OLTP and OLAP in the same engine without thought
-- Underestimate the cost of disk I/O
-- Build without considering concurrency control from day one
-
-### Prefer
-
-- Specialized engines over general-purpose compromises
-- Main-memory optimized structures for OLTP
-- Columnar storage for analytics
-- Shared-nothing over shared-disk
-- Deterministic execution for replication
-
-## Code Patterns
-
-### Separation of Concerns (Postgres Architecture)
+## Decision Tree: Choosing Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  SQL Interface                   │
-├─────────────────────────────────────────────────┤
-│    Parser → Analyzer → Rewriter → Planner       │
-├─────────────────────────────────────────────────┤
-│              Executor (Volcano Model)            │
-├─────────────────────────────────────────────────┤
-│  Access Methods   │  Buffer Manager  │  WAL     │
-├───────────────────┼──────────────────┼──────────┤
-│              Storage Manager                     │
-└─────────────────────────────────────────────────┘
+Workload?
+├─ OLTP (short txns, point lookups, high concurrency)
+│  ├─ Data fits in memory? → Main-memory engine, no buffer pool
+│  │  ├─ >95% single-partition? → Single-threaded partitions (H-Store/VoltDB model)
+│  │  └─ Multi-partition heavy? → Shared-memory MVCC (Hekaton/Silo model)
+│  └─ Data exceeds memory? → Disk-based with anti-caching or tiered storage
+│
+├─ OLAP (aggregations, scans, few writers)
+│  ├─ Queries touch <30% of columns? → Column store (C-Store/Vertica model)
+│  ├─ Queries touch >70% of columns? → Row store may match column store
+│  └─ Mixed: wide tables, selective columns → Column store wins decisively
+│
+├─ HTAP (real-time analytics on operational data)
+│  └─ CAUTION: True HTAP is an unsolved problem. Separate engines with
+│     CDC replication is more predictable than any single-engine HTAP.
+│     The physics of optimization for both is fundamentally adversarial.
+│
+└─ Streaming / Scientific / Array
+   └─ Different data models entirely. Don't force relational.
 ```
 
-### OLTP vs OLAP Design
+## Expert Knowledge: What Takes Years to Learn
 
-```python
-# OLTP: Row-oriented, point queries, high concurrency
-class OLTPStorage:
-    """
-    Stonebraker's H-Store/VoltDB principles:
-    - Main-memory resident
-    - Single-threaded partitions (no locking!)
-    - Stored procedures, not ad-hoc SQL
-    - Deterministic execution for replication
-    """
-    def __init__(self, num_partitions):
-        self.partitions = [Partition() for _ in range(num_partitions)]
-    
-    def execute(self, txn):
-        partition = self.route(txn)
-        # Single-threaded: no locks needed!
-        return partition.execute(txn)
-    
-    def route(self, txn):
-        # Partition by primary key
-        return self.partitions[hash(txn.key) % len(self.partitions)]
+### The OLTP Overhead Taxonomy (Quantified)
 
+Stonebraker's "Looking Glass" (2008) decomposed where CPU time goes in a traditional
+RDBMS running TPC-C. The numbers that matter:
 
-# OLAP: Column-oriented, full scans, compression
-class OLAPStorage:
-    """
-    Stonebraker's C-Store/Vertica principles:
-    - Column-at-a-time processing
-    - Heavy compression (RLE, dictionary, delta)
-    - Projection-based storage (materialized views)
-    - Read-optimized store + write-optimized store
-    """
-    def __init__(self):
-        self.columns = {}  # column_name -> compressed array
-        self.write_store = []  # Recent writes (row-oriented)
-    
-    def scan(self, column_name, predicate):
-        # Operate on compressed data when possible
-        col = self.columns[column_name]
-        return col.scan_with_predicate(predicate)
-    
-    def aggregate(self, column_name, agg_func):
-        # Vectorized execution on columnar data
-        col = self.columns[column_name]
-        return agg_func(col.decompress_batch())
-```
+- **Buffer pool management**: ~35% of CPU (page mapping, pin/unpin, replacement)
+- **Locking**: ~25% (lock table, deadlock detection, lock waits)
+- **Latching**: ~15% (short-term mutual exclusion on internal structures)
+- **Logging (WAL)**: ~15% (serializing log writes, group commit, fsync)
+- **Useful work**: ~10% (actually executing queries)
 
-### Write-Ahead Logging
+H-Store/VoltDB eliminated the first four by going main-memory + single-threaded
+partitions + deterministic execution + command logging instead of WAL. Result: 82×
+faster on TPC-C. But the 2025 "Looking Glass 2.0" (Stonebraker et al., CIDR 2025)
+revealed the *new* bottleneck: VoltDB spends only 23% of CPU on transaction processing;
+~40% goes to internal DBMS networking, ~38% to Linux kernel networking. Kernel bypass
+(DPDK/F-Stack) reclaims this, pushing useful work from 33% to 54% on YCSB.
 
-```python
-class WriteAheadLog:
-    """
-    Fundamental durability mechanism.
-    The log IS the database; tables are just a cache.
-    """
-    def __init__(self, log_path):
-        self.log_file = open(log_path, 'ab')
-        self.lsn = 0  # Log Sequence Number
-    
-    def append(self, record):
-        """Write-ahead: log before modifying data pages."""
-        self.lsn += 1
-        entry = LogEntry(
-            lsn=self.lsn,
-            timestamp=time.time(),
-            record=record
-        )
-        self.log_file.write(entry.serialize())
-        self.log_file.flush()
-        os.fsync(self.log_file.fileno())  # Force to disk
-        return self.lsn
-    
-    def recover(self):
-        """Replay log to reconstruct state after crash."""
-        for entry in self.read_all_entries():
-            self.apply(entry)
-```
+### Column Store Crossover Points
 
-### Extensible Type System (Postgres Model)
+Column stores don't always win for analytics. The crossover depends on table width:
 
-```sql
--- Stonebraker's key insight: let users define their own types
--- This is why Postgres supports JSON, arrays, PostGIS, etc.
+- **<5 columns in table**: Row store and column store perform similarly
+- **Query touches >70% of a wide table's columns**: Row store can match or beat
+  column store because you're reconstructing tuples anyway
+- **Sweet spot for column stores**: Wide tables (20+ columns) where queries touch
+  <30% of columns. Here compression + skip-scan gives 10–100× advantage
+- **C-Store's projection trick**: Store overlapping sorted projections, not just
+  columns. Each projection is a subset of columns sorted on a chosen key.
+  The optimizer picks the projection whose sort order best matches the query.
+  Maintaining multiple projections costs write amplification—budget 2–4× storage
 
-CREATE TYPE complex AS (
-    re double precision,
-    im double precision
-);
+### The Multi-Partition Transaction Cliff
 
-CREATE FUNCTION complex_add(complex, complex) RETURNS complex AS $$
-    SELECT ROW($1.re + $2.re, $1.im + $2.im)::complex;
-$$ LANGUAGE SQL IMMUTABLE;
+In VoltDB/H-Store, multi-partition transactions serialize globally. Practical thresholds:
 
-CREATE OPERATOR + (
-    leftarg = complex,
-    rightarg = complex,
-    function = complex_add,
-    commutator = +
-);
+- **<5% multi-partition**: System performs well, single-partition throughput dominates
+- **5–15%**: Noticeable degradation; multi-partition becomes the scheduling bottleneck
+- **>15%**: System effectively serializes; throughput collapses to single-threaded speed
 
--- Now you can: SELECT (1.0, 2.0)::complex + (3.0, 4.0)::complex;
-```
+The database designer's job is to find a partitioning key that keeps cross-partition
+work below 5%. For e-commerce: partition by customer_id, not order_id (because
+payment transactions join customer and warehouse—partition on the anchor entity).
+When you can't partition cleanly, consider replicating small read-only tables to every
+partition to convert joins into local lookups.
 
-### Partition-Based Concurrency
+### C-Store's Write Store / Read Store Architecture
 
-```python
-class PartitionedDatabase:
-    """
-    H-Store insight: if each partition is single-threaded,
-    you eliminate locking overhead entirely.
-    """
-    def __init__(self, num_partitions):
-        self.partitions = []
-        for i in range(num_partitions):
-            # Each partition runs in its own thread
-            p = Partition(id=i)
-            p.start()
-            self.partitions.append(p)
-    
-    def execute_single_partition(self, txn):
-        """Fast path: no coordination needed."""
-        p = self.get_partition(txn.partition_key)
-        return p.execute(txn)
-    
-    def execute_multi_partition(self, txn):
-        """Slow path: requires coordination."""
-        # Two-phase commit across partitions
-        partitions = self.get_involved_partitions(txn)
-        
-        # Phase 1: Prepare
-        votes = [p.prepare(txn) for p in partitions]
-        if all(votes):
-            # Phase 2: Commit
-            for p in partitions:
-                p.commit(txn)
-        else:
-            for p in partitions:
-                p.abort(txn)
-```
+C-Store maintains two physical stores: a Write Store (WS) optimized for inserts
+(row-oriented, uncompressed) and a Read Store (RS) optimized for queries
+(column-oriented, compressed, sorted). A Tuple Mover periodically migrates WS→RS.
 
-## Mental Model
+Practitioner traps:
+- **Tuple Mover stalls**: If write rate exceeds Tuple Mover throughput, WS grows
+  unboundedly and query performance degrades because the executor must merge
+  WS and RS results. Monitor WS size as a health metric.
+- **Projection maintenance cost**: Each write must update ALL projections. N projections
+  means N× write amplification. Keep projection count to 3–5 per table maximum.
+- **Join index fragility**: Join indexes connecting projections are expensive to maintain
+  under updates. Each modification to a projection requires updating every join
+  index that points into or out of it.
 
-Stonebraker approaches database design by asking:
+## NEVER
 
-1. **What is the workload?** OLTP, OLAP, streaming, scientific?
-2. **Where is the data?** Memory, SSD, disk, distributed?
-3. **What is the access pattern?** Point queries, range scans, full table scans?
-4. **What consistency is required?** ACID, eventual, something in between?
-5. **How will it scale?** Vertical, horizontal, both?
+- **NEVER run OLAP queries against your OLTP database** "just for now." A single
+  analytical scan holding locks or consuming buffer pool pages will spike p99 latency
+  for all OLTP transactions. Stonebraker calls this the cardinal sin. Even read-committed
+  isolation causes cache pollution that degrades OLTP for minutes afterward.
 
-Then design the architecture specifically for those answers.
+- **NEVER assume HTAP solves the separation problem.** HTAP systems (TiDB,
+  AlloyDB, SingleStore) use internal replication from row-store to column-store replicas.
+  This is the same architecture as separate engines + CDC—just hidden. You still pay
+  for replication lag, and the column replica's resource consumption can impact the
+  OLTP engine through shared memory/CPU. Prefer explicit separation where you
+  control the blast radius.
 
-## Signature Stonebraker Moves
+- **NEVER design a partitioning scheme without profiling your actual transaction mix.**
+  The seductive path is to partition by primary key. But if 20% of transactions join
+  across the partition boundary, you've built a system that serializes 20% of throughput.
+  Profile first, then partition on the key that minimizes cross-partition transactions.
 
-- Specialized engines over general-purpose
-- Column stores for analytics, row stores for transactions
-- Main-memory optimization for OLTP
-- Shared-nothing architecture for scale
-- Extensible type systems
-- Clean separation between components
-- Write-ahead logging as the foundation
+- **NEVER use ad-hoc SQL in a high-throughput OLTP system.** Stored procedures
+  (or pre-defined transaction classes) allow the system to pre-plan execution,
+  determine partition routing at compile time, and eliminate per-query optimization
+  overhead. Ad-hoc SQL in OLTP is a 2–5× throughput penalty from parsing,
+  planning, and extra client-server round trips.
 
-## Key Papers
+- **NEVER add a general-purpose index to a column store "just in case."** B-tree
+  indexes on column stores add write amplification without benefiting scan-heavy
+  workloads. Column stores achieve selectivity through sorted projections, zone maps,
+  and min/max pruning—not traditional indexes.
 
-- "The Design of Postgres" (1986)
-- "C-Store: A Column-oriented DBMS" (2005)
-- "H-Store: A High-Performance, Distributed Main Memory Transaction Processing System" (2008)
-- "The End of an Architectural Era" (2007)
-- "One Size Fits All: An Idea Whose Time Has Come and Gone" (2005)
+- **NEVER ignore the network stack in a modern OLTP engine.** Once you eliminate
+  buffer pool/locking/latching overhead, 50–70% of CPU goes to networking. If you
+  benchmark only the query engine, you're measuring the wrong bottleneck. Measure
+  end-to-end including serialization, socket I/O, and kernel overhead.
+
+## Stonebraker's Postgres Extensibility Insight
+
+Postgres survived 40+ years because of one architectural bet: user-defined types,
+operators, index methods, and procedural languages as first-class citizens. This enabled
+PostGIS, JSONB, pgvector, and hundreds of extensions without forking the engine.
+
+The principle: **build extensibility at the type system level, not at the query level.**
+If you let users define new types + operators + index access methods, the optimizer
+and executor handle them automatically. This is cheaper than special-casing every
+new data type in the query engine. When designing a new database system, the
+question isn't "what types should we support?" but "how do we let users add types
+we haven't imagined?"
+
+## Fallback Strategies
+
+| Primary approach fails | Fallback |
+|---|---|
+| Partitioning can't get <5% cross-partition | Replicate hot dimension tables to all partitions; or switch to shared-memory MVCC |
+| Column store write throughput insufficient | Add a row-oriented write buffer (WS/RS pattern); batch writes into larger appends |
+| Main-memory engine exceeds RAM | Anti-caching: evict cold tuples to SSD, fetch on demand; or use tiered storage with access-frequency tracking |
+| Stored procedures too rigid for evolving schema | Use parameterized query templates with pre-compiled plans; avoid full ad-hoc but allow controlled flexibility |
+| Deterministic execution can't handle external calls | Isolate non-deterministic operations (e.g., current_timestamp, random) into a pre-processing step that resolves them before entering the deterministic engine |

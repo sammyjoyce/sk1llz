@@ -1,771 +1,148 @@
 ---
 name: bach-exploratory-testing
-description: Test software in the style of James Bach, pioneer of exploratory testing and context-driven testing. Emphasizes skilled human investigation, heuristics-based test design, and adapting to context rather than following rigid scripts. Use when designing test strategies, performing exploratory testing, or building thinking testers.
-tags: exploratory-testing, test-design, heuristics, risk-based, session-based, manual-testing, quality, critical-thinking
+description: Test software in the style of James Bach and Michael Bolton's Rapid Software Testing (RST) methodology. Use when designing a test strategy, writing or reviewing charters, running exploratory/chartered sessions, debriefing testers, critiquing test plans that over-rely on test cases or automated "tests," deciding whether a failing check is actually a bug, or evaluating whether a tester's report should be trusted. Also use when a stakeholder asks "how much testing is enough?", when SBTM is being introduced, or when testing LLMs/AI systems. Triggers include: exploratory testing, SBTM, session-based test management, RST, test charter, test oracle, FEW HICCUPPS, HTSM, SFDPOT, CRUSSPIC STMPL, "too many test cases", "tests pass but bugs slip through", "automation isn't catching bugs", debriefing a tester, context-driven testing, Bach, Bolton.
 ---
 
-# James Bach Exploratory Testing Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​​​‌‌​‍​​​‌​​​​‍‌​‌‌​‌‌​‍​​‌‌​‌​‌‍​​​​‌​​‌‍‌‌‌​‌​‌‌⁠‍⁠
+# Bach-style Rapid Software Testing
 
-## Overview
+## First, drop three beliefs you almost certainly hold
 
-James Bach is a pioneer of exploratory testing and co-founder of the context-driven testing movement. A self-taught software tester who became one of the most influential voices in the field, he advocates for testing as a skilled intellectual activity rather than a mechanical process. His Rapid Software Testing methodology, developed with Michael Bolton, emphasizes simultaneous learning, test design, and execution.
+If you don't internalise these, nothing else in this skill will land.
 
-## Core Philosophy
+1. **There is no such thing as an "automated test."** Tools do *checking* — the mechanical verification of propositions about the product. Testing is investigation. A Playwright suite, a unit test file, a CI job — all checks. Call them checks. Saying "automated test" in a Bach-style conversation marks you as a novice and leaks into how people measure, staff, and plan testing.
 
-> "Testing is not a phase. Testing is not a checklist. Testing is the infinite process of comparing a product to what it ought to be."
+2. **"Exploratory testing" is not a technique.** It is the default posture of any responsible tester. Since Bach & Bolton's *Exploratory Testing 3.0* (2015) the adjective exists only to contrast with *scripted* — and the distinguishing axis is **tester agency**, not activity. If someone asks "do you use exploratory testing or scripted testing?", the honest answer is "both, simultaneously, in every session"; the real question is how much freedom the tester has from moment to moment.
 
-> "Exploratory testing is simultaneous learning, test design, and test execution."
+3. **A test case is not a unit of measurement.** Never count them. The same testing activity can be expressed as 1 case or 1,000,000 cases — counting it rewards splitting over thinking. "We have 3,400 regression tests" tells a sophisticated reader nothing except that the speaker doesn't know how to describe coverage. Reply with Bach's three coverage questions (below), not a number.
 
-> "A good tester is not a person who follows scripts. A good tester is a person who can think."
+## The Three Coverage Questions (use these in every testing conversation)
 
-Bach rejects the notion that testing can be reduced to following predetermined steps. Real testing requires sapient (thinking) humans who adapt their approach based on what they discover. The tester's mind is the primary testing tool.
+Before claiming you tested something, or accepting someone else's claim:
 
-## Design Principles
+1. **What did you look at?** (product factors, data, configurations — *coverage*)
+2. **How would you recognise a problem if you saw one?** (oracles)
+3. **What did you actually do?** (procedures, techniques)
 
-1. **Context Drives Practice**: There is no universal best practice—only practices that fit the context.
+If the speaker can't answer all three crisply, they performed *activity*, not testing. This is the fastest diagnostic for a hand-wavy QA plan or a half-baked test report.
 
-2. **Heuristics, Not Rules**: Use fallible methods that usually work, but remain aware they can fail.
+## Oracles: how you recognise a problem you didn't predict
 
-3. **Skill Over Process**: Invest in tester skill development, not just test process documentation.
+An oracle is a **heuristic**. It can tell you there *might be* a problem, but it can *never* tell you there is *no* problem. That asymmetry is the whole game. Anyone who says "all tests passed, the product works" has forgotten it.
 
-4. **Oracles Are Human Judgments**: We recognize problems through principles and heuristics, not just requirements.
+Use **A FEW HICCUPPS** (Bach & Bolton's current list — the original 2005 HICCUPPS has been updated; do not teach the old one):
 
-5. **Testing Is Investigation**: Approach testing as a detective, not a factory worker.
+- **A**cceptability — is it *good enough*, not just "not wrong"?
+- **F**amiliarity — inconsistent with a pattern of familiar bugs?
+- **E**xplainability — can you describe its behaviour without hedging?
+- **W**orld — consistent with what you know about reality?
+- **H**istory — consistent with past versions?
+- **I**mage — consistent with the org's desired reputation?
+- **C**omparable products — consistent with similar systems?
+- **C**laims — consistent with docs, specs, marketing?
+- **U**sers' desires — consistent with what reasonable users want?
+- **P**roduct — internally self-consistent?
+- **P**urpose — consistent with apparent and implied uses?
+- **S**tatutes — consistent with laws, regulations, standards?
 
-## The Seven Principles of Context-Driven Testing
+**Key move:** when something "feels off" but you can't explain why, walk the list aloud until a word makes you say *"this one."* That word is the framing for your bug report. Reports without an oracle citation get dismissed; reports with one become very hard to argue with.
 
-```
-1. The value of any practice depends on its context.
-2. There are good practices in context, but no best practices.
-3. People, working together, are the most important part of any project's context.
-4. Projects unfold over time in ways that are often not predictable.
-5. The product is a solution. If the problem isn't solved, the product doesn't work.
-6. Good software testing is a challenging intellectual process.
-7. Only through judgment and skill can we do the right things at the right times.
-```
+For the full oracle catalogue, Doug Hoffman's complementary list, SFDPOT product elements, CRUSSPIC STMPL quality criteria, and the Honest Manual Writer heuristic, **READ `references/oracles-and-coverage.md`.**
 
-## Heuristic Test Strategy Model (HTSM)
+## Writing a charter (the craft beginners get wrong)
 
-Bach's framework for thinking about test strategy:
+Format: *Explore **[target]** with **[resources]** to discover **[information]**.*
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    PROJECT ENVIRONMENT                       │
-│  Customers, Information, Developer Relations, Test Team,    │
-│  Equipment & Tools, Schedule, Test Items, Deliverables      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    PRODUCT ELEMENTS                          │
-│  Structure, Function, Data, Platform, Operations             │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    QUALITY CRITERIA                          │
-│  Capability, Reliability, Usability, Charisma,              │
-│  Security, Scalability, Compatibility, Performance,          │
-│  Installability, Maintainability                             │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    TEST TECHNIQUES                           │
-│  Function, Domain, Stress, Flow, Scenario, Claims,          │
-│  User, Risk, Automatic                                       │
-└─────────────────────────────────────────────────────────────┘
-```
+Hidden skill: **charter sizing**.
 
-## When Testing
+- **Too big** ("Explore checkout to find bugs") → no testing story, nothing to debrief, nothing to finish.
+- **Too small** ("Verify the Save button stores the record") → it's a *check* in disguise. Automate it and move on.
+- **Right-sized:** one focused tester reaches a satisfying stopping point in **60–120 minutes** and produces a reviewable session sheet. If it can't, split it.
 
-### Always
+**Before writing a charter, ask yourself:** *"What information am I buying, and which stakeholder will act on it?"* If you cannot name a decision the result will inform, the charter is vanity. Kill it and rewrite.
 
-- Begin with a testing charter or mission
-- Document your mental model of the product
-- Use oracles to identify potential problems
-- Take notes during sessions (not after)
-- Time-box exploratory sessions (60-90 minutes)
-- Debrief after sessions to capture learnings
-- Question requirements—they are often incomplete
+For sizing worked examples, risk-to-charter translation, and the top six charter anti-patterns, **READ `references/charters.md`.**
 
-### Never
+## Running and debriefing sessions (the SBTM parts people skip)
 
-- Follow scripts blindly without thinking
-- Assume requirements are complete or correct
-- Confuse test execution with testing
-- Believe that passing tests means quality
-- Stop exploring when you find one bug
-- Treat automation as a replacement for thinking
-- Assume absence of evidence is evidence of absence
+- **Session length.** Short = 60m, normal = 90m, long = 120m (±15m). The hard ceiling is **2–4 sessions/tester/day** before cognitive fatigue destroys signal. A schedule of five back-to-back normals is a schedule of cargo-cult SBTM.
+- **Note in real time.** If you reconstruct the session sheet from memory afterwards, you are writing a *memoir*, not a test report. You will unconsciously smooth over dead-ends — which is exactly where the next bug lives.
+- **Track T / B / S** inside on-charter time as rough percentages:
+  - **T** – test design & execution (produces coverage)
+  - **B** – bug investigation & reporting (interrupts coverage)
+  - **S** – setup & configuration (interrupts coverage)
+  A session reported at 10/80/10 means you found a bug and chased it — that may have been correct, but the manager now knows this charter is **not done**.
+- **Opportunity time (O)** is relevant work *outside* the charter's mission. Record it separately. It often produces the best bugs, but do not pretend it was the charter.
 
-### Prefer
+**Debrief with PROOF** (Jon Bach) — a 5–10 minute *conversation*, not a status meeting:
 
-- Questions over assumptions
-- Exploration over confirmation
-- Learning over procedure
-- Skill over certification
-- Models over checklists
-- Collaboration over documentation
-- Oracles over expected results
+- **P**ast — what did you actually do?
+- **R**esults — what happened? (bugs, surprises, questions)
+- **O**bstacles — what got in the way? (testability, environment, missing info)
+- **O**utlook — what should happen next?
+- **F**eelings — how does the tester *feel* about the product and the session?
 
-## Code Patterns
+**The most-dropped letter is F, and dropping it is the single biggest mistake in SBTM.** "I'm uneasy about the payment flow" from an experienced tester is worth more than forty green checks. If a debrief consistently runs longer than 15 minutes, the *session sheet* is broken — fix the sheet, not the debrief.
 
-### Session-Based Test Management
+For the exact session-sheet schema, Jon Bach's PROOF definition, T/B/S/O math, and parser-friendly tagging, **READ `references/sbtm-session-sheet.md`.**
 
-```python
-class ExploratorySession:
-    """
-    A time-boxed exploratory testing session.
-    Bach's SBTM: structured freedom for skilled testers.
-    """
-    
-    def __init__(self,
-                 charter: str,
-                 duration_minutes: int = 90,
-                 tester: str = None):
-        self.charter = charter
-        self.duration = duration_minutes
-        self.tester = tester
-        self.start_time = None
-        self.end_time = None
-        self.notes = []
-        self.bugs = []
-        self.questions = []
-        self.risks = []
-        self.areas_explored = []
-        self.session_metrics = {}
-    
-    def start(self):
-        """Begin the session."""
-        self.start_time = datetime.now()
-        self.log(f"Session started. Charter: {self.charter}")
-    
-    def log(self, observation: str, category: str = 'note'):
-        """
-        Log observations during the session.
-        Categories: note, bug, question, risk, idea
-        """
-        entry = {
-            'timestamp': datetime.now(),
-            'elapsed': self.elapsed_minutes(),
-            'category': category,
-            'content': observation
-        }
-        
-        self.notes.append(entry)
-        
-        if category == 'bug':
-            self.bugs.append(entry)
-        elif category == 'question':
-            self.questions.append(entry)
-        elif category == 'risk':
-            self.risks.append(entry)
-    
-    def elapsed_minutes(self) -> float:
-        """Time elapsed since session start."""
-        if not self.start_time:
-            return 0
-        return (datetime.now() - self.start_time).total_seconds() / 60
-    
-    def remaining_minutes(self) -> float:
-        """Time remaining in session."""
-        return max(0, self.duration - self.elapsed_minutes())
-    
-    def end(self):
-        """
-        End the session and calculate metrics.
-        """
-        self.end_time = datetime.now()
-        
-        self.session_metrics = {
-            'duration_planned': self.duration,
-            'duration_actual': self.elapsed_minutes(),
-            'bugs_found': len(self.bugs),
-            'questions_raised': len(self.questions),
-            'risks_identified': len(self.risks),
-            'areas_explored': len(self.areas_explored),
-            'note_count': len(self.notes)
-        }
-        
-        self.log("Session ended.")
-        return self.generate_report()
-    
-    def generate_report(self) -> SessionReport:
-        """
-        Generate session report for debrief.
-        """
-        return SessionReport(
-            charter=self.charter,
-            tester=self.tester,
-            duration=self.session_metrics['duration_actual'],
-            bugs=self.bugs,
-            questions=self.questions,
-            risks=self.risks,
-            areas=self.areas_explored,
-            notes=self.notes,
-            metrics=self.session_metrics
-        )
+## Anti-patterns (with the part that makes each one seductive)
 
+- **NEVER count test cases as a measure of progress or coverage.** Seductive because the number always goes up and managers love charts. Consequence: the team optimises for *splitting*, not *thinking*; a single activity gets re-tagged into 500 rows and nobody learns anything. Instead, report coverage as answers to the three coverage questions and as risk areas addressed.
 
-class TestCharter:
-    """
-    A testing charter defines the mission for an exploratory session.
-    
-    Format: Explore <target> with <resources> to discover <information>
-    """
-    
-    def __init__(self,
-                 target: str,
-                 resources: List[str],
-                 information_sought: str,
-                 time_box: int = 90,
-                 priority: str = 'medium'):
-        self.target = target
-        self.resources = resources
-        self.information = information_sought
-        self.time_box = time_box
-        self.priority = priority
-    
-    def __str__(self) -> str:
-        return (f"Explore {self.target} "
-                f"with {', '.join(self.resources)} "
-                f"to discover {self.information}")
-    
-    @classmethod
-    def from_risk(cls, risk: Risk, product_area: str) -> 'TestCharter':
-        """
-        Generate charter from identified risk.
-        """
-        return cls(
-            target=product_area,
-            resources=['boundary analysis', 'error guessing', risk.related_technique],
-            information_sought=f"whether {risk.description} can occur",
-            priority=risk.severity
-        )
-```
+- **NEVER call a suite of automated checks a "test suite" or its runs "test runs."** Seductive because the whole industry does it. Consequence: managers hear "tests pass" and conclude testing is done; real testing gets defunded. Instead, put "automated checks" and "exploratory testing" on separate lines in every plan and report.
 
-### Oracle Heuristics
+- **NEVER write session notes after the session from memory.** Seductive because note-taking feels like it interrupts flow. Consequence: you lose the one detail that would have reproduced the bug, and your sheet reads like a victory lap. Instead, take ugly real-time notes (bullets, timestamps, screenshots), then spend the last five minutes of the session tidying them — inside the time-box.
 
-```python
-class OracleHeuristics:
-    """
-    Oracles: principles or mechanisms by which we recognize problems.
-    Bach's FEW HICCUPPS mnemonic for consistency oracles.
-    """
-    
-    # FEW HICCUPPS - Consistency Heuristics
-    CONSISTENCY_ORACLES = {
-        'Familiarity': 'Consistent with what testers have seen before',
-        'Explainability': 'Consistent with what can be explained/documented',
-        'World': 'Consistent with how the real world works',
-        
-        'History': 'Consistent with past versions of the product',
-        'Image': 'Consistent with the organization\'s desired image',
-        'Comparable_Products': 'Consistent with similar products',
-        'Claims': 'Consistent with documentation, ads, specs',
-        'User_Expectations': 'Consistent with what users want/expect',
-        'Product': 'Consistent with itself (internal consistency)',
-        'Purpose': 'Consistent with the explicit/implicit purpose',
-        'Statutes': 'Consistent with laws, regulations, standards',
-    }
-    
-    def __init__(self):
-        self.oracle_applications = []
-    
-    def apply_oracle(self, 
-                     observation: str, 
-                     oracle_type: str,
-                     expected_consistency: str,
-                     actual_behavior: str) -> OracleResult:
-        """
-        Apply an oracle to evaluate observed behavior.
-        """
-        is_consistent = self.evaluate_consistency(
-            expected_consistency, 
-            actual_behavior
-        )
-        
-        result = OracleResult(
-            oracle=oracle_type,
-            observation=observation,
-            expected=expected_consistency,
-            actual=actual_behavior,
-            consistent=is_consistent,
-            confidence=self.assess_confidence(oracle_type),
-            notes=[]
-        )
-        
-        self.oracle_applications.append(result)
-        return result
-    
-    def evaluate_consistency(self, expected: str, actual: str) -> bool:
-        """
-        This requires human judgment—cannot be fully automated.
-        Returns a preliminary assessment.
-        """
-        # This is where human thinking is essential
-        # Automation can only flag for review
-        return None  # Requires human judgment
-    
-    def assess_confidence(self, oracle_type: str) -> str:
-        """
-        Some oracles are more reliable than others.
-        """
-        high_confidence = ['Claims', 'Statutes', 'Product']
-        medium_confidence = ['User_Expectations', 'Comparable_Products', 'History']
-        low_confidence = ['Familiarity', 'World', 'Image']
-        
-        if oracle_type in high_confidence:
-            return 'HIGH'
-        elif oracle_type in medium_confidence:
-            return 'MEDIUM'
-        else:
-            return 'LOW'
-    
-    def generate_test_ideas(self, product_element: str) -> List[str]:
-        """
-        Generate test ideas by applying each oracle.
-        """
-        ideas = []
-        
-        for oracle, description in self.CONSISTENCY_ORACLES.items():
-            ideas.append(
-                f"Test {product_element} for {oracle} consistency: "
-                f"Is it {description.lower()}?"
-            )
-        
-        return ideas
+- **NEVER turn a charter into a step-by-step script.** Seductive because it makes the session look "accountable" to auditors and junior testers feel safer. Consequence: you've built a check paid for at a tester's salary, and you've thrown away the tester's judgement — the only thing automation can't do. Instead, leave the *how* to the tester and hold them accountable on the *information* they produced.
 
+- **NEVER report "passed" or "works as expected."** Seductive because it's the language managers want to hear. Consequence: it is literally false — you only know you did not *see* a problem in the specific actions you took. Instead, use **safety language**: *"So far I haven't found a problem in X under conditions Y"* / *"No failure observed in the scenarios I ran."* This sounds pedantic until the first postmortem, when it becomes the only sentence anyone trusts.
 
-class ProductCoverageModel:
-    """
-    Model the product to guide exploration.
-    SFDPOT: Structure, Function, Data, Platform, Operations, Time
-    """
-    
-    ELEMENTS = {
-        'Structure': [
-            'Code modules',
-            'Database schemas', 
-            'File systems',
-            'Configuration files',
-            'Dependencies',
-            'Interfaces'
-        ],
-        'Function': [
-            'Features',
-            'Error handling',
-            'Calculations',
-            'Transformations',
-            'Workflows',
-            'Business rules'
-        ],
-        'Data': [
-            'Input data',
-            'Output data',
-            'Stored data',
-            'Data states',
-            'Data flows',
-            'Data constraints'
-        ],
-        'Platform': [
-            'Operating systems',
-            'Browsers',
-            'Hardware',
-            'Networks',
-            'External services',
-            'Configurations'
-        ],
-        'Operations': [
-            'User scenarios',
-            'Startup/shutdown',
-            'Recovery',
-            'Maintenance',
-            'Updates',
-            'Integration'
-        ],
-        'Time': [
-            'Concurrent usage',
-            'Timeouts',
-            'Date/time handling',
-            'Scheduling',
-            'Sequences',
-            'Race conditions'
-        ]
-    }
-    
-    def __init__(self, product_name: str):
-        self.product = product_name
-        self.coverage_map = {element: [] for element in self.ELEMENTS}
-        self.explored_areas = set()
-    
-    def map_product(self, element: str, specifics: List[str]):
-        """
-        Map specific product elements for coverage tracking.
-        """
-        if element in self.coverage_map:
-            self.coverage_map[element].extend(specifics)
-    
-    def mark_explored(self, element: str, specific: str, session_id: str):
-        """
-        Mark an area as explored.
-        """
-        self.explored_areas.add((element, specific, session_id))
-    
-    def coverage_gaps(self) -> Dict[str, List[str]]:
-        """
-        Identify areas not yet explored.
-        """
-        gaps = {}
-        explored_specifics = {(e, s) for e, s, _ in self.explored_areas}
-        
-        for element, specifics in self.coverage_map.items():
-            unexplored = [s for s in specifics if (element, s) not in explored_specifics]
-            if unexplored:
-                gaps[element] = unexplored
-        
-        return gaps
-    
-    def suggest_charters(self) -> List[str]:
-        """
-        Suggest test charters based on coverage gaps.
-        """
-        charters = []
-        gaps = self.coverage_gaps()
-        
-        for element, specifics in gaps.items():
-            for specific in specifics[:3]:  # Top 3 per element
-                charters.append(
-                    f"Explore {specific} ({element}) to discover potential problems"
-                )
-        
-        return charters
-```
+- **NEVER trust your best technique on familiar code.** Seductive because it worked before. Consequence: the *pesticide paradox* — tests become immune to new bugs; you swear an area is clean while users find bugs daily. Instead, **defocus**: deliberately vary technique, data class, starting state, platform, even tester. If boundary testing found the last five bugs, the next one almost certainly isn't a boundary bug.
 
-### Test Heuristics
+- **NEVER accept "shallow agreement"** on loaded words (*quality*, *done*, *coverage*, *tested*, *automated*, *AI*). Seductive because the meeting ends faster. Consequence: three people leave with three different plans and blame each other in two weeks. Instead, ask each person for a concrete example of what they mean. Takes ninety seconds; saves a sprint.
 
-```python
-class TestHeuristics:
-    """
-    Heuristics are fallible methods for solving problems.
-    Bach's testing heuristics for generating test ideas.
-    """
-    
-    # ZOMBIE heuristic for boundaries
-    ZOMBIE = {
-        'Zero': 'Test with zero, empty, null, none',
-        'One': 'Test with one, single, first, minimum',
-        'Many': 'Test with many, multiple, maximum, large',
-        'Boundary': 'Test at boundaries, edges, limits',
-        'Interface': 'Test at interfaces, handoffs, integrations',
-        'Exceptions': 'Test error conditions, invalid inputs, edge cases'
-    }
-    
-    # CRUSSPIC STMPL for quality criteria
-    QUALITY_CRITERIA = {
-        'Capability': 'Can it perform its functions?',
-        'Reliability': 'Will it work consistently?',
-        'Usability': 'Can real users use it?',
-        'Security': 'Is it protected from threats?',
-        'Scalability': 'Does it handle growth?',
-        'Performance': 'Is it fast enough?',
-        'Installability': 'Can it be deployed?',
-        'Compatibility': 'Does it work with other things?',
-        'Supportability': 'Can it be maintained?',
-        'Testability': 'Can it be tested effectively?',
-        'Maintainability': 'Can it be changed?',
-        'Portability': 'Does it work in different environments?',
-        'Localizability': 'Can it be adapted for different locales?'
-    }
-    
-    def generate_boundary_tests(self, variable: str, data_type: str) -> List[str]:
-        """
-        Generate test ideas using ZOMBIE heuristic.
-        """
-        tests = []
-        
-        if data_type == 'numeric':
-            tests.extend([
-                f"{variable} = 0 (Zero)",
-                f"{variable} = 1 (One)",
-                f"{variable} = -1 (Negative one)",
-                f"{variable} = MAX_INT (Many/Boundary)",
-                f"{variable} = MIN_INT (Many/Boundary)",
-                f"{variable} = MAX + 1 (Boundary overflow)",
-                f"{variable} = decimal value (Interface)",
-                f"{variable} = null/undefined (Exception)",
-                f"{variable} = NaN (Exception)",
-            ])
-        elif data_type == 'string':
-            tests.extend([
-                f"{variable} = '' (Zero/Empty)",
-                f"{variable} = single char (One)",
-                f"{variable} = very long string (Many)",
-                f"{variable} = max length (Boundary)",
-                f"{variable} = max + 1 (Boundary)",
-                f"{variable} = special characters (Interface)",
-                f"{variable} = unicode (Interface)",
-                f"{variable} = null (Exception)",
-                f"{variable} = SQL injection (Exception/Security)",
-            ])
-        elif data_type == 'collection':
-            tests.extend([
-                f"{variable} = [] empty (Zero)",
-                f"{variable} = [1 item] (One)",
-                f"{variable} = [many items] (Many)",
-                f"{variable} = [max items] (Boundary)",
-                f"{variable} = [duplicate items] (Interface)",
-                f"{variable} = null (Exception)",
-                f"{variable} = nested collections (Interface)",
-            ])
-        
-        return tests
-    
-    def generate_quality_tests(self, feature: str) -> Dict[str, List[str]]:
-        """
-        Generate test ideas for each quality criterion.
-        """
-        tests = {}
-        
-        for criterion, question in self.QUALITY_CRITERIA.items():
-            tests[criterion] = [
-                f"{feature}: {question}",
-                f"What would make {feature} fail {criterion.lower()}?",
-                f"How would a user judge {feature}'s {criterion.lower()}?",
-            ]
-        
-        return tests
-    
-    def soap_opera_testing(self, workflow: str) -> List[str]:
-        """
-        Soap Opera Testing: dramatic, complex, intertwined scenarios.
-        Bach's technique for finding interaction bugs.
-        """
-        return [
-            f"Start {workflow}, interrupt midway, start another",
-            f"Run {workflow} with minimum permissions",
-            f"Run {workflow} with conflicting concurrent users",
-            f"Start {workflow}, lose connection, reconnect",
-            f"Run {workflow} with corrupted cache/state",
-            f"Complete {workflow}, immediately undo, redo",
-            f"Run {workflow} at system resource limits",
-            f"Interleave {workflow} with upgrade/migration",
-        ]
-    
-    def touring_heuristics(self, application: str) -> Dict[str, str]:
-        """
-        Touring: systematic exploration strategies.
-        Different "tours" reveal different problems.
-        """
-        return {
-            'Guidebook Tour': f"Follow the documentation exactly for {application}",
-            'Money Tour': f"Test the features that sell {application}",
-            'Landmark Tour': f"Navigate between major features of {application}",
-            'Intellectual Tour': f"Find the most complex parts of {application}",
-            'FedEx Tour': f"Follow data through {application} end to end",
-            'Garbage Tour': f"Look for dead code and unused features in {application}",
-            'Bad Neighborhood Tour': f"Focus on historically buggy areas of {application}",
-            'Museum Tour': f"Test legacy code and old features in {application}",
-            'Back Alley Tour': f"Test least-used features of {application}",
-            'All-Nighter Tour': f"Test {application} over extended time periods",
-        }
-```
+- **NEVER delegate oracle judgement to an LLM.** Bach calls this "Automated Irresponsibility." Seductive because a one-shot demo looks magical. Consequence: LLMs are non-deterministic retrievers — run the same prompt 25× and watch the output drift. Instead, when using AI in testing, run every judgement ≥10×, measure the variance as your *first* signal, and treat any single-shot LLM output as a lead, never as an oracle.
 
-### Rapid Software Testing Session
+- **NEVER use SBTM metrics (session counts, T/B/S ratios) to grade or rank individual testers.** Seductive because it feels like "accountability." Consequence: testers learn to game the numbers — they stop reporting bugs during B-heavy sessions, inflate S on hard days, and never admit a session was wasted. You destroy the honest reporting that made SBTM valuable in the first place. Instead, use the numbers to generate *questions* in debriefs, never conclusions.
 
-```python
-class RapidTestingSession:
-    """
-    Rapid Software Testing: Bach & Bolton's methodology.
-    Testing as a performance, not a procedure.
-    """
-    
-    def __init__(self, 
-                 product: str,
-                 tester: 'SkilledTester',
-                 stakeholder_info: Dict):
-        self.product = product
-        self.tester = tester
-        self.stakeholder = stakeholder_info
-        self.mental_model = ProductCoverageModel(product)
-        self.oracles = OracleHeuristics()
-        self.heuristics = TestHeuristics()
-        self.sessions = []
-        self.findings = []
-    
-    def analyze_context(self) -> ContextAnalysis:
-        """
-        Understand the project context before testing.
-        """
-        return ContextAnalysis(
-            who_is_the_customer=self.stakeholder.get('customer'),
-            what_is_the_mission=self.stakeholder.get('mission'),
-            what_does_quality_mean=self.stakeholder.get('quality_definition'),
-            what_threatens_quality=self.stakeholder.get('risks'),
-            what_resources_exist=self.stakeholder.get('resources'),
-            what_constraints_exist=self.stakeholder.get('constraints'),
-            what_has_been_done=self.stakeholder.get('prior_testing'),
-        )
-    
-    def create_test_strategy(self, context: ContextAnalysis) -> TestStrategy:
-        """
-        Build a test strategy based on context.
-        No best practices—only practices that fit this context.
-        """
-        strategy = TestStrategy(product=self.product)
-        
-        # Prioritize based on risks
-        for risk in context.what_threatens_quality:
-            strategy.add_focus_area(
-                area=risk.area,
-                priority=risk.severity,
-                techniques=self.select_techniques(risk),
-                time_allocation=self.estimate_time(risk)
-            )
-        
-        # Generate charters for each focus area
-        for area in strategy.focus_areas:
-            charters = self.generate_charters(area)
-            strategy.add_charters(area.name, charters)
-        
-        return strategy
-    
-    def select_techniques(self, risk: Risk) -> List[str]:
-        """
-        Select testing techniques based on risk characteristics.
-        """
-        techniques = []
-        
-        if risk.involves_boundaries:
-            techniques.append('Boundary Analysis (ZOMBIE)')
-        if risk.involves_user_interaction:
-            techniques.append('Scenario Testing')
-            techniques.append('Touring')
-        if risk.involves_data:
-            techniques.append('Data Flow Testing')
-            techniques.append('CRUD Testing')
-        if risk.involves_integration:
-            techniques.append('Interface Testing')
-            techniques.append('Soap Opera Testing')
-        if risk.involves_time:
-            techniques.append('Stress Testing')
-            techniques.append('Longevity Testing')
-        
-        # Always include exploratory
-        techniques.append('Exploratory Testing')
-        
-        return techniques
-    
-    def run_session(self, charter: TestCharter) -> SessionReport:
-        """
-        Run a time-boxed exploratory testing session.
-        """
-        session = ExploratorySession(
-            charter=str(charter),
-            duration_minutes=charter.time_box,
-            tester=self.tester.name
-        )
-        
-        session.start()
-        
-        # The actual testing happens here—human cognition
-        # This framework supports but doesn't replace the tester
-        
-        self.sessions.append(session)
-        return session  # Tester controls when to end
-    
-    def debrief(self, session: ExploratorySession) -> DebriefNotes:
-        """
-        Post-session debrief: capture learnings and adjust strategy.
-        """
-        report = session.generate_report()
-        
-        debrief = DebriefNotes(
-            session_id=id(session),
-            what_was_tested=session.areas_explored,
-            what_was_found=session.bugs,
-            what_was_learned=self.extract_learnings(session),
-            what_should_change=self.recommend_changes(session),
-            new_questions=session.questions,
-            new_risks=session.risks,
-        )
-        
-        # Update mental model based on session
-        for area in session.areas_explored:
-            self.mental_model.mark_explored(
-                area['element'],
-                area['specific'],
-                str(id(session))
-            )
-        
-        return debrief
-    
-    def extract_learnings(self, session: ExploratorySession) -> List[str]:
-        """
-        What did we learn about the product?
-        """
-        learnings = []
-        
-        for note in session.notes:
-            if 'learned' in note['content'].lower():
-                learnings.append(note['content'])
-            if 'realized' in note['content'].lower():
-                learnings.append(note['content'])
-            if 'discovered' in note['content'].lower():
-                learnings.append(note['content'])
-        
-        return learnings
-    
-    def recommend_changes(self, session: ExploratorySession) -> List[str]:
-        """
-        What should we do differently next?
-        """
-        recommendations = []
-        
-        if session.session_metrics['bugs_found'] > 3:
-            recommendations.append(
-                "High bug density—consider deeper exploration of this area"
-            )
-        
-        if session.session_metrics['questions_raised'] > 5:
-            recommendations.append(
-                "Many questions—schedule stakeholder discussion"
-            )
-        
-        return recommendations
-```
-
-## Mental Model
-
-Bach approaches testing by asking:
-
-1. **What is the mission?** Who cares, and what do they need to know?
-2. **What could go wrong?** Risks drive test focus
-3. **How will I recognize a problem?** Which oracles apply?
-4. **What have I covered?** Maintain a mental model of the product
-5. **What did I learn?** Each test teaches something
-
-## The Session Checklist
+## Decision tree: "we have a result — what now?"
 
 ```
-□ Charter defined (Explore X with Y to discover Z)
-□ Time-box set (60-90 minutes typical)
-□ Oracles identified (how will I recognize problems?)
-□ Note-taking ready (real-time, not after)
-□ Product model in mind (SFDPOT coverage)
-□ Heuristics available (ZOMBIE, touring, soap opera)
-□ Questions captured (for stakeholder follow-up)
-□ Debrief scheduled (capture learnings immediately)
+A check failed
+├─ Is the check's proposition still valid about the current product?
+│  ├─ No → the check is stale; fix or retire it (it was a proposition, not testing)
+│  └─ Yes → is the product wrong, or was the proposition wrong?
+│     ├─ Product wrong → investigate with oracles, file bug with A FEW HICCUPPS framing
+│     └─ Proposition wrong → this is a testing-the-tests moment; capture the learning
+│
+All checks passed
+├─ What did the checks NOT look at? Answer the three coverage questions for the gap.
+├─ Which A FEW HICCUPPS oracles have you not consulted in the last two weeks?
+├─ Charter one exploratory session against the riskiest gap.
+└─ Expect that session to find a bug. If it doesn't, defocus and run another.
+
+Stakeholder asks "is it ready to ship?"
+└─ Never answer yes/no. Answer with:
+    (1) coverage so far, (2) notable risks remaining, (3) obstacles encountered,
+    (4) what you'd test next given one more day.
+   The ship decision is theirs; your job is to inform it, credibly.
+
+A whole testing area has "gone quiet" (no new bugs for weeks)
+└─ Do NOT conclude it's stable. Apply the pesticide paradox:
+    change techniques, data, state, platform, or tester. Treat silence as a smell.
 ```
 
-## Signature Bach Moves
+## When to deviate from this skill
 
-- Session-Based Test Management (SBTM)
-- Heuristic Test Strategy Model (HTSM)
-- FEW HICCUPPS consistency oracles
-- SFDPOT product coverage model
-- Exploratory testing charters
-- Context-driven approach (no best practices)
-- Soap Opera Testing for complex scenarios
-- Touring heuristics for systematic exploration
+- **Regulated / safety-critical domains** (FDA Class III, DO-178C, IEC 62304): the auditor demands traceable scripts. Do the scripted work *in addition to* session-based testing, never instead of it. Bach's two-paragraph protocol for a Class 3 medical device (which replaced 50 pages of procedural "test cases") is the model — scripted parts can be tiny.
+- **Pure algorithmic code with a cheap reference oracle** (compilers, parsers, numeric libraries, consensus protocols): lean heavily on property-based and high-volume automated checking. Responsible testing still matters, but the economics tilt hard toward machine checks.
+- **You are embedded in a shallow-agreement culture you cannot fix politically**: translate internally. Write "test case" in Jira; think "charter + check" in your head. This is survival, not surrender.
+- **You are testing GenAI / LLMs**: every principle here applies *more strongly*, not less. The product is non-deterministic, so no single-run observation is ever an oracle — measure variance across runs first.
+
+## Further reading inside this skill
+
+- `references/oracles-and-coverage.md` — full FEW HICCUPPS definitions, Hoffman's complementary oracles, SFDPOT, CRUSSPIC STMPL, the Honest Manual Writer heuristic, the Blink Test, and the Generic Test Procedure. **Load before writing a test strategy, reviewing a bug report framing, or building an oracle checklist.**
+- `references/charters.md` — charter sizing worked examples, risk-to-charter translation, six charter anti-patterns with fixes, and tour heuristics (Money, FedEx, Landmark, Anti-tour). **Load when writing charters or reviewing someone else's charter library.**
+- `references/sbtm-session-sheet.md` — exact session-sheet schema, parser tags, T/B/S/O math, PROOF debrief script with sample dialogue, and rules for when to run paired sessions. **Load when introducing SBTM, running your first debrief, or auditing an existing SBTM implementation.**
+
+**Do NOT load the references for quick questions already answered in this file (e.g. "what does FEW HICCUPPS stand for", "what's a charter's format"). Only load them when you need depth, exact schemas, or worked examples.**

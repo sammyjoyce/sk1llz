@@ -1,250 +1,130 @@
 ---
 name: polya-how-to-solve-it
-description: Solve problems in the style of George Pólya, mathematician and author of "How to Solve It." Emphasizes structured heuristics, analogy, decomposition, and working backward from the goal. Use when stuck on algorithmic problems, debugging complex systems, or designing solutions that require systematic creative thinking.
-tags: heuristics, decomposition, analogy, working-backward, problem-solving, mathematical, strategy, systematic
+description: Apply Pólya's problem-solving framework with Schoenfeld's empirical corrections. Use when stuck on an algorithmic, mathematical, or debugging problem; when a direct approach has failed; when someone is chasing the wrong lead (wild goose chase); when a solution "works" but won't generalize; when you need to turn a vague hunch into a tractable plan. Trigger phrases - "I'm stuck", "don't know where to start", "tried everything", "how do I approach this", "can't see the pattern", heuristics, problem-solving, proof strategy, root cause analysis, why is this hard.
 ---
 
-# George Pólya Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​‌‌‌​​​‌‍​​​​‌​​​‍‌‌​‌‌​‌‌‍​​​​‌‌​‌‍‌​​‌​​‌​‍‌​‌‌​​‌‌‍​​​​‌​​‌‍‌‌‌‌‌‌​‌⁠‍⁠
+# Pólya + Schoenfeld: Problem Solving That Actually Works
 
-## Overview
+Pólya's 1945 *How to Solve It* gave us the famous four phases (Understand, Plan, Execute, Look Back). Four decades of empirical research — chiefly Alan Schoenfeld's — showed the framework is right but **insufficient by itself**. Pólya's "heuristics" are not strategies you can execute: each is a *family* of ~10 distinct strategies hiding under one label. And the real binding constraint on problem-solving success is not which heuristic you pick but whether you notice when your current path is failing. This skill encodes what survived the scrutiny.
 
-George Pólya (1887–1985) was a Hungarian-American mathematician whose book *How to Solve It* (1945) became the definitive manual for structured problem-solving. Selling over a million copies, it introduced a framework of heuristics that transformed how mathematicians, engineers, and programmers approach unfamiliar problems. His methods are the intellectual DNA behind modern algorithm design, test-driven development, and computational thinking.
+## The central insight Claude usually misses
 
-## Core Philosophy
+**Pólya's heuristics are labels, not moves.** "Try an easier related problem" is not an instruction — it names roughly a dozen distinct sub-strategies, each triggered by different features of the problem. If you invoke the label without committing to a specific family member, you are pattern-matching to a word cloud, not solving.
 
-> "If you can't solve a problem, then there is an easier problem you can solve: find it."
+Before using any Pólya heuristic, force yourself to answer: *which specific member of this family am I using, and what feature of the problem suggested it?* If you cannot name the feature, you are bluffing.
 
-> "The first rule of discovery is to have brains and good luck. The second rule of discovery is to sit tight and wait till you get a bright idea."
+**Loading guidance**:
+- For any non-trivial problem, **READ `references/heuristic-families.md` before choosing a heuristic**. It contains the full Schoenfeld-style decomposition. Do not reconstruct it from memory — the whole point of the research is that the sub-strategies are *not* obvious.
+- **Do NOT load `references/worked-example.md`** for normal problem-solving; it is an end-to-end demonstration useful only when teaching the method or debugging why the method is not working on a specific problem.
 
-> "It is better to solve one problem five different ways than to solve five problems one way."
+The 1970s AI research tried to implement Pólya's heuristics directly and largely failed; one leading researcher concluded the labeled strategies were "epiphenomenal rather than real". The finding that rescued Pólya was Schoenfeld's: the labels are *correct descriptions* of what experts do, but each label covers a family that must be taught (or executed) piece by piece.
 
-Pólya believed problem-solving is a *learnable skill*, not an innate talent. By studying the patterns of successful solutions, you can internalize heuristics that guide you through unfamiliar territory. The key is not knowing the answer—it's knowing the *process*.
+## Pólya's precise vocabulary (use it literally)
 
-## Design Principles
+Pólya defined three words with surgical precision. Using them loosely destroys the method:
 
-1. **Understand the Problem First**: Before writing a single line, you must be able to state the problem clearly, identify the unknowns, the data, and the constraints. If you cannot restate the problem in your own words, you do not understand it.
+- **Unknown** — the specific thing whose value or form is missing. Not "the goal" or "the answer". A problem may have several unknowns but only one *principal* unknown.
+- **Data** — what is given. Concrete, enumerable.
+- **Condition** — the *relation* that ties the data to the unknown. Solutions hide here.
 
-2. **Devise a Plan Before Executing**: Find the connection between the data and the unknown. Consider analogous problems, special cases, and decomposition. Do not start coding until you have a strategy.
+The diagnostic questions that follow from this vocabulary are the ones non-experts skip:
+- Is the condition **sufficient** to determine the unknown? **Insufficient**? **Redundant**? **Contradictory**?
+- Have I used **all** the data? If not, either I missed a clue or the problem is over-specified (often itself a clue).
+- Have I used the **entire** condition? If my solution ignores part of the condition, the solution is almost certainly wrong or incomplete.
 
-3. **Carry Out the Plan with Discipline**: Implement step by step, checking each step as you go. If a step doesn't work, return to the plan—don't patch blindly.
+The "have I used all the data" check catches more wrong solutions than any other single Pólya move. When a teammate produces a plausible answer that nags at you, this is the first thing to check.
 
-4. **Look Back and Reflect**: After solving, examine the solution. Can you derive it differently? Can you generalize it? Can you use the result or method for another problem?
+## The metacognitive loop (what Pólya left out)
 
-## The Four Phases
+Schoenfeld recorded video of students failing on problems they had the knowledge to solve. The dominant pathology he named the **wild goose chase**: pick a direction in the first 30 seconds, pursue it for 20 minutes, never re-evaluate. The missing piece is not heuristic knowledge but self-interruption.
 
-### Phase 1: Understanding the Problem
+Every ~5 minutes of active work on a hard problem, stop and answer three questions:
 
-```
-Questions to ask:
-├── What is the unknown? What are we trying to compute/build/find?
-├── What is the data? What inputs do we have?
-├── What are the constraints? What conditions must be satisfied?
-├── Can I restate the problem in my own words?
-├── Can I draw a diagram, table, or example?
-├── Have I seen this problem before—or something similar?
-└── Is the problem well-posed? Are there edge cases or ambiguities?
-```
+1. **What am I doing right now?** (Name the specific sub-strategy, not the family name.)
+2. **Why am I doing it?** (Connect to the unknown, the data, or the condition.)
+3. **How will it help if it works?** (Forecast the *shape* of the intermediate result.)
 
-#### Applied to Code
+If you cannot answer any one of them, abandon the current path and return to planning. This single loop accounts for most of Schoenfeld's measurable improvement over raw Pólya instruction. It is more important than any specific heuristic.
 
-```python
-# PROBLEM: Given a list of intervals, merge overlapping ones.
-#
-# UNDERSTAND FIRST:
-# - Unknown: merged list of non-overlapping intervals
-# - Data: list of [start, end] pairs
-# - Constraints: intervals overlap if one starts before the other ends
-# - Edge cases: empty list, single interval, all overlapping, none overlapping
-# - Restate: "Collapse touching/overlapping ranges into minimal set"
+## The connection subproblem (why analogy often fails)
 
-# Draw examples:
-# Input:  [[1,3], [2,6], [8,10], [15,18]]
-# Visual: |---|         1-3
-#           |-----|     2-6
-#                  |--| 8-10
-#                          |--| 15-18
-# Output: [[1,6], [8,10], [15,18]]
-```
+Finding an analogous solved problem is the easy half. Bridging from the analog's solution to the original is the hard half — Newell called this the **connection subproblem** and showed it is where most analogical reasoning silently breaks. When you catch yourself saying "this is just like X", pause and ask: *what is the isomorphism?* Write it out explicitly: data→data, condition→condition, unknown→unknown. If the mapping breaks on any of the three, you have a **surface analogy**, not a **structural** one, and it will mislead you.
 
-### Phase 2: Devising a Plan
+Surface analogy is the leading cause of wrong-pattern-match bugs in debugging: *"we had this before, it was a race condition"* — symptom matches, mechanism differs, two days wasted.
 
-Pólya's heuristic toolkit:
+## Inversion and the inventor's paradox
 
-| Heuristic | Description | Code Application |
-|-----------|-------------|------------------|
-| **Analogy** | Have you seen a similar problem? | Pattern matching to known algorithms |
-| **Decomposition** | Can you break it into parts? | Divide and conquer, modular functions |
-| **Specialization** | Try a special case first | Handle n=1, n=2 before n=general |
-| **Generalization** | Can you solve a broader problem? | Generic solution that includes this case |
-| **Working Backward** | Start from the desired result | Write the test first, then the code |
-| **Auxiliary Elements** | Introduce a helper construct | Helper functions, intermediate data structures |
-| **Variation** | Change the problem slightly | Relax a constraint, solve the relaxed version |
+Pólya observed that the more general problem is sometimes *easier* — because it has more hooks for techniques to grab. But he distinguished two kinds of generalization, and only one works:
 
-#### Applied to Code
+- **Concentration** (good): extract the structural essence. Group theory concentrated algebra + number theory + geometry. Test: the general proof is *shorter* than the specific proof.
+- **Dilution** (bad): wrap the problem in abstraction that uses no new property of the abstraction. "Let X be any object..." followed by arguments that only use the original special case. Test: the general proof is *longer* than the specific proof, or uses the same steps.
 
-```python
-# PLAN for interval merging:
-#
-# Analogy: This is like merging sorted ranges — a sweep-line pattern.
-#
-# Decomposition:
-#   1. Sort intervals by start time
-#   2. Walk through sorted list
-#   3. For each interval, either merge with previous or start new
-#
-# Working backward:
-#   - Final output is sorted, non-overlapping intervals
-#   - To produce that, I need to process in order
-#   - To process in order, I need to sort first
-#
-# Specialization (test small cases):
-#   - Empty: [] → []
-#   - Single: [[1,3]] → [[1,3]]
-#   - Two overlapping: [[1,3],[2,4]] → [[1,4]]
-#   - Two disjoint: [[1,2],[3,4]] → [[1,2],[3,4]]
-```
+If generalizing did not give you a new tool, you diluted. Roll back.
 
-### Phase 3: Carrying Out the Plan
+## Look Back is not "check your work"
 
-```python
-def merge_intervals(intervals: list[list[int]]) -> list[list[int]]:
-    if not intervals:
-        return []
+"Look Back" in the original means four things, only one of which is verification. Doing only verification is the most common corruption of the method:
 
-    # Step 1: Sort by start time (from our plan)
-    intervals.sort(key=lambda x: x[0])
+1. **Verify** — is the answer correct? (Everyone does this.)
+2. **Derive differently** — can you reach the same result by a completely different route? Two independent derivations rarely fail the same way, so agreement is strong evidence. Disagreement localizes the bug.
+3. **Audit the hypotheses used** — Pólya's *qui nimium probat, nihil probat* ("he who proves too much proves nothing"). Examine the solution and check that *every* assumption in the problem statement was actually needed. If your argument works with fewer hypotheses, either the problem is over-specified (suspect), or you accidentally proved a stronger statement (extract it), or your solution is wrong and the unused hypothesis would have broken it.
+4. **Generalize** — for which larger class of inputs does the argument still work? Where *exactly* does it break?
+5. **Transfer** — which *other* problems does this method now solve? Pólya's rule: an idea used once is a trick; used twice, it becomes a method. Name one concrete second problem or you have not transferred.
 
-    # Step 2: Walk and merge
-    merged = [intervals[0]]
+Skip steps 2–5 and the problem leaves no trace. You will re-solve the same class of problem five times because the first solution never became a technique in your repertoire. For the canonical worked example showing all five in sequence, see `references/worked-example.md` (only load if you need the full walkthrough).
 
-    for start, end in intervals[1:]:
-        last = merged[-1]
-        if start <= last[1]:  # Overlapping — merge
-            last[1] = max(last[1], end)
-        else:                 # Disjoint — new interval
-            merged.append([start, end])
+## Anti-patterns (NEVER do these)
 
-    return merged
+- **NEVER invoke a Pólya heuristic by its label alone** (e.g., "let's try a simpler case") because labels feel like progress but commit you to nothing. Consequence: you burn cycles with no falsifiable next step, and 20 minutes later you cannot say what you tried. **Instead**: name the specific sub-strategy from the family table and the feature that triggered it ("I'm setting n=3 because the problem has an implicit integer parameter").
 
-# Step 3: Check each step
-assert merge_intervals([]) == []
-assert merge_intervals([[1, 3]]) == [[1, 3]]
-assert merge_intervals([[1, 3], [2, 6]]) == [[1, 6]]
-assert merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]) == [[1, 6], [8, 10], [15, 18]]
-```
+- **NEVER believe a pattern from ≤4 examples.** The classic trap: chords joining `n` points on a circle divide the disk into 1, 2, 4, 8, 16 regions. The next term is **31**, not 32. Consequence: confident wrong answers in a domain where you can't tell you are wrong. **Instead**: treat every pattern as a *conjecture* until you have either a proof or a counterexample, and always compute one more term than feels necessary. Four data points is when the pattern *starts* being worth stating, not when it's worth believing.
 
-### Phase 4: Looking Back
+- **NEVER work backward without translating to forward form at the end.** Working backward produces a chain of *implications*, not equivalences. Each step must be *reversible*, and reversibility is easy to assume and hard to verify. Consequence: your solution contains a one-way step you cannot justify in forward direction. **Instead**: after working backward, rewrite the whole chain forward and check every "therefore" actually holds.
 
-```python
-# REFLECT:
-#
-# 1. Can we derive it differently?
-#    - Union-Find approach: treat each interval as a node, union overlapping
-#    - Stack-based: push/merge pattern
-#    - Both work but sorting + scan is O(n log n) and simplest
-#
-# 2. Can we generalize?
-#    - Works for any comparable type, not just int
-#    - Extend to multi-dimensional intervals (rectangles, volumes)
-#    - Adapt to "merge if gap < k" by changing the overlap condition
-#
-# 3. Can we use this method elsewhere?
-#    - Meeting room scheduling (same pattern)
-#    - Memory allocation / free-list coalescing
-#    - Time-series data range consolidation
-#
-# 4. What did we learn?
-#    - "Sort first, then scan" is a powerful meta-pattern
-#    - The key insight was: sorting makes overlap detection local
-```
+- **NEVER abandon a failing approach without diagnosing why it failed.** The seductive move is to try the next idea; the expensive move is to ask "what did this attempt rule out?". Consequence: you re-enter the same dead end from a different angle a week later. **Instead**: before switching, write one sentence naming the specific obstacle — e.g., *"sorting does not help because the order depends on a quantity I have not computed yet."*
 
-## When Writing Code
+- **NEVER treat "I've seen this before" as permission to skip Understanding.** Familiarity is the leading cause of solving the wrong problem — you ship a correct solution to the problem you imagined. **Instead**: restate data / condition / unknown *for the current problem* before comparing to the remembered one, and note the **differences** before the similarities. Differences are where the bugs live.
 
-### Always
+- **NEVER consider a problem solved at the first green test.** Pólya's Look Back is not optional; it is where the technique gets extracted for reuse. Consequence: the solution remains a single-use trick. **Instead**: before closing the task, answer "where else does this method apply?" with one *concrete* second example — not a class of problems, a specific one.
 
-- State the problem before writing code
-- Identify unknowns, data, and constraints explicitly
-- Search for analogous solved problems
-- Test small/special cases by hand first
-- Check each step during implementation
-- Reflect on the solution after it works
+- **NEVER dismiss "have I used all the data" as pedantic.** Unused data is one of: (a) a clue you missed, (b) redundancy that hints at an invariant, or (c) evidence the problem is over-specified for the path you are on. All three are actionable. Consequence of ignoring: you solve an easier problem than the one asked. **Instead**: for each datum in the problem statement, point at the specific step of your solution where it was consumed.
 
-### Never
+- **NEVER relax a condition without asking which one to relax.** Relaxation is powerful but novices drop any condition; experts drop the one that leaves the *core structural constraint* intact. Consequence: you get a relaxed problem whose solution teaches you nothing about the original. **Instead**: list every condition, rank them by structural importance, drop the least structural one first.
 
-- Start coding without understanding the problem
-- Skip the planning phase because the problem "seems easy"
-- Abandon a failing approach without understanding *why* it fails
-- Consider a problem solved without reviewing the solution
-- Solve only one way when multiple approaches exist
-- Ignore edge cases until they become bugs
-
-### Prefer
-
-- Understanding over speed — slow down to go fast
-- Decomposition over monolithic solutions
-- Analogy to known patterns over inventing from scratch
-- Small verified steps over large untested leaps
-- Multiple solution approaches over attachment to the first idea
-- Generalized solutions over one-off hacks
-
-## Pólya's Heuristic Ladder
-
-When stuck, climb this ladder from bottom to top:
+## Decision tree: which heuristic, when
 
 ```
-Level 5: INVERSION
-         └── Can I solve the opposite problem?
-         └── What if I assume the answer and work backward?
+Stuck at "I don't understand the problem"
+ └── Restate in your own words using Pólya's vocabulary (data/condition/unknown).
+ └── If you cannot, you do not understand it. Draw a diagram or build one concrete example.
 
-Level 4: TRANSFORMATION
-         └── Can I change the representation? (graph → matrix, recursion → iteration)
-         └── Can I map this to an equivalent problem I know how to solve?
+Stuck at "I understand it but see no plan"
+ ├── Is there an analogous solved problem?
+ │    ├── Yes, with structural isomorphism → map data/condition/unknown explicitly, reuse method.
+ │    └── No or only surface match → proceed to decomposition / specialization.
+ ├── Can I drop one non-structural condition?
+ │    ├── Yes → solve the relaxed problem, then find the locus/family of relaxed solutions,
+ │    │         then intersect with the dropped condition to re-satisfy it.
+ │    └── No → specialize.
+ ├── Is there an integer parameter (explicit or tacit)?
+ │    └── Tabulate n=1,2,3,4,5 looking for an invariant. Compute one more term than you trust.
+ └── None of the above → invert. Assume a solution exists and derive its properties.
 
-Level 3: AUXILIARY ELEMENTS
-         └── What if I introduce a helper variable, function, or data structure?
-         └── What if I add constraints to make it easier?
+Plan selected but execution keeps breaking
+ └── Run the metacognitive loop (what/why/how). If the three questions
+     have bad answers, the plan is wrong, not the execution. Do not patch.
 
-Level 2: DECOMPOSITION
-         └── Can I break this into independent subproblems?
-         └── Can I solve a simpler version first?
-
-Level 1: SPECIALIZATION
-         └── What happens for n=0? n=1? n=2?
-         └── What does the simplest possible input look like?
-
-Level 0: RESTATEMENT
-         └── Can I say this in different words?
-         └── Can I draw it?
+Solution found but feels fragile
+ └── Look Back. Derive it a second way. If the two derivations disagree,
+     at least one is wrong. If they agree, you have high confidence and
+     often a generalization for free.
 ```
 
-## The Debugging Corollary
+## Fallback when nothing works
 
-Pólya's framework applies directly to debugging:
+After decomposition, analogy, specialization, and inversion have all failed:
 
-1. **Understand the Bug**: What is the expected behavior? What is the actual behavior? What is the minimal input that reproduces it?
-
-2. **Devise a Hypothesis**: What could cause this discrepancy? Analogy — have you seen a similar bug before? Decomposition — which component is responsible?
-
-3. **Test the Hypothesis**: Add a log, write a test, isolate the component. One variable at a time.
-
-4. **Reflect**: Why did this bug occur? What systemic issue allowed it? How do you prevent the class of bug, not just this instance?
-
-## Mental Model
-
-Pólya approaches every problem by asking:
-
-1. **What do I know?** Inventory all given information.
-2. **What do I need?** State the goal precisely.
-3. **What connects them?** Find the bridge between known and unknown.
-4. **Have I seen this bridge before?** Draw on solved problems.
-5. **Can I build the bridge in pieces?** Decompose if the gap is too wide.
-
-## Signature Pólya Moves
-
-- Restating problems until they become tractable
-- Solving the simplest special case first, then generalizing
-- Drawing diagrams and tables before writing code
-- Asking "Have I seen something like this?" for every new problem
-- Working backward from the desired output
-- Reflecting on solutions to extract reusable patterns
-- Treating problem-solving as a skill to be practiced, not a talent to be born with
+1. **Compute something — anything.** This is Schoenfeld's "exploration" phase: generate data about the problem even without a plan. Calculate concrete instances, draw pictures, measure things. The next move often becomes visible after ~10 minutes of concrete computation, for reasons no one fully understands.
+2. **Talk through the problem using Pólya's vocabulary.** State the data, the condition, and the unknown out loud. The mismatch between what you say aloud and what the problem literally says is often where the insight hides — you will catch yourself paraphrasing a condition in a way the problem did not.
+3. **Incubation is not procrastination.** If a problem has resisted ~45 minutes of sustained focused effort, stop. Pólya explicitly endorsed "sit tight and wait till you get a bright idea" — not as laziness but because focused attention can lock you into a local optimum. The unconscious continues to work; returning in an hour often trivializes what was impossible.
+4. **Do not read the solution yet.** If a reference solution is available, resist for at least one incubation cycle. Reading the solution collapses the problem-solving experience into pattern recognition, and you lose the only thing that would have turned this problem into a method in your repertoire.

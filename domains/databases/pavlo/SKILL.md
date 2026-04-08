@@ -1,295 +1,109 @@
 ---
 name: pavlo-database-performance
-description: Optimize databases in the style of Andy Pavlo, CMU professor and database performance expert. Emphasizes understanding internals, benchmarking rigorously, and making informed architectural choices. Use when tuning query performance, designing storage engines, or evaluating database technologies.
-tags: databases, query-optimization, indexing, storage-engines, btree, lsm-tree, olap, oltp, benchmarking, sql
+description: >
+  Optimize databases in the style of Andy Pavlo, CMU professor and database
+  systems researcher. Applies hard-won lessons from NoisePage, OtterTune,
+  Peloton, and 15-721 on query compilation trade-offs, MVCC garbage collection
+  pitfalls, index selection mistakes, buffer pool diagnostics, and storage
+  engine architecture decisions. Use when tuning query performance, choosing
+  between B-tree and LSM-tree, evaluating vectorized vs compiled execution,
+  diagnosing MVCC-induced slowdowns, benchmarking databases, designing storage
+  engines, selecting concurrency control schemes, or evaluating database
+  technologies. Trigger keywords: query optimization, EXPLAIN ANALYZE,
+  buffer pool, write amplification, cardinality estimation, lock-free index,
+  HTAP, self-driving database, OtterTune, BenchBase.
 ---
 
-# Andy Pavlo Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​‌‌‌​​‍‌​‌‌​​‌​‍‌​​​‌‌​‌‍​‌‌‌​​​​‍​​​​‌​‌​‍‌​‌‌​‌​‌⁠‍⁠
+# Pavlo-Style Database Performance
 
-## Overview
+## Thinking Framework
 
-Andy Pavlo is a professor at Carnegie Mellon University, leading researcher in database systems, and creator of the Database of Databases (dbdb.io). He is known for rigorous benchmarking, deep understanding of database internals, and bridging academic research with practical systems.
+Before touching any database performance problem, ask yourself:
 
-## Core Philosophy
+1. **Where is wall-clock time actually going?** Not CPU vs I/O — decompose into: buffer pool misses, lock waits, log flushes, network round-trips, GC stalls, or cardinality misestimates causing wrong join order. Most "slow query" issues are actually buffer pool or cardinality issues masquerading as something else.
 
-> "There's no magic in databases. It's all just data structures and algorithms."
+2. **Am I measuring the right thing correctly?** Averages lie. Report p50/p99/p999. Warm the cache first. Use realistic skew — uniform random is never realistic. Run long enough for GC and compaction to kick in (60-second benchmarks hide the worst problems — Peloton degraded from 100K to 6 TPS over months because nobody ran long benchmarks).
 
-> "Benchmarks lie. Understand what you're measuring."
+3. **Does the architecture match the workload's access pattern?** The best optimization is choosing the right architecture. No amount of index tuning saves a row store doing full-table analytics, or a column store doing point lookups with random inserts.
 
-> "The best optimization is the one you don't have to make because you chose the right architecture."
+## Critical Decision Trees
 
-Pavlo believes in understanding systems deeply, measuring rigorously, and making decisions based on data rather than marketing claims.
+### Vectorized vs Compiled Execution
 
-## Design Principles
+| Factor | Favors Vectorized | Favors Compiled |
+|--------|-------------------|------------------|
+| Query complexity | Many joins, complex predicates | Simple filters, point lookups |
+| Compilation latency tolerance | None (interactive) | Acceptable (prepared statements) |
+| SIMD utilization | High (tight primitives loop) | Low (gains vanish when data > L1 cache) |
+| Debugging | Easier (step through primitives) | Harder (generated LLVM IR has no stack trace) |
+| Engineering effort | Thousands of pre-compiled primitives | Code-generating compiler |
 
-1. **Know Your Hardware**: CPU cache lines, memory bandwidth, SSD latencies—they all matter.
+Key insight from CMU's research: SIMD speedups in vectorized joins nearly vanish once hash tables exceed L1 cache. At TPC-H SF10+, memory latency dominates and SIMD gives <5% improvement on join-heavy queries. Hyper-threading can hide ~50% of the performance gap between the two models.
 
-2. **Measure, Don't Guess**: Microbenchmarks lie; end-to-end benchmarks reveal truth.
+Practical crossover: NoisePage abandoned HyPer-style direct LLVM IR generation because students couldn't debug it. SingleStore's DSL→opcode→LLVM approach is the pragmatic winner — interpret immediately, compile in background, swap seamlessly.
 
-3. **Query Compilation > Interpretation**: Modern CPUs reward tight, compiled code.
+### B-tree vs LSM-tree Selection
 
-4. **Vectorization Wins**: Process batches of tuples, not one at a time.
+- **B-tree when**: read:write ratio >10:1, need predictable read latency, range scans are primary access pattern, can tolerate random write I/O, dataset fits in buffer pool
+- **LSM-tree when**: write:read ratio >1:1, can tolerate write amplification (10-30× is typical for leveled compaction), space amplification budget exists, point lookups dominate reads
+- **The trap**: LSM write amplification compounds with compaction — a single long-running OLAP query on an LSM engine (e.g., MyRocks) causes compaction to stall, which causes memtable flushes to stall, which causes write stalls. Budget 2-3× your expected write throughput for compaction headroom.
 
-5. **Memory is Bandwidth**: In-memory DBs are often memory-bandwidth bound, not compute bound.
+### MVCC Scheme Selection
 
-## When Writing Database Code
+A single long-running analytical query can collapse OLTP throughput to near-zero in PostgreSQL, WiredTiger, and InnoDB. This happens because:
+- GC cannot reclaim versions visible to the long-running snapshot
+- Tombstones accumulate in queue-pattern indexes (like TPC-C's new-order table)
+- Version chains grow unbounded, turning O(1) lookups into O(n) chain traversals
 
-### Always
+Mitigation hierarchy:
+1. Separate OLTP snapshot tracking from OLAP (OSIC-style per-thread commit logs)
+2. Use a Graveyard Index to move tombstones out of hot paths
+3. Adaptive version storage: inline versions for cold tuples, delta chains for hot tuples
+4. If none of those are available: physically separate OLTP and OLAP (which is why most orgs still run separate systems despite HTAP promises)
 
-- Profile before optimizing
-- Understand the memory hierarchy impact on your data structures
-- Use vectorized execution for analytical queries
-- Consider cache-conscious data layouts
-- Benchmark with realistic workloads and data sizes
-- Know the difference between OLTP and OLAP optimization strategies
+## Anti-Patterns
 
-### Never
+NEVER trust a lock-free index will outperform a lock-based one. CMU's SIGMOD'18 Bw-Tree paper showed a well-implemented B+Tree with optimistic lock coupling beats the Bw-Tree by 1.5-4.5× on multi-core CPUs. The Bw-Tree's indirection layer and delta chain traversal cause 2× more L3 cache misses. Lock-free sounds faster but the CaS retry storms under contention and cache-line invalidation from delta appends dominate.
 
-- Trust vendor benchmarks without reproduction
-- Optimize without measuring
-- Ignore the buffer pool / caching behavior
-- Assume indexes are always the answer
-- Forget about CPU branch prediction and cache misses
+NEVER benchmark for only 60 seconds. Peloton's CI ran 60-second tests and showed 1% regressions that were ignored. Over months, it accumulated to 99.99% throughput loss (100K→6 TPS). GC pressure, compaction storms, buffer pool thrashing, and log file growth only manifest over minutes to hours. Minimum credible benchmark: 10 minutes steady-state after warmup, with p99 tails tracked.
 
-### Prefer
+NEVER add an index without checking cardinality estimates first. The optimizer may not use your index if its cardinality estimate is off by >10×. In PostgreSQL, multi-column statistics are opt-in (`CREATE STATISTICS`) and disabled by default — without them, the optimizer assumes column independence, which can produce estimates off by 1000× on correlated columns. Check `EXPLAIN (ANALYZE, BUFFERS)` — if `rows=` estimate differs from `actual rows=` by >10×, fix the stats before adding indexes.
 
-- Compiled queries over interpreted
-- Vectorized over tuple-at-a-time
-- Column stores for analytical workloads
-- Covering indexes to avoid heap fetches
-- Batched I/O over random I/O
+NEVER assume bigger buffer pool = faster queries. Past ~80% cache hit ratio, increasing buffer pool size yields diminishing returns. But running mixed OLTP+OLAP on a shared buffer pool causes catastrophic "buffer pool pollution" — the OLAP scan evicts the OLTP hot set, and recovery time after the scan completes scales linearly with buffer pool size. Larger pool = longer recovery.
 
-## Code Patterns
+NEVER use vendor benchmarks without checking: (1) did they flush writes to disk? (SurrealDB reported great numbers without fsync), (2) is the dataset larger than memory? (in-memory results don't predict disk-bound behavior), (3) what percentile are they reporting? (p50 hides tail latency disasters), (4) how long did the benchmark run? (short runs miss GC and compaction effects).
 
-### Vectorized Execution
+## Knob Tuning Heuristics
 
-```cpp
-// Tuple-at-a-time (slow - function call overhead per row)
-for (auto& tuple : table) {
-    if (predicate(tuple)) {
-        result.push_back(project(tuple));
-    }
-}
+From OtterTune's research (improved Oracle performance 50% after expert DBAs had already tuned it):
 
-// Vectorized execution (fast - process batches)
-class VectorizedScan {
-    static constexpr size_t BATCH_SIZE = 1024;
-    
-    void execute(Table& table, std::vector<Tuple>& result) {
-        std::array<Tuple, BATCH_SIZE> batch;
-        std::array<bool, BATCH_SIZE> selection;
-        
-        for (size_t offset = 0; offset < table.size(); offset += BATCH_SIZE) {
-            size_t count = table.read_batch(offset, batch);
-            
-            // Evaluate predicate on entire batch
-            evaluate_predicate(batch, count, selection);
-            
-            // Project selected tuples
-            for (size_t i = 0; i < count; i++) {
-                if (selection[i]) {
-                    result.push_back(project(batch[i]));
-                }
-            }
-        }
-    }
-};
-```
+- Most DBMSs have 100-500 knobs but only 10-15 matter for any given workload
+- PostgreSQL's most impactful: `shared_buffers` (start at 25% RAM), `effective_cache_size` (75% RAM), `work_mem` (watch for per-sort multiplication), `random_page_cost` (set to 1.1 for SSD, not the default 4.0)
+- The knob that causes the most confusion: PostgreSQL's `maintenance_work_mem` with value `-1` silently inherits from `autovacuum_work_mem`, creating an invisible dependency. Always set both explicitly.
+- Knob interactions are non-linear: increasing `shared_buffers` beyond physical RAM causes double-buffering with the OS page cache and can *decrease* performance
 
-### Query Compilation
+## Benchmarking Methodology
 
-```cpp
-// Interpreted execution (slow)
-class InterpretedExecutor {
-    Value execute(const Expr& expr, const Tuple& tuple) {
-        switch (expr.type) {
-            case ADD:
-                return execute(expr.left, tuple) + execute(expr.right, tuple);
-            case COLUMN:
-                return tuple.get(expr.column_id);
-            // ... many more cases, many branches
-        }
-    }
-};
+| Phase | Duration | Purpose |
+|-------|----------|---------|
+| Load | Until complete | Populate with realistic data distribution + skew |
+| Warmup | 2-5 min | Fill buffer pool, trigger JIT, stabilize caches |
+| Ramp | 1-2 min | Gradually increase to target concurrency |
+| Steady-state | 10+ min | Actual measurement window |
+| Cooldown | 2 min | Catch GC/compaction tail effects |
 
-// Compiled execution (fast - generate native code)
-class CompiledQuery {
-    // Generate LLVM IR or C++ code for the query
-    // Compile once, execute many times with no interpretation overhead
-    
-    std::function<void(Tuple*, Result*)> compile(const Query& q) {
-        // Example: SELECT a + b FROM t WHERE c > 10
-        // Generates something like:
-        return [](Tuple* t, Result* r) {
-            if (t->c > 10) {
-                r->emit(t->a + t->b);
-            }
-        };
-    }
-};
-```
+Report: p50, p99, p999 latency + throughput. Plot latency over time (not just aggregates) — look for periodic spikes from compaction, checkpointing, or autovacuum. If p99/p50 ratio > 10×, you have a tail latency problem that averages will never reveal.
 
-### Cache-Conscious Data Structures
+## Fallback Strategies
 
-```cpp
-// Cache-unfriendly: pointer chasing
-struct Node {
-    int key;
-    Node* left;
-    Node* right;
-};
+When EXPLAIN ANALYZE shows a bad plan:
+1. First: check if `ANALYZE` has been run recently on all involved tables
+2. If stats are fresh but estimates are still wrong: create multi-column statistics or use expression statistics
+3. If the optimizer still won't cooperate: use `pg_hint_plan` or CTE materialization fences as last resort — but log every hint so you can remove them when the optimizer improves
+4. If it's a parameterized query with plan instability: consider `plan_cache_mode = force_custom_plan` for that specific query
 
-// Cache-friendly: B+ tree with high fan-out
-template<typename K, typename V, size_t FAN_OUT = 256>
-class BPlusTreeNode {
-    // Pack keys contiguously for cache-friendly binary search
-    std::array<K, FAN_OUT - 1> keys;
-    
-    // Separate array for children/values
-    union {
-        std::array<BPlusTreeNode*, FAN_OUT> children;
-        std::array<V, FAN_OUT - 1> values;
-    };
-    
-    bool is_leaf;
-    size_t num_keys;
-    
-    // Binary search stays in cache
-    size_t find_key(K key) {
-        return std::lower_bound(
-            keys.begin(), 
-            keys.begin() + num_keys, 
-            key
-        ) - keys.begin();
-    }
-};
-```
-
-### Proper Benchmarking
-
-```python
-class DatabaseBenchmark:
-    """
-    Pavlo's benchmarking principles:
-    1. Warm up the cache
-    2. Run multiple iterations
-    3. Report percentiles, not just averages
-    4. Measure what matters (end-to-end latency)
-    """
-    
-    def __init__(self, db, workload):
-        self.db = db
-        self.workload = workload
-        self.results = []
-    
-    def run(self, warmup_iters=100, measure_iters=1000):
-        # Warmup phase - populate caches, trigger JIT
-        for _ in range(warmup_iters):
-            self.workload.execute(self.db)
-        
-        # Measurement phase
-        for _ in range(measure_iters):
-            start = time.perf_counter_ns()
-            self.workload.execute(self.db)
-            elapsed = time.perf_counter_ns() - start
-            self.results.append(elapsed)
-        
-        return self.analyze()
-    
-    def analyze(self):
-        results = sorted(self.results)
-        return {
-            'p50': results[len(results) // 2],
-            'p99': results[int(len(results) * 0.99)],
-            'p999': results[int(len(results) * 0.999)],
-            'mean': sum(results) / len(results),
-            'min': results[0],
-            'max': results[-1],
-        }
-```
-
-### Index Selection
-
-```sql
--- Pavlo's index selection principles:
-
--- 1. Leading columns matter most
--- Good: queries filter on (a) or (a, b) or (a, b, c)
-CREATE INDEX idx_abc ON t(a, b, c);
-
--- 2. Covering indexes avoid heap fetches
--- If query only needs a, b, d - include d in index
-CREATE INDEX idx_abc_covering ON t(a, b, c) INCLUDE (d);
-
--- 3. Consider index-only scans for aggregations
--- This index can answer: SELECT COUNT(*) FROM t WHERE status = 'active'
-CREATE INDEX idx_status ON t(status);
-
--- 4. Partial indexes for skewed data
--- Only index rows where is_active = true (if most rows are false)
-CREATE INDEX idx_active_users ON users(email) WHERE is_active = true;
-
--- 5. Expression indexes for computed predicates
-CREATE INDEX idx_lower_email ON users(LOWER(email));
-```
-
-### Understanding Buffer Pool Behavior
-
-```python
-class BufferPoolAnalysis:
-    """
-    Most "slow query" issues are buffer pool issues.
-    """
-    
-    def diagnose_slow_query(self, query, db):
-        # Check buffer pool hit ratio
-        stats_before = db.get_buffer_stats()
-        db.execute(query)
-        stats_after = db.get_buffer_stats()
-        
-        reads = stats_after['disk_reads'] - stats_before['disk_reads']
-        hits = stats_after['buffer_hits'] - stats_before['buffer_hits']
-        
-        hit_ratio = hits / (hits + reads) if (hits + reads) > 0 else 1.0
-        
-        if hit_ratio < 0.99:
-            print(f"WARNING: Buffer hit ratio {hit_ratio:.2%}")
-            print("Consider: larger buffer pool, better indexes, or query rewrite")
-        
-        if reads > 1000:
-            print(f"WARNING: {reads} disk reads - check for sequential scan")
-        
-        return {
-            'disk_reads': reads,
-            'buffer_hits': hits,
-            'hit_ratio': hit_ratio
-        }
-```
-
-## Mental Model
-
-Pavlo approaches database optimization by asking:
-
-1. **What does EXPLAIN show?** Understand the query plan first
-2. **Where is time spent?** I/O, CPU, network, locks?
-3. **What's the data distribution?** Skew kills assumptions
-4. **Is caching working?** Buffer pool, OS page cache, CPU cache
-5. **Am I measuring correctly?** Warm cache, realistic data, percentiles
-
-## Signature Pavlo Moves
-
-- Rigorous benchmarking with proper methodology
-- Understanding hardware characteristics
-- Vectorized execution for analytics
-- Query compilation for OLTP
-- Cache-conscious data structure design
-- EXPLAIN ANALYZE before optimizing
-- Skepticism of vendor claims
-
-## Key Resources
-
-- CMU Database Systems course (15-445/645)
-- Database of Databases (dbdb.io)
-- "What's New with NewSQL?" (2016)
-- "Self-Driving Database Management Systems" (2017)
-- CMU Database Group YouTube channel
+When buffer pool hit ratio drops below 99%:
+1. Check for sequential scan flooding (a single `SELECT *` can evict your entire hot set)
+2. Verify no long-running transactions holding snapshots open
+3. Consider partitioning the hot set into a separate tablespace on faster storage
+4. Last resort: increase `shared_buffers`, but only if total buffer pool < 40% of available RAM

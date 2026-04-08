@@ -1,245 +1,90 @@
 ---
 name: hettinger-idiomatic-python
-description: Write Python code in the style of Raymond Hettinger, Python core developer. Emphasizes beautiful, idiomatic code using iterators, generators, and built-in tools elegantly. Use when transforming code into clean, Pythonic solutions.
-tags: itertools, collections, decorators, idioms, readability, functional, generators, clean-code, pythonic
+description: >
+  Write Python code in the style of Raymond Hettinger, Python core developer
+  and author of collections, itertools, and functools. Emphasizes idiomatic
+  transformations, iterator algebra, and leveraging the stdlib over hand-rolled
+  logic. Use when refactoring Python to be more Pythonic, choosing between
+  collections/itertools/functools abstractions, designing cooperative
+  inheritance with super(), or transforming imperative loops into composable
+  generator pipelines. Trigger keywords: Pythonic, idiomatic, itertools,
+  collections, functools, lru_cache, defaultdict, Counter, namedtuple,
+  generator pipeline, refactor Python, "there must be a better way".
 ---
 
-# Raymond Hettinger Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​‌​‌​​‍​‌‌​​​‌​‍‌‌​​​​​​‍‌​​​​​‌​‍​​​​‌​‌​‍‌‌‌​​​‌​⁠‍⁠
+# Hettinger-Style Idiomatic Python
 
-## Overview
+## Thinking Framework
 
-Raymond Hettinger is a Python core developer famous for his talks on transforming code into beautiful, idiomatic Python. His mantra "There must be a better way!" drives the pursuit of elegant solutions using Python's rich toolkit.
+Before writing or refactoring any code, ask in order:
 
-## Core Philosophy
+1. **Is there a stdlib tool for this?** Check `collections`, `itertools`, `functools` — Hettinger built them to eliminate hand-rolled logic. If you're writing a loop that counts, groups, caches, chains, or combines, the tool already exists.
+2. **Am I working at the right abstraction level?** One `Counter` arithmetic expression replaces 15 lines of loop-and-dict code. Prefer the declarative operation.
+3. **Can this be lazy?** If the consumer only needs one item at a time, yield — don't build a list. But if you need `len()`, indexing, or multiple passes, a list is correct.
+4. **Would a 6-month-from-now reader understand this?** Hettinger's "Beyond PEP 8" point: a clever one-liner that takes 30 seconds to parse is worse than three clear lines. Chunk complex expressions into named sub-expressions.
 
-> "There must be a better way!"
+## Expert Decision Trees
 
-> "If you copy-paste code, you're doing it wrong."
+### Choosing a collections type
 
-> "The goal is not to teach Python, but to teach programming using Python."
+| Need | Use | NOT |
+|---|---|---|
+| Count occurrences | `Counter` | `dict` + manual increment |
+| Group items by key | `defaultdict(list)` | `dict.setdefault()` — it creates a new list *every call* even on hits, just to discard it |
+| Ordered keys (insert order + reorder) | `OrderedDict` — still needed for `move_to_end()` and equality semantics (order-sensitive `==`) | Plain `dict` if you need reordering or order-aware equality |
+| Lightweight immutable record | `namedtuple` — 64 bytes/instance, `__slots__` automatic, picklable | `dataclass` when you need mutability or default values; `namedtuple` when you need tuple protocol (unpacking, hashing, use as dict keys) |
+| FIFO/LIFO with O(1) ends | `deque` — `appendleft`/`popleft` are O(1) | `list` — `insert(0, x)` is O(n), silently quadratic on large data |
+| Scope chain / layered config | `ChainMap` — lookups fall through parents; mutations only hit the first map | Merging dicts with `{**a, **b}` loses the ability to track which layer owns a key |
 
-Hettinger believes Python's beauty lies in its tools—iterators, generators, decorators—and knowing when and how to use them transforms mediocre code into elegant solutions.
+### Choosing between caching strategies
 
-## Design Principles
+| Situation | Use | Why |
+|---|---|---|
+| Pure function, hashable args | `@lru_cache(maxsize=128)` or `@cache` | `@cache` is `lru_cache(maxsize=None)` — unbounded, faster, but leaks memory if args are diverse |
+| Method on mutable instance | `@cached_property` | `lru_cache` on a method pins `self` in cache, preventing GC of the instance — silent memory leak |
+| Class with `__slots__` | Stack `@property` over `@lru_cache` | `cached_property` writes to `__dict__` which doesn't exist on `__slots__` classes — raises `TypeError` |
+| Function that returns generators | DO NOT cache | `lru_cache` returns the *same exhausted* generator object on subsequent calls — returns empty |
+| Need TTL expiry | Roll your own with `time.monotonic()` | `lru_cache` has no expiry; stale data persists until `cache_clear()` |
 
-1. **Use the Right Tool**: Python has tools for everything. Find them.
+### Generator vs List decision
 
-2. **Iterate, Don't Index**: Let Python handle the iteration machinery.
+- **Use generator when**: single pass, pipeline stage, data larger than memory, feeding `sum()`/`any()`/`all()`/`min()`/`max()`
+- **Use list when**: need `len()`, indexing, multiple iteration, or the data will be consumed in a non-linear order
+- **Trap**: a generator assigned to a variable and iterated twice silently yields nothing the second time — no error, just empty. If there's any chance of re-iteration, materialize with `list()`.
 
-3. **Compose Small Functions**: Build complex behavior from simple, reusable pieces.
+## NEVER (with reasons)
 
-4. **Embrace Generators**: Lazy evaluation is memory-efficient and composable.
+**NEVER use `@lru_cache` on a method** without understanding it pins `self`. The cache holds strong references to every unique `self` that calls it, so instances never get garbage-collected. For 10K objects each calling a cached method, that's 10K entries leaking. Use `@cached_property` for instance-level caching, or use a module-level function that takes the relevant data (not `self`) as args.
 
-## When Writing Code
+**NEVER use `groupby` on unsorted data** — it only groups *consecutive* identical keys, so `[A,A,B,A]` gives three groups (`A,A`, `B`, `A`), not two. Always `sorted(data, key=keyfunc)` first, or use `defaultdict(list)` if data arrives in arbitrary order.
 
-### Always
+**NEVER use `Counter.subtract()` and assume non-negative counts.** Unlike `-` operator which drops zero/negative, `subtract()` happily goes negative: `Counter(a=1).subtract(Counter(a=3))` → `Counter(a=-2)`. If you need floor-at-zero, use `counter1 - counter2` (the operator), or `+counter` to strip non-positives.
 
-- Use `collections` module (Counter, defaultdict, deque, namedtuple)
-- Use `itertools` for iterator algebra
-- Use `functools` for function composition
-- Prefer generators over building lists
-- Use descriptive names that read like prose
-- Chain operations fluently when appropriate
+**NEVER pass `maxsize=None` to `lru_cache` on functions with unbounded argument domains** (e.g., string inputs from users). The cache grows without limit. Use bounded `maxsize` or `@cache` only when you know the domain is finite.
 
-### Never
+**NEVER build a `list` just to call `len()` on a generator.** Use `sum(1 for _ in gen)` for counting, or better, restructure to track count during generation.
 
-- Build lists just to iterate over them once
-- Write nested loops when `itertools.product` works
-- Manually implement what `itertools` provides
-- Use indices when direct iteration works
-- Repeat code—abstract it
+**NEVER use `functools.total_ordering` in performance-hot paths.** It synthesizes comparison methods with two indirections per call (~2x slower than hand-written comparisons). Write all six comparison methods when objects are sorted in tight loops.
 
-### Prefer
+## Cooperative Inheritance (Hettinger's super() Protocol)
 
-- `collections.Counter` over manual counting
-- `collections.defaultdict` over `.setdefault()`
-- `itertools.chain` over nested loops
-- `itertools.groupby` over manual grouping
-- Generator expressions over list comprehensions (when iterating once)
-- `functools.lru_cache` over manual memoization
+Before designing a class hierarchy, ask: "Will anyone compose this via multiple inheritance?" If yes, follow these three rules from Hettinger's "super() considered super":
 
-## Code Patterns
+1. **Every overriding method must call `super()`** — even if your immediate base is `object`. Breaking the chain silently drops all downstream mixins.
+2. **Use `**kwargs` to forward unknown arguments** — the MRO can insert classes you didn't anticipate. Rigid positional signatures break when composed.
+3. **Create a root class that stops the chain** — a `Root.draw()` that doesn't call `super().draw()` prevents `AttributeError` when `object` is reached.
 
-### The Collections Module
+To incorporate a non-cooperative third-party class, write an adapter that translates between the cooperative `**kwargs` protocol and the rigid class.
 
-```python
-# BAD: Manual counting
-word_counts = {}
-for word in words:
-    if word in word_counts:
-        word_counts[word] += 1
-    else:
-        word_counts[word] = 1
+## Hettinger's Refactoring Heuristic
 
-# GOOD: Counter
-from collections import Counter
-word_counts = Counter(words)
+From "The Mental Game of Python":
+- **Don't write `def` first.** Write the operation inline 2-3 times. Let the pattern emerge, *then* extract a function. Premature abstraction creates the wrong abstraction.
+- **Chunk aggressively.** If a line has >7 symbols, alias sub-expressions into named variables. `uniform(50, 250)` beats `50 + random() * 200` — same result, half the cognitive load.
+- **Let inheritance discover itself.** Build two concrete classes independently. The shared base class becomes obvious only after you see the duplication. Planning the hierarchy upfront yields unused methods and missing ones.
 
-# Bonus: most_common gives sorted results
-top_ten = word_counts.most_common(10)
+## Reference Loading
 
+**For code examples and patterns**: READ `references/philosophy.md` when you need specific before/after code transformations or stdlib usage examples.
 
-# BAD: Manual grouping
-groups = {}
-for item in items:
-    key = get_key(item)
-    if key not in groups:
-        groups[key] = []
-    groups[key].append(item)
-
-# GOOD: defaultdict
-from collections import defaultdict
-groups = defaultdict(list)
-for item in items:
-    groups[get_key(item)].append(item)
-
-
-# BAD: Tuple indexing
-point = (10, 20, 30)
-x = point[0]
-y = point[1]
-
-# GOOD: namedtuple
-from collections import namedtuple
-Point = namedtuple('Point', ['x', 'y', 'z'])
-point = Point(10, 20, 30)
-print(point.x, point.y)  # Clear and self-documenting
-```
-
-### The itertools Module
-
-```python
-from itertools import chain, groupby, product, combinations, islice
-
-# Flatten nested lists
-nested = [[1, 2], [3, 4], [5, 6]]
-flat = list(chain.from_iterable(nested))  # [1, 2, 3, 4, 5, 6]
-
-# All combinations
-for a, b in combinations([1, 2, 3, 4], 2):
-    print(a, b)  # (1,2), (1,3), (1,4), (2,3), (2,4), (3,4)
-
-# Cartesian product (replaces nested loops)
-# BAD:
-for x in xs:
-    for y in ys:
-        for z in zs:
-            process(x, y, z)
-
-# GOOD:
-for x, y, z in product(xs, ys, zs):
-    process(x, y, z)
-
-# Take first N items from any iterable
-first_ten = list(islice(huge_generator, 10))
-
-# Group consecutive items
-data = [('A', 1), ('A', 2), ('B', 3), ('B', 4)]
-for key, group in groupby(data, key=lambda x: x[0]):
-    print(key, list(group))
-```
-
-### Generator Excellence
-
-```python
-# BAD: Build entire list in memory
-def get_squares(n):
-    result = []
-    for i in range(n):
-        result.append(i ** 2)
-    return result
-
-# GOOD: Generator (lazy, memory-efficient)
-def get_squares(n):
-    for i in range(n):
-        yield i ** 2
-
-# BETTER: Generator expression
-squares = (i ** 2 for i in range(n))
-
-# Chaining generators (no intermediate lists!)
-def pipeline(data):
-    cleaned = (clean(item) for item in data)
-    validated = (item for item in cleaned if is_valid(item))
-    transformed = (transform(item) for item in validated)
-    return transformed
-
-# Only processes items as needed
-for result in pipeline(huge_dataset):
-    process(result)
-```
-
-### Decorator Patterns
-
-```python
-from functools import wraps, lru_cache, partial
-
-# Memoization made easy
-@lru_cache(maxsize=128)
-def fibonacci(n):
-    if n < 2:
-        return n
-    return fibonacci(n - 1) + fibonacci(n - 2)
-
-# Custom decorator template
-def my_decorator(func):
-    @wraps(func)  # Preserves function metadata
-    def wrapper(*args, **kwargs):
-        # Before
-        result = func(*args, **kwargs)
-        # After
-        return result
-    return wrapper
-
-# Decorator with arguments
-def repeat(times):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            for _ in range(times):
-                result = func(*args, **kwargs)
-            return result
-        return wrapper
-    return decorator
-
-@repeat(3)
-def greet(name):
-    print(f"Hello, {name}!")
-```
-
-### Sorting Idioms
-
-```python
-# Sort by key
-students = [('Alice', 85), ('Bob', 90), ('Charlie', 85)]
-
-# Sort by grade (descending), then name (ascending)
-sorted_students = sorted(students, key=lambda s: (-s[1], s[0]))
-
-# Using operator module (faster)
-from operator import itemgetter, attrgetter
-
-# For tuples/lists
-sorted_students = sorted(students, key=itemgetter(1), reverse=True)
-
-# For objects
-sorted_users = sorted(users, key=attrgetter('last_name', 'first_name'))
-```
-
-## Mental Model
-
-Hettinger approaches code by asking:
-
-1. **Is there a built-in for this?** Check `collections`, `itertools`, `functools` first
-2. **Can I use a generator?** Process one item at a time, not all at once
-3. **Can I compose existing tools?** Chain small operations together
-4. **Would a decorator help?** Cross-cutting concerns belong in decorators
-
-## Signature Hettinger Moves
-
-- Replace manual loops with `sum()`, `any()`, `all()`, `max()`, `min()`
-- Replace index access with `zip()`, `enumerate()`, unpacking
-- Replace manual caching with `@lru_cache`
-- Replace nested loops with `itertools.product`
-- Replace manual counting with `collections.Counter`
-
+**Do NOT load** `references/philosophy.md` if you only need the decision trees above — they are self-contained.

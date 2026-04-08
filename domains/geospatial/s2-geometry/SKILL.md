@@ -1,415 +1,193 @@
 ---
 name: s2-geometry-spatial-indexing
-description: Index and query geospatial data using Google's S2 Geometry library. Emphasizes hierarchical cell decomposition, Hilbert curves for locality preservation, and efficient spatial operations on spherical geometry. Use when building location-based services, proximity search, geofencing, or any system that needs to efficiently query geographic data.
-tags: spatial-indexing, geospatial, s2, cells, regions, coordinates, geographic, mapping, location, queries
+description: Expert guidance for Google S2 Geometry — cell ID design, region coverings, proximity search, geofencing, and sharding. Use when building location-based services, ride-sharing dispatch, delivery zones, geofences, spatial joins, geographic sharding, or any system that indexes points/regions on a sphere. Triggers on keywords s2, s2sphere, s2geometry, S2CellId, S2RegionCoverer, S2Polygon, S2Cap, S2LatLngRect, cell covering, Hilbert curve spatial index, DGGS, and comparisons to H3/geohash.
+tags: spatial-indexing, geospatial, s2, s2cell, regioncoverer, hilbert-curve, geofencing, proximity-search, sharding, dggs
 ---
 
-# S2 Geometry Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​​‌‌‌‌‍​​‌​​‌​‌‍​‌‌‌‌​​​‍​​​​​​‌​‍​​​​‌​​‌‍‌‌​‌‌​​​⁠‍⁠
+# S2 Geometry
 
-## Overview
+S2 is deceptively easy to start with and punishingly sharp in the details.
+Most bugs come from defaults that are tuned for one shape (circular caps) being
+applied to another (thin polygons, large rects), and from assuming properties
+that S2 does not actually guarantee.
 
-S2 is Google's library for spherical geometry and spatial indexing, used internally for Google Maps, Google Earth, and countless geo-aware services. It solves the fundamental problem: **how do you efficiently index and query locations on a sphere?**
+## What Claude Probably Gets Wrong About S2
 
-The library was developed at Google and open-sourced in 2017. It powers proximity search, geofencing, spatial joins, and geographic sharding at planetary scale.
+Before writing any S2 code, internalize these expert-only facts. Each one has
+bitten real production systems.
 
-## Core Philosophy
+1. **S2 cells at the same level are NOT equal area.** They vary by up to ~2× at
+   every level because of the cube projection. Level 16 spans 11,880–24,909 m².
+   Never say "level N cells are X m²" — say "average X, worst case 2X".
 
-> "The Earth is not flat. Your spatial index shouldn't pretend it is."
+2. **`max_cells` is a work budget, not just an output cap.** Raising it makes
+   the coverer itself slower. And `max_cells < 4` is catastrophic: the
+   worst-case area ratio at `max_cells = 3` is **215,518×** (yes, that's the
+   real published number). Never go below 4. The library default of 8 is
+   tuned for circular caps and nothing else.
 
-> "A good spatial index turns geometric queries into range queries on integers."
+3. **`min_level` silently overrides `max_cells`.** If `min_level` is too high
+   for the region, you get an arbitrary number of cells back. Setting
+   `min_level == max_level` does NOT give a fixed-level covering — you'll get
+   coarser cells whose children fit. Use `GetSimpleCovering` or post-process.
 
-> "Locality in space should mean locality in your index."
+4. **RegionCoverer output is not stable across library versions.** Never use
+   a covering as a canonical hash/fingerprint. Store the `S2Polygon`, not its
+   covering, and recompute when the library updates.
 
-S2's insight: project the sphere onto a cube, fill each face with a space-filling Hilbert curve, and encode positions as 64-bit integers. Nearby points get nearby integers. Geometric queries become range scans.
+5. **`S2Polygon` requires CCW orientation.** A clockwise loop is interpreted
+   as its complement — your "delivery zone in downtown SF" becomes
+   "everywhere on Earth except a tiny hole in SF." Always validate.
 
-## Design Principles
+6. **Close points don't always have close cell IDs** (despite what most
+   tutorials say). The reverse is true — close IDs mean close cells — but
+   two points 5 m apart across a cube face boundary can have wildly different
+   IDs. Never do nearest-neighbor by `abs(id_a - id_b)`.
 
-1. **Spherical First**: No projection distortion. Work on the actual sphere.
+7. **`s2sphere` (pure Python) is incomplete.** It lacks S2Polygon boolean ops,
+   `S2ShapeIndex`, and closest-edge queries. For anything beyond point-to-cell
+   and cap coverings, use the SWIG-bound `s2geometry` package instead. If you
+   start on `s2sphere` and later need polygon intersection, you will rewrite.
 
-2. **Hierarchical Decomposition**: 30 levels from ~85km² cells down to ~1cm² cells.
+8. **`CellId.from_lat_lng(ll).to_lat_lng() != ll`.** You get the leaf cell
+   center, not the original point. Never store a cell ID as a lossless
+   substitute for coordinates — store both if you need roundtrip fidelity.
 
-3. **Locality Preservation**: Hilbert curves ensure nearby points have nearby cell IDs.
+## Before Writing S2 Code, Ask Yourself
 
-4. **Integer Encoding**: Any cell is a single 64-bit integer. Hierarchy is in the bits.
+- **What shape am I covering?** Caps (circles) are what the defaults assume.
+  Long thin polygons (roads, rivers), large rectangles, and polygons that
+  straddle cube faces all need hand-tuned `max_cells` (often 30–200).
+- **What's my query level vs. my storage level?** They should match within
+  ±2. A mismatch turns a range query into a parent scan.
+- **Is my covering computed once (offline) or per-request?** Offline
+  coverings can afford `max_cells = 100–500`. Per-request should stay ≤20.
+- **Do I need interior, exterior, or both?** Geofence containment usually
+  needs both — interior cells are instant-accept, boundary cells need the
+  full polygon check.
+- **Is this data CCW?** If it came from a GeoJSON source, check. GeoJSON
+  doesn't enforce winding order; S2 does, silently and catastrophically.
+- **Am I about to use S2 for hexagonal aggregation or visual heatmaps?**
+  Don't. Use H3. S2's quadrilateral cells at face boundaries look ugly,
+  and H3's hexagonal neighbors have uniform distances, which matters for
+  visualization. S2 wins at backend indexing; H3 wins at the frontend.
 
-5. **Exact Predicates**: Robust geometric operations that don't fail on edge cases.
+## NEVER List
 
-## When Writing Code
+**NEVER set `max_cells < 4`.** The coverer has no combinatorial freedom and
+worst-case area blowup is 215,518×. Even `max_cells = 4` can hit 14.4× at
+cube face corners. Start at 8, move up to 20 if post-filter cost hurts.
+*Instead*: use 8 for quick caps, 16–20 for polygons, 50–200 for offline
+precomputed geofences.
 
-### Always
+**NEVER use S2 tokens as prefixes for parent lookup.** Unlike geohash,
+chopping characters off a token produces an invalid token because the
+trailing `1` sentinel bit moves. Convert to `CellId → .parent(level) →
+token` instead. *Consequence of the wrong approach*: silent wrong answers
+that look plausible because the bad token is often still a valid cell.
 
-- Think in cells, not coordinates
-- Choose the right cell level for your precision needs
-- Use region coverings for irregular shapes
-- Leverage the hierarchical nature for multi-resolution queries
-- Remember: cell ID ordering preserves spatial locality
+**NEVER store a covering as the canonical form of a geofence.** The
+RegionCoverer algorithm's output changes across library versions and
+between language implementations. Your "golden" covering will silently
+diverge after a library upgrade. *Instead*: store the `S2Polygon` (WKT or
+S2 binary) and recompute the covering at load time.
 
-### Never
+**NEVER compute interior coverings without setting `max_level`.** For a
+tiny or thin region with no `max_level` set, the coverer recursively
+subdivides to level 30 searching for contained cells. This is seconds of
+CPU per call for an empty or near-empty result. *Instead*: set `max_level`
+to 2–4 levels below your exterior coverer's `max_level`.
 
-- Use lat/lng bounding boxes for spherical queries (they distort near poles)
-- Ignore the antimeridian (longitude ±180°)
-- Assume cells are square (they're quadrilaterals on a sphere)
-- Store raw coordinates when you could store cell IDs
-- Forget that level 30 is ~1cm², level 12 is ~3km²
+**NEVER shard on `cell_id % num_shards`.** This destroys the locality that
+is the entire point of S2. Every proximity query will fan out to all shards.
+*Instead*: partition the 64-bit ID space into contiguous ranges
+(`boundaries[i] = i * 2^64 / num_shards`) so each shard owns a geographically
+contiguous region.
 
-### Prefer
+**NEVER use Haversine for post-filter distance.** It's 5–10× slower than
+`S1ChordAngle` and gives identical rankings and thresholds. *Instead*:
+`S1ChordAngle.from_length2(dist_squared)` for comparisons, convert to meters
+only for display.
 
-- Cell IDs over lat/lng pairs for storage and indexing
-- Region coverings over point-in-polygon for containment
-- S2 distance calculations over Haversine (more accurate)
-- Hierarchical queries (coarse to fine) for performance
-- Cell unions for representing complex regions
+**NEVER trust that a `LatLngRect` covering handles the antimeridian the
+way you expect.** A rect with `west > east` in longitude is interpreted as
+crossing ±180°. Rects where the bounds look "normal" but should cross the
+antimeridian (e.g., Fiji) will silently cover the wrong half of the planet.
+*Instead*: for antimeridian-crossing regions, build an `S2Polygon` directly
+from points, which handles wrapping naturally.
 
-## The S2 Cell Hierarchy
+## The max_cells Calibration Cheat Sheet
 
-```
-Level    Cell Size (edge)    Use Case
-─────────────────────────────────────────────────────
-  0      ~7,842 km          Continental regions
-  4      ~490 km            Country-scale
-  8      ~31 km             Metro area
- 12      ~1.9 km            Neighborhood
- 14      ~477 m             City block
- 16      ~119 m             Building cluster  
- 18      ~30 m              Building footprint
- 20      ~7.4 m             Room-scale
- 24      ~0.46 m            Sub-meter precision
- 30      ~0.7 cm            Maximum precision
-```
-
-## Code Patterns
-
-### Basic Cell Operations
-
-```python
-import s2sphere  # Python wrapper
-
-# Point to cell at specific level
-lat, lng = 37.7749, -122.4194  # San Francisco
-point = s2sphere.LatLng.from_degrees(lat, lng)
-cell_id = s2sphere.CellId.from_lat_lng(point)
-
-# Get cell at level 16 (~119m cells)
-cell_level_16 = cell_id.parent(16)
-print(f"Cell ID: {cell_level_16.id()}")  # 64-bit integer
-
-# Cell properties
-cell = s2sphere.Cell(cell_level_16)
-print(f"Level: {cell.level()}")
-print(f"Area: {cell.exact_area()} steradians")
-
-# Get neighbors
-neighbors = [cell_level_16.get_edge_neighbors()]
-
-# Parent/child traversal
-parent = cell_level_16.parent()  # Level 15
-children = [cell_level_16.child(i) for i in range(4)]  # 4 children
-```
-
-### The 64-bit Cell ID Encoding
-
-```python
-# The cell ID encodes the entire hierarchy in its bits
-# 
-# Bit layout (simplified):
-#   - 3 bits: face (0-5, which cube face)
-#   - 2 bits per level: quadrant within parent (0-3)
-#   - 1 bit: sentinel marking the end
-#
-# This means:
-#   - Parent cell ID is a prefix of child cell ID
-#   - Range queries on cell IDs = spatial range queries
-#   - Sorting by cell ID clusters nearby cells together
-
-cell_id = s2sphere.CellId.from_lat_lng(
-    s2sphere.LatLng.from_degrees(37.7749, -122.4194)
-)
-
-# The magic: all descendants share a prefix
-parent = cell_id.parent(12)
-range_min = parent.range_min()  # Smallest descendant
-range_max = parent.range_max()  # Largest descendant
-
-# "Find all points in this region" becomes:
-# SELECT * FROM locations 
-# WHERE cell_id >= range_min AND cell_id <= range_max
-```
-
-### Region Covering Algorithm
-
-```python
-# The killer feature: approximate any region with a set of cells
-# at varying levels, optimizing for minimal cells
-
-from s2sphere import RegionCoverer, LatLngRect, LatLng
-
-# Define a region (e.g., bounding rectangle)
-rect = LatLngRect(
-    LatLng.from_degrees(37.7, -122.5),  # SW corner
-    LatLng.from_degrees(37.8, -122.4)   # NE corner
-)
-
-# Configure the coverer
-coverer = RegionCoverer()
-coverer.min_level = 8   # Don't go coarser than level 8
-coverer.max_level = 16  # Don't go finer than level 16
-coverer.max_cells = 20  # Use at most 20 cells
-
-# Get the covering
-covering = coverer.get_covering(rect)
-
-# Result: a set of cells at different levels that
-# tightly approximate the region
-for cell_id in covering:
-    print(f"Level {cell_id.level()}: {cell_id.id()}")
-
-# These cell IDs can be used for:
-# - Geofencing (is point in any of these cells?)
-# - Spatial joins (do cell sets overlap?)
-# - Sharding (route requests to shard owning the cell)
-```
-
-### Proximity Search Pattern
-
-```python
-# "Find all restaurants within 500m of me"
-
-def find_nearby(center_lat, center_lng, radius_meters, max_results=100):
-    """
-    S2 approach to proximity search:
-    1. Create a cap (spherical circle) around the point
-    2. Get a covering of that cap
-    3. Query the index for all covered cells
-    4. Post-filter by exact distance
-    """
-    from s2sphere import Cap, LatLng, CellId, RegionCoverer
-    import math
-    
-    # Earth radius in meters
-    EARTH_RADIUS = 6371000
-    
-    # Create center point
-    center = LatLng.from_degrees(center_lat, center_lng)
-    
-    # Create a spherical cap (circle on sphere)
-    # Cap is defined by axis (center) and chord angle
-    angle = radius_meters / EARTH_RADIUS  # radians
-    cap = Cap.from_axis_angle(
-        center.to_point(),
-        s1.Angle.from_radians(angle)
-    )
-    
-    # Get covering cells
-    coverer = RegionCoverer()
-    coverer.max_cells = 8  # Balance: fewer cells = more false positives
-    covering = coverer.get_covering(cap)
-    
-    # Query database for each cell range
-    candidates = []
-    for cell_id in covering:
-        # This is the key insight: spatial query → range query
-        range_min = cell_id.range_min().id()
-        range_max = cell_id.range_max().id()
-        
-        # SELECT * FROM places WHERE cell_id BETWEEN range_min AND range_max
-        candidates.extend(db.query_range(range_min, range_max))
-    
-    # Post-filter by exact distance (covering may include some outside radius)
-    results = []
-    for place in candidates:
-        dist = calculate_distance(center_lat, center_lng, place.lat, place.lng)
-        if dist <= radius_meters:
-            results.append((place, dist))
-    
-    # Sort by distance, return top N
-    results.sort(key=lambda x: x[1])
-    return results[:max_results]
-```
-
-### Geofencing with Cell Unions
-
-```python
-# "Is this user inside our delivery zone?"
-
-class DeliveryZone:
-    def __init__(self, polygon_coords, name):
-        """
-        Pre-compute a cell covering for the delivery zone.
-        Containment checks become cell ID lookups.
-        """
-        self.name = name
-        
-        # Build S2 polygon from coordinates
-        points = [LatLng.from_degrees(lat, lng) for lat, lng in polygon_coords]
-        loop = S2Loop(points)
-        polygon = S2Polygon(loop)
-        
-        # Cover the polygon with cells
-        coverer = RegionCoverer()
-        coverer.max_cells = 100  # More cells = tighter fit
-        self.covering = coverer.get_covering(polygon)
-        
-        # Store as sorted list for binary search
-        self.cell_ids = sorted([c.id() for c in self.covering])
-    
-    def contains(self, lat, lng):
-        """
-        Fast containment check:
-        1. Get cell ID for point
-        2. Check if any ancestor cell is in our covering
-        """
-        point_cell = CellId.from_lat_lng(LatLng.from_degrees(lat, lng))
-        
-        # Check this cell and all its ancestors
-        cell = point_cell
-        while cell.is_valid():
-            # Binary search in our covering
-            if self._cell_in_covering(cell.id()):
-                return True
-            cell = cell.parent()
-        
-        return False
-    
-    def _cell_in_covering(self, cell_id):
-        # Binary search for cell_id in sorted covering
-        import bisect
-        idx = bisect.bisect_left(self.cell_ids, cell_id)
-        return idx < len(self.cell_ids) and self.cell_ids[idx] == cell_id
-```
-
-### Geographic Sharding
-
-```python
-# Partition data across shards by geography
-
-class GeoShardRouter:
-    """
-    Route requests to shards based on S2 cell ownership.
-    Each shard owns a contiguous range of cell IDs.
-    """
-    
-    def __init__(self, num_shards, replication_factor=3):
-        self.num_shards = num_shards
-        
-        # Divide the full cell ID space among shards
-        # Cell IDs range from 0 to 2^64-1
-        # Hilbert curve ensures geographic locality within ranges
-        self.shard_boundaries = []
-        step = (2**64) // num_shards
-        for i in range(num_shards):
-            self.shard_boundaries.append(i * step)
-    
-    def get_shard(self, lat, lng, level=16):
-        """Get the primary shard for a location."""
-        cell_id = CellId.from_lat_lng(
-            LatLng.from_degrees(lat, lng)
-        ).parent(level).id()
-        
-        # Binary search for owning shard
-        import bisect
-        shard = bisect.bisect_right(self.shard_boundaries, cell_id) - 1
-        return shard
-    
-    def get_shards_for_region(self, covering):
-        """
-        For a region query, return all shards that might have data.
-        This is why coverings are powerful: bounded shard fan-out.
-        """
-        shards = set()
-        for cell_id in covering:
-            # Add shards for entire cell range
-            min_shard = self.get_shard_by_id(cell_id.range_min().id())
-            max_shard = self.get_shard_by_id(cell_id.range_max().id())
-            for s in range(min_shard, max_shard + 1):
-                shards.add(s)
-        return shards
-```
-
-### Hilbert Curve Intuition
+From the S2 C++ source, measured on 100,000 random caps:
 
 ```
-Why Hilbert curves? They preserve locality better than alternatives.
-
-Z-order (Morton) curve:         Hilbert curve:
-┌───┬───┐                       ┌───┬───┐
-│ 0 │ 1 │                       │ 0 │ 1 │
-├───┼───┤                       ├───┼───┤
-│ 2 │ 3 │                       │ 3 │ 2 │  ← Notice: 2 and 3 are adjacent
-└───┴───┘                       └───┴───┘
-
-Z-order: cells 1 and 2 are sequential but not adjacent spatially.
-Hilbert: sequential cells are always spatially adjacent.
-
-This matters because:
-- Range queries on cell IDs return spatially coherent results
-- Cache locality is preserved
-- Fewer disk seeks for spatial scans
+max_cells:        3        4     5     6     8    12    20   100   1000
+median ratio:  5.33     3.32  2.73  2.34  1.98  1.66  1.42  1.11  1.01
+worst case:  215518    14.41  9.72  5.26  3.91  2.75  1.92  1.20  1.02
 ```
 
-## Mental Model
+- `8` = library default, inflection point for caps.
+- `16–20` = best upgrade for polygons or thin regions (worst case drops to ~2×).
+- `100` = diminishing returns; only worth it when post-filter is very expensive.
+- `>100` = almost never justified by accuracy; only by query engine limits.
 
-Think of S2 as giving every location on Earth a **sort key** where:
+## When You Actually Hit the Details
 
-1. **Nearby locations have similar sort keys** (Hilbert property)
-2. **Containment is prefix matching** (hierarchy property)
-3. **Resolution is adjustable** (level selection)
-4. **Regions are cell sets** (covering algorithm)
+Load these references when the task requires their specific territory. Do NOT
+load all three for a simple task.
 
-When you need to answer "what's near X?" or "what's inside Y?", you're really asking about ranges and sets of these sort keys.
+- **Tuning a RegionCoverer, interior vs exterior coverings, `level_mod`, or
+  area method selection** → **MANDATORY read** `references/covering-tuning.md`
+- **Implementing proximity search, geofence containment, or geographic
+  sharding** → **MANDATORY read** `references/proximity-and-sharding.md`
+- **Parsing cell IDs by hand, token canonicalization, cross-language
+  interop, or choosing a Python/Go/Java/R S2 library** →
+  **MANDATORY read** `references/cell-id-internals.md`
 
-## Common Mistakes
+Do NOT load `cell-id-internals.md` for a proximity-search task — it adds no
+value. Do NOT load `covering-tuning.md` for a pure cell-ID encoding question.
 
-### Wrong Level Selection
+## Fallback Strategies
 
-```python
-# BAD: Using level 30 (1cm) for city-scale queries
-cell = CellId.from_lat_lng(point).parent(30)  # Way too precise
+- **Covering too loose (false positive rate too high)**: first double
+  `max_cells` (8→16→20). If still bad, raise `max_level` by 1. Only then
+  consider `level_mod = 1` with a tighter `[min_level, max_level]` window.
+- **Covering compute too slow**: halve `max_cells`, or precompute offline and
+  cache by polygon hash. Never compute coverings inside a hot request path
+  for polygons you control.
+- **Python `s2sphere` missing an API you need**: switch to `s2geometry` (SWIG
+  bindings). It is the full C++ library. No other Python option is complete.
+- **Antimeridian-crossing region covering wrong**: drop `LatLngRect`, build
+  an `S2Polygon` from explicit CCW points. Polygons handle wrap naturally;
+  rectangles do not.
+- **Cell IDs drifting between two services**: one is almost certainly using
+  `s2sphere` (which matches C++) and the other Java (which has a slightly
+  different ST coordinate system in intermediate values). Final cell IDs
+  should still match — if they don't, check CCW orientation of your input
+  polygons first.
 
-# GOOD: Match level to your use case
-# Ride-sharing pickup: level 16-18 (~30-120m)
-# Neighborhood search: level 12-14 (~500m-2km)
-# City-scale analytics: level 8-10 (~10-40km)
-cell = CellId.from_lat_lng(point).parent(16)
-```
+## When to Use Something Other Than S2
 
-### Ignoring Covering Size
+S2 is the right answer for **backend indexing, spatial joins, and geographic
+sharding at scale**. It is the wrong answer for:
 
-```python
-# BAD: Unlimited cells = slow queries
-coverer.max_cells = 10000  # Will fan out to too many ranges
-
-# GOOD: Balance precision vs. query cost
-coverer.max_cells = 8   # For proximity search
-coverer.max_cells = 50  # For geofencing
-coverer.max_cells = 200 # For precise region analytics
-```
-
-### Forgetting Post-Filtering
-
-```python
-# BAD: Assuming covering is exact
-results = query_covering(covering)  # May include points outside region
-
-# GOOD: Always post-filter for exactness
-results = query_covering(covering)
-results = [r for r in results if region.contains(r.point)]
-```
-
-## S2 Debugging Questions
-
-When your spatial queries aren't working:
-
-1. **What level am I using?** Is it appropriate for my precision needs?
-2. **How many cells in my covering?** Too few = false positives. Too many = slow.
-3. **Am I handling the antimeridian?** Regions crossing ±180° need special care.
-4. **Am I post-filtering?** Coverings are approximate by design.
-5. **Is my data indexed at the right level?** Query level should match index level.
+- **Hexagonal aggregation, heatmaps, visualization** — use H3. Hexagonal
+  neighbors have uniform distances (critical for heatmaps), and H3's 16
+  resolutions are easier to reason about than S2's 30 levels.
+- **Simple systems where any database will do** — use a geohash column and
+  `LIKE 'dr5ru%'`. Not elegant, but zero new dependencies.
+- **Strictly equal-area statistical analysis** — use an equal-area DGGS
+  (A5, ISEA4H). S2's 2× area variation at the same level breaks naive
+  aggregation by cell count.
+- **Geodetic survey, aviation, sub-meter absolute accuracy** — S2 treats
+  lat/lng as spherical, introducing ≤0.3% error from ignoring WGS84's
+  flattening. Fine for consumer apps, not for compliance or survey work.
 
 ## References
 
-- [S2 Geometry Library](https://s2geometry.io/) — Official documentation
-- [S2 Cells Overview](https://s2geometry.io/devguide/s2cell_hierarchy) — Cell hierarchy details
-- [Google Open Source Blog: Announcing S2](https://opensource.googleblog.com/2017/12/announcing-s2-library-geometry-on-sphere.html)
-- [Hilbert Curves and S2](https://blog.christianperone.com/2015/08/googles-s2-geometry-on-the-sphere-cells-and-hilbert-curve/)
-- [S2 at Foursquare](https://engineering.foursquare.com/) — Production usage patterns
-- [Uber H3](https://h3geo.org/) — Alternative (hexagonal) for comparison
+- S2 Cell Statistics (the official variation-by-level table):
+  https://s2geometry.io/resources/s2cell_statistics
+- S2 Developer Guide: https://s2geometry.io/devguide/
+- S2RegionCoverer source (where the `max_cells` calibration table lives):
+  https://github.com/google/s2geometry/blob/master/src/s2/s2region_coverer.h
+- H3 vs S2 comparison from Uber: https://h3geo.org/docs/comparisons/s2/
