@@ -1,6 +1,6 @@
 ---
 name: lamport-distributed-consensus
-description: Design, review, and debug Lamport-style consensus, leases, quorum math, and reconfiguration under crash faults and partial synchrony. Use when changing Paxos or Raft-style replication, leader election, membership transitions, read leases, quorum layouts, recovery semantics, or TLA+-backed safety arguments. Triggers: Paxos, Raft, quorum intersection, lease, epoch, term, ballot, split brain, stale read, learner, catch-up, reconfiguration, commit wait, TrueTime, Vertical Paxos, Flexible Paxos.
+description: "Design, review, and debug Lamport-style consensus, leases, quorum math, and reconfiguration under crash faults and partial synchrony. Use when changing Paxos or Raft-style replication, leader election, membership transitions, read leases, quorum layouts, recovery semantics, or TLA+-backed safety arguments. Triggers: Paxos, Raft, quorum intersection, lease, epoch, term, ballot, split brain, stale read, learner, catch-up, reconfiguration, commit wait, TrueTime, Vertical Paxos, Flexible Paxos."
 tags: paxos, raft, quorum, leases, reconfiguration, logical-time, tla-plus
 ---
 

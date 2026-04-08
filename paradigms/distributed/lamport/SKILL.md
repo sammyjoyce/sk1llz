@@ -1,6 +1,6 @@
 ---
 name: lamport-formal-distributed
-description: Formalize, model-check, and de-risk distributed protocols the Lamport way: isolate safety first, add liveness only with explicit synchrony assumptions, use refinement mappings to connect specs to optimized implementations, and choose the right Paxos-family variant for reconfiguration, leases, quorum shape, or Byzantine faults. Use when designing or reviewing consensus, replication, logical clocks, TLA+, PlusCal, TLC, TLAPS, Multi-Paxos, Fast Paxos, Flexible Paxos, Vertical Paxos, Cheap Paxos, leases, quorums, or refinement mappings.
+description: "Formalize, model-check, and de-risk distributed protocols the Lamport way: isolate safety first, add liveness only with explicit synchrony assumptions, use refinement mappings to connect specs to optimized implementations, and choose the right Paxos-family variant for reconfiguration, leases, quorum shape, or Byzantine faults. Use when designing or reviewing consensus, replication, logical clocks, TLA+, PlusCal, TLC, TLAPS, Multi-Paxos, Fast Paxos, Flexible Paxos, Vertical Paxos, Cheap Paxos, leases, quorums, or refinement mappings."
 tags: paxos, tla+, pluscal, tlc, tlaps, consensus, quorum-systems, refinement-mapping, logical-clocks, leases, reconfiguration, byzantine
 ---
 

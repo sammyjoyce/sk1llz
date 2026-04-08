@@ -1,6 +1,6 @@
 ---
 name: ramalho-fluent-python
-description: Design Python objects that cooperate with the interpreter through protocols, descriptors, dataclasses, weak references, and zero-copy buffers. Use when writing or refactoring custom collections, value objects, operator overloads, `Protocol` types, `__slots__`, descriptors, `memoryview` or `struct` code, or advanced dataclass APIs. Trigger on: dunder methods, `NotImplemented`, `Protocol`, `runtime_checkable`, `__slots__`, `descriptor`, `weakref`, `cached_property`, `dataclass`, `memoryview`, `struct`.
+description: "Design Python objects that cooperate with the interpreter through protocols, descriptors, dataclasses, weak references, and zero-copy buffers. Use when writing or refactoring custom collections, value objects, operator overloads, `Protocol` types, `__slots__`, descriptors, `memoryview` or `struct` code, or advanced dataclass APIs. Trigger on: dunder methods, `NotImplemented`, `Protocol`, `runtime_checkable`, `__slots__`, `descriptor`, `weakref`, `cached_property`, `dataclass`, `memoryview`, `struct`."
 tags: protocols, dataclasses, descriptors, slots, weakref, memoryview, typing, data-model
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: abramov-state-composition
-description: Write React and Redux-flavored JavaScript in Dan Abramov's style: minimal state, honest effects, composition before memoization, reducers for event logs, and boundaries that survive refactors. Use when refactoring hooks, placing state, fixing stale closures, removing prop-state sync bugs, deciding local state vs reducer vs Redux, or untangling render-performance problems. Triggers: react, hooks, useEffect, useReducer, composition, memo, stale closure, derived state, Redux, normalized state.
+description: "Write React and Redux-flavored JavaScript in Dan Abramov's style: minimal state, honest effects, composition before memoization, reducers for event logs, and boundaries that survive refactors. Use when refactoring hooks, placing state, fixing stale closures, removing prop-state sync bugs, deciding local state vs reducer vs Redux, or untangling render-performance problems. Triggers: react, hooks, useEffect, useReducer, composition, memo, stale closure, derived state, Redux, normalized state."
 ---
 
 # Abramov State Composition

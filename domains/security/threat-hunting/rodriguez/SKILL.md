@@ -1,6 +1,6 @@
 ---
 name: rodriguez-threat-hunter-playbook
-description: Build and review threat hunts in Roberto Rodriguez's Threat Hunter Playbook style: pre-hunt data management, relationship-driven analytics, notebook-first evidence chains, and replay validation with OTRF Security Datasets. Use when creating a new hunt playbook, auditing why a hunt failed, porting THP ideas into an existing SIEM or notebook stack, validating ATT&CK coverage claims, or working on HELK, OTRF, OSSEM, Security Datasets, Mordor, DCSync, remote PowerShell, WMI, service-creation, or other Windows behavior hunts.
+description: "Build and review threat hunts in Roberto Rodriguez's Threat Hunter Playbook style: pre-hunt data management, relationship-driven analytics, notebook-first evidence chains, and replay validation with OTRF Security Datasets. Use when creating a new hunt playbook, auditing why a hunt failed, porting THP ideas into an existing SIEM or notebook stack, validating ATT&CK coverage claims, or working on HELK, OTRF, OSSEM, Security Datasets, Mordor, DCSync, remote PowerShell, WMI, service-creation, or other Windows behavior hunts."
 ---
 
 # Rodriguez Threat Hunter Playbook

@@ -1,6 +1,6 @@
 ---
 name: jane-street-functional-trading
-description: Design or review trading systems in a Jane Street style: atomic risk boundaries, replay-first architecture, determinism before headline speed, and OCaml/typed-functional techniques only where they buy real safety or latency. Use when building or debugging market making, pricing, market-data, exchange, or risk infrastructure, especially when users mention OCaml, order books, inventory limits, replay, jitter, queue growth, zero-allocation hot paths, or microsecond latency.
+description: "Design or review trading systems in a Jane Street style: atomic risk boundaries, replay-first architecture, determinism before headline speed, and OCaml/typed-functional techniques only where they buy real safety or latency. Use when building or debugging market making, pricing, market-data, exchange, or risk infrastructure, especially when users mention OCaml, order books, inventory limits, replay, jitter, queue growth, zero-allocation hot paths, or microsecond latency."
 tags: ocaml, trading, market-making, exchange, latency, determinism, replay, risk, queueing, concurrency
 ---
 

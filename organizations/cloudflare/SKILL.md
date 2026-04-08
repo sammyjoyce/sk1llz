@@ -1,6 +1,6 @@
 ---
 name: cloudflare-performance-engineering
-description: Design and review latency-critical edge, proxy, cache, and packet-processing systems using Cloudflare-style heuristics for XDP/eBPF, connection reuse, tiered cache, anycast routing, and QUIC/HTTP/3. Use when building or debugging CDN, reverse proxy, DDoS mitigation, origin routing, or edge compute paths where tail latency and failure amplification matter. Triggers: xdp, ebpf, pingora, quic, http/3, anycast, tiered cache, origin shield, connection reuse, tail latency, ddos, cache collapse.
+description: "Design and review latency-critical edge, proxy, cache, and packet-processing systems using Cloudflare-style heuristics for XDP/eBPF, connection reuse, tiered cache, anycast routing, and QUIC/HTTP/3. Use when building or debugging CDN, reverse proxy, DDoS mitigation, origin routing, or edge compute paths where tail latency and failure amplification matter. Triggers: xdp, ebpf, pingora, quic, http/3, anycast, tiered cache, origin shield, connection reuse, tail latency, ddos, cache collapse."
 tags: cdn, networking, performance, edge, dns, http, tls, proxy, scale, systems, rust
 ---
 

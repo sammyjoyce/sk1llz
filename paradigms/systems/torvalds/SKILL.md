@@ -1,6 +1,6 @@
 ---
 name: torvalds-kernel-pragmatism
-description: Kernel-maintainer heuristics for Linux C, review, and patch flow: regression triage, bisect-safe patch slicing, calling-context decisions, UAPI immutability, and review-scarred anti-patterns. Use when writing or reviewing Linux kernel code, drivers, modules, lockless/RCU/IRQ paths, ioctl/sysfs/proc/syscall changes, or LKML/stable-ready patch series. Triggers: kernel patch, device driver, kernel module, LKML, stable backport, regression, RCU, spinlock, GFP_ATOMIC, READ_ONCE, ioctl, sysfs, procfs, Fixes tag, checkpatch, git bisect.
+description: "Kernel-maintainer heuristics for Linux C, review, and patch flow: regression triage, bisect-safe patch slicing, calling-context decisions, UAPI immutability, and review-scarred anti-patterns. Use when writing or reviewing Linux kernel code, drivers, modules, lockless/RCU/IRQ paths, ioctl/sysfs/proc/syscall changes, or LKML/stable-ready patch series. Triggers: kernel patch, device driver, kernel module, LKML, stable backport, regression, RCU, spinlock, GFP_ATOMIC, READ_ONCE, ioctl, sysfs, procfs, Fixes tag, checkpatch, git bisect."
 ---
 
 # Torvalds / Kernel Pragmatism

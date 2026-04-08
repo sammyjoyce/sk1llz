@@ -1,6 +1,6 @@
 ---
 name: kelley-zig-philosophy
-description: Write Zig in Andrew Kelley's style: explicit ownership, visible control flow, compile-time used for proof or specialization instead of cleverness, and ABI-aware data layout. Use when writing or reviewing Zig systems code, choosing allocators and lifetime models, debugging comptime or result-location bugs, or designing FFI/MMIO boundaries. Triggers: zig, comptime, allocator, ownership, lifetime, packed struct, extern struct, sentinel slice, OutOfMemory, result location semantics, ArrayList.items.
+description: "Write Zig in Andrew Kelley's style: explicit ownership, visible control flow, compile-time used for proof or specialization instead of cleverness, and ABI-aware data layout. Use when writing or reviewing Zig systems code, choosing allocators and lifetime models, debugging comptime or result-location bugs, or designing FFI/MMIO boundaries. Triggers: zig, comptime, allocator, ownership, lifetime, packed struct, extern struct, sentinel slice, OutOfMemory, result location semantics, ArrayList.items."
 ---
 
 # Andrew Kelley Zig Philosophy

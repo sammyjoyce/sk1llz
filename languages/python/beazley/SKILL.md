@@ -1,6 +1,6 @@
 ---
 name: beazley-deep-python
-description: Protocol-first guidance for advanced Python in David Beazley's style: generator pipelines, send/throw/close semantics, descriptor precedence, metaclass and code-generation trade-offs, GIL behavior, and inspect-driven debugging. Use when working on streaming pipelines, yield-from refactors, generator-based coroutines, descriptors, metaclasses, import hooks, or subtle CPython behavior. Trigger keywords: generator pipeline, yield from, send, throw, close, descriptor, __set_name__, metaclass, __signature__, inspect, GIL, free-threaded.
+description: "Protocol-first guidance for advanced Python in David Beazley's style: generator pipelines, send/throw/close semantics, descriptor precedence, metaclass and code-generation trade-offs, GIL behavior, and inspect-driven debugging. Use when working on streaming pipelines, yield-from refactors, generator-based coroutines, descriptors, metaclasses, import hooks, or subtle CPython behavior. Trigger keywords: generator pipeline, yield from, send, throw, close, descriptor, __set_name__, metaclass, __signature__, inspect, GIL, free-threaded."
 tags: generators, coroutines, descriptors, metaclasses, inspect, cpython, concurrency, streaming
 ---
 

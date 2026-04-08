@@ -1,7 +1,7 @@
 ---
 name: bianco-pyramid-of-pain
 namespace: bianco-pyramid-of-pain
-description: Threat-hunting strategy and detection-engineering guidance for using David Bianco's Pyramid of Pain, Hunting Maturity Model (HM0-HM4), and modern Summiting-the-Pyramid/Ambiguous-Techniques methods to choose hypotheses, score robustness, and turn hunts into durable detections. Use when planning hunts, deciding whether a signal belongs at IOC/tool/TTP level, triaging living-off-the-land activity, measuring hunting maturity, or operationalizing successful hunts. Triggers: pyramid of pain, hunting maturity model, HM0, HM1, HM2, HM3, HM4, summiting the pyramid, ambiguous techniques, TTP hunting, direct correlation, loose correlation, hunt-to-detection.
+description: "Threat-hunting strategy and detection-engineering guidance for using David Bianco's Pyramid of Pain, Hunting Maturity Model (HM0-HM4), and modern Summiting-the-Pyramid/Ambiguous-Techniques methods to choose hypotheses, score robustness, and turn hunts into durable detections. Use when planning hunts, deciding whether a signal belongs at IOC/tool/TTP level, triaging living-off-the-land activity, measuring hunting maturity, or operationalizing successful hunts. Triggers: pyramid of pain, hunting maturity model, HM0, HM1, HM2, HM3, HM4, summiting the pyramid, ambiguous techniques, TTP hunting, direct correlation, loose correlation, hunt-to-detection."
 ---
 
 # Hunt for attacker cost, not IOC volume

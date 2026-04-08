@@ -1,6 +1,6 @@
 ---
 name: blow-compiler-gamedev
-description: Build languages, compilers, asset pipelines, and game-engine subsystems in a Jonathan Blow style: prioritize compile-edit-run latency, explicit costs, data-first transforms, and compile-time power without a second meta-language. Use when designing or refactoring hot engine loops, ECS/data-layout code, build systems, asset tooling, language features, or creative tools where iteration speed and debuggability matter. Triggers: Jonathan Blow, Jai, compile-time execution, data-oriented, ECS, fast compile, no hidden costs, engine architecture, asset pipeline, metaprogramming, game tooling.
+description: "Build languages, compilers, asset pipelines, and game-engine subsystems in a Jonathan Blow style: prioritize compile-edit-run latency, explicit costs, data-first transforms, and compile-time power without a second meta-language. Use when designing or refactoring hot engine loops, ECS/data-layout code, build systems, asset tooling, language features, or creative tools where iteration speed and debuggability matter. Triggers: Jonathan Blow, Jai, compile-time execution, data-oriented, ECS, fast compile, no hidden costs, engine architecture, asset pipeline, metaprogramming, game tooling."
 tags: compiler, language-design, game-dev, game-engine, data-oriented, metaprogramming, jai, performance, tooling
 ---
 

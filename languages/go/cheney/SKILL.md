@@ -1,6 +1,6 @@
 ---
 name: cheney-practical-go
-description: Pragmatic Go API and code design in Dave Cheney's style: shrink public surface area, make the default path trivial, treat errors as API, and measure before optimizing. Use when writing or reviewing production Go, especially constructors, package boundaries, interfaces, error flows, logging, goroutine lifecycles, tests, or performance-sensitive code. Triggers: functional options, small interfaces, context misuse, internal packages, goroutine leaks, benchmarks, package-level logger, same-type parameters, streaming APIs.
+description: "Pragmatic Go API and code design in Dave Cheney's style: shrink public surface area, make the default path trivial, treat errors as API, and measure before optimizing. Use when writing or reviewing production Go, especially constructors, package boundaries, interfaces, error flows, logging, goroutine lifecycles, tests, or performance-sensitive code. Triggers: functional options, small interfaces, context misuse, internal packages, goroutine leaks, benchmarks, package-level logger, same-type parameters, streaming APIs."
 tags: go, api-design, errors, interfaces, logging, concurrency, testing, performance
 ---
 

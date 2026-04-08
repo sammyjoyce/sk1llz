@@ -1,6 +1,6 @@
 ---
 name: cro-practical-zig
-description: Practical Zig decision guide in Loris Cro's style: use Zig as a toolchain and integration layer first, keep build.zig and build.zig.zon as the source of truth, migrate C/C++ gradually, and express I/O and concurrency requirements precisely. Use when writing production Zig, designing build.zig, packaging cross-platform apps, wrapping C libraries, or evaluating async and event-loop code. Triggers: zig, build.zig, build.zig.zon, zig cc, zig translate-c, @cImport, std.Build, cross-compilation, system library, Io, asyncConcurrent, snapshot testing.
+description: "Practical Zig decision guide in Loris Cro's style: use Zig as a toolchain and integration layer first, keep build.zig and build.zig.zon as the source of truth, migrate C/C++ gradually, and express I/O and concurrency requirements precisely. Use when writing production Zig, designing build.zig, packaging cross-platform apps, wrapping C libraries, or evaluating async and event-loop code. Triggers: zig, build.zig, build.zig.zon, zig cc, zig translate-c, @cImport, std.Build, cross-compilation, system library, Io, asyncConcurrent, snapshot testing."
 tags: zig, build-system, c-interop, async, cross-compilation, package-management, testing
 ---
 

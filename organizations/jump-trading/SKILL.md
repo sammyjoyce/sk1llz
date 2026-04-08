@@ -1,6 +1,6 @@
 ---
 name: jump-trading-fpga-hft
-description: Expert playbook for FPGA-first electronic trading systems where wire-to-wire latency, determinism, and feed correctness dominate. Use when building or reviewing tick-to-trade paths, pre-trade risk gates, multicast A/B feed arbitration, 10G or 25G low-latency links, PTP or 1PPS timestamping, microwave-vs-fiber path choices, or FPGA/CPU partitioning for HFT. Triggers: FPGA trading, HFT, low latency, FEC, PTP, multicast gap recovery, cut-through, pre-trade risk, microwave, tick-to-trade.
+description: "Expert playbook for FPGA-first electronic trading systems where wire-to-wire latency, determinism, and feed correctness dominate. Use when building or reviewing tick-to-trade paths, pre-trade risk gates, multicast A/B feed arbitration, 10G or 25G low-latency links, PTP or 1PPS timestamping, microwave-vs-fiber path choices, or FPGA/CPU partitioning for HFT. Triggers: FPGA trading, HFT, low latency, FEC, PTP, multicast gap recovery, cut-through, pre-trade risk, microwave, tick-to-trade."
 tags: fpga, hft, low-latency, trading, hardware, networking, market-data, timestamping
 ---
 

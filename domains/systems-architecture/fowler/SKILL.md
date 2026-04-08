@@ -1,6 +1,6 @@
 ---
 name: fowler
-description: Apply Martin Fowler and Thoughtworks architecture heuristics for legacy modernization, evolutionary design, refactoring strategy, monolith-vs-microservice decisions, service extraction, integration boundary reviews, and technical-debt triage. Use when reviewing or designing system boundaries, planning strangler-fig migrations, deciding whether to split a monolith, introducing feature flags, or diagnosing distributed-monolith failures. Triggers: fowler, refactoring, evolutionary architecture, technical debt, monolith first, microservices, strangler fig, branch by abstraction, service extraction, distributed monolith.
+description: "Apply Martin Fowler and Thoughtworks architecture heuristics for legacy modernization, evolutionary design, refactoring strategy, monolith-vs-microservice decisions, service extraction, integration boundary reviews, and technical-debt triage. Use when reviewing or designing system boundaries, planning strangler-fig migrations, deciding whether to split a monolith, introducing feature flags, or diagnosing distributed-monolith failures. Triggers: fowler, refactoring, evolutionary architecture, technical debt, monolith first, microservices, strangler fig, branch by abstraction, service extraction, distributed monolith."
 ---
 
 # Fowler

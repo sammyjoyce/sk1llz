@@ -1,6 +1,6 @@
 ---
 name: feynman-first-principles
-description: Stress-test explanations, estimates, fixes, and designs by rebuilding them from primitives, operating envelopes, and falsification probes instead of trusting polished stories. Use when a bug survives normal debugging, when experts disagree on basics, when a system is outside its validated regime, when you need a model you can hand-simulate, or when a "simple explanation" feels suspiciously smooth. Triggers: "first principles", "rederive", "what actually causes this", "reason from scratch", "sanity check", "back of envelope", "falsify this", "simple example", "explain why this works", "I don't really understand this".
+description: "Stress-test explanations, estimates, fixes, and designs by rebuilding them from primitives, operating envelopes, and falsification probes instead of trusting polished stories. Use when a bug survives normal debugging, when experts disagree on basics, when a system is outside its validated regime, when you need a model you can hand-simulate, or when a \"simple explanation\" feels suspiciously smooth. Triggers: \"first principles\", \"rederive\", \"what actually causes this\", \"reason from scratch\", \"sanity check\", \"back of envelope\", \"falsify this\", \"simple example\", \"explain why this works\", \"I don't really understand this\"."
 ---
 
 # Feynman First-Principles

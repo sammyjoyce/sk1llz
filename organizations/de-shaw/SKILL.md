@@ -1,6 +1,6 @@
 ---
 name: de-shaw-computational-finance
-description: Make research, portfolio, and execution decisions in a D.E. Shaw style: hypothesis-first, leak-intolerant, capacity-aware systematic trading. Use when building alpha research, stat-arb, factor portfolios, transaction-cost models, risk systems, or research infrastructure. Triggers: quant, stat arb, alpha decay, market impact, borrow fee, crowding, backtest, factor model, execution, capacity.
+description: "Make research, portfolio, and execution decisions in a D.E. Shaw style: hypothesis-first, leak-intolerant, capacity-aware systematic trading. Use when building alpha research, stat-arb, factor portfolios, transaction-cost models, risk systems, or research infrastructure. Triggers: quant, stat arb, alpha decay, market impact, borrow fee, crowding, backtest, factor model, execution, capacity."
 tags: trading, computational-finance, quantitative, stat-arb, market-microstructure, risk, portfolio-construction
 ---
 

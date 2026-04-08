@@ -1,6 +1,6 @@
 ---
 name: eich-language-fundamentals
-description: Write JavaScript with expert-level control over prototypes, dynamic objects, function binding, coercion, and V8 shape/array behavior. Use when working on hot Node/Chrome paths, serialization-heavy DTO pipelines, prototype-pollution risk, tricky `this` or optional-chaining bugs, or equality/defaulting migrations. Triggers: "hidden class", "shape", "deopt", "elements kind", "prototype pollution", "__proto__", "Object.assign vs spread", "this binding", "arrow vs method", "optional chaining", "nullish coalescing", "Object.hasOwn", "Map vs Object", "coercion", "Eich", "ECMAScript semantics".
+description: "Write JavaScript with expert-level control over prototypes, dynamic objects, function binding, coercion, and V8 shape/array behavior. Use when working on hot Node/Chrome paths, serialization-heavy DTO pipelines, prototype-pollution risk, tricky `this` or optional-chaining bugs, or equality/defaulting migrations. Triggers: \"hidden class\", \"shape\", \"deopt\", \"elements kind\", \"prototype pollution\", \"__proto__\", \"Object.assign vs spread\", \"this binding\", \"arrow vs method\", \"optional chaining\", \"nullish coalescing\", \"Object.hasOwn\", \"Map vs Object\", \"coercion\", \"Eich\", \"ECMAScript semantics\"."
 tags: javascript, v8, prototypes, coercion, security, performance
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: gremlin-enterprise-chaos
-description: Design and review Gremlin chaos experiments, Scenarios, Reliability Tests, and Failure Flags for enterprise systems. Use when choosing between latency, packet loss, blackhole, DNS, shutdown, time travel, certificate expiry, or application-layer failure injection; when defining Health Checks and halt logic; when growing blast radius safely; or when interpreting reliability score changes and GameDay outcomes. Triggers: gremlin, chaos engineering, scenario, health check, reliability test, reliability score, failure flags, gameday, latency, packet loss, blackhole, dns, time travel, certificate expiry.
+description: "Design and review Gremlin chaos experiments, Scenarios, Reliability Tests, and Failure Flags for enterprise systems. Use when choosing between latency, packet loss, blackhole, DNS, shutdown, time travel, certificate expiry, or application-layer failure injection; when defining Health Checks and halt logic; when growing blast radius safely; or when interpreting reliability score changes and GameDay outcomes. Triggers: gremlin, chaos engineering, scenario, health check, reliability test, reliability score, failure flags, gameday, latency, packet loss, blackhole, dns, time travel, certificate expiry."
 tags: chaos-engineering, gremlin, reliability, fault-injection, failure-flags, gameday, resiliency, health-checks
 ---
 

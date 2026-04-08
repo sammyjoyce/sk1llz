@@ -1,6 +1,6 @@
 ---
 name: beck-tdd
-description: Apply Kent Beck style TDD as a step-size and design-control system: decide when not to TDD, choose Obvious Implementation vs Fake It vs Triangulate, keep red phases tiny, separate tidy from behavior, and avoid structure-cementing tests. Use when implementing behavior from a known interface, pinning a reproduced bug, deciding between real collaborator, fake, or mock, coaching an AI agent through red-green-refactor, or routing work out to learning tests, spikes, or legacy characterization when TDD is the wrong tool. Triggers: "TDD this", "red green refactor", "Kent Beck", "fake it", "triangulate", "obvious implementation", "Tidy First", "test list", "Detroit school", "classicist", "TCR", "learning test", "characterization test".
+description: "Apply Kent Beck style TDD as a step-size and design-control system: decide when not to TDD, choose Obvious Implementation vs Fake It vs Triangulate, keep red phases tiny, separate tidy from behavior, and avoid structure-cementing tests. Use when implementing behavior from a known interface, pinning a reproduced bug, deciding between real collaborator, fake, or mock, coaching an AI agent through red-green-refactor, or routing work out to learning tests, spikes, or legacy characterization when TDD is the wrong tool. Triggers: \"TDD this\", \"red green refactor\", \"Kent Beck\", \"fake it\", \"triangulate\", \"obvious implementation\", \"Tidy First\", \"test list\", \"Detroit school\", \"classicist\", \"TCR\", \"learning test\", \"characterization test\"."
 ---
 
 # Beck TDD

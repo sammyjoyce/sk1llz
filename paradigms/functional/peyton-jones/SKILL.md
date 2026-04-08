@@ -1,6 +1,6 @@
 ---
 name: peyton-jones-practical-haskell
-description: Practical GHC-facing Haskell guidance for diagnosing space leaks, specialization failures, RULES misfires, and unsafe sharing bugs without cargo-cult pragmas. Use when tuning hot Haskell paths, reading Core or demand output, setting `INLINE`/`INLINABLE`/`SPECIALIZE`, or debugging `foldl'`, `StrictData`, `Data.Map.Strict`, `SpecConstr`, `unsafePerformIO`, heap profiles, and worker-wrapper behavior. Keywords: Haskell, GHC, strictness, space leak, RULES, specialization, Core, profiling, unsafePerformIO.
+description: "Practical GHC-facing Haskell guidance for diagnosing space leaks, specialization failures, RULES misfires, and unsafe sharing bugs without cargo-cult pragmas. Use when tuning hot Haskell paths, reading Core or demand output, setting `INLINE`/`INLINABLE`/`SPECIALIZE`, or debugging `foldl'`, `StrictData`, `Data.Map.Strict`, `SpecConstr`, `unsafePerformIO`, heap profiles, and worker-wrapper behavior. Keywords: Haskell, GHC, strictness, space leak, RULES, specialization, Core, profiling, unsafePerformIO."
 tags: haskell, ghc, optimization, strictness, laziness, profiling, rewrite-rules, specialization
 ---
 

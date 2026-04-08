@@ -1,6 +1,6 @@
 ---
 name: nichols-practical-rust
-description: Apply Carol Nichols style practical Rust judgment to libraries, binaries, async services, and crate reviews. Use when changing public APIs, Cargo features, MSRV, tokio control flow, error boundaries, or unsafe edges. Triggers: Rust, Cargo.toml, tokio, semver, feature flags, crates.io, async cancellation, MSRV.
+description: "Apply Carol Nichols style practical Rust judgment to libraries, binaries, async services, and crate reviews. Use when changing public APIs, Cargo features, MSRV, tokio control flow, error boundaries, or unsafe edges. Triggers: Rust, Cargo.toml, tokio, semver, feature flags, crates.io, async cancellation, MSRV."
 ---
 
 # Nichols Practical Rust

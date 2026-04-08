@@ -1,6 +1,6 @@
 ---
 name: lipton-mutation-testing
-description: Separate productive mutants from noise so mutation testing improves tests instead of gaming a score. Use when tuning PIT or Stryker runs, triaging survivors, timeouts, static mutants, or NoCoverage results, setting PR or CI mutation gates, or deciding whether a mutant is equivalent, arid, or worth a new test. Trigger keywords: mutation testing, mutation score, PIT, Stryker, survivor triage, equivalent mutant, arid code, static mutant, timeoutFactor, incremental, NoCoverage.
+description: "Separate productive mutants from noise so mutation testing improves tests instead of gaming a score. Use when tuning PIT or Stryker runs, triaging survivors, timeouts, static mutants, or NoCoverage results, setting PR or CI mutation gates, or deciding whether a mutant is equivalent, arid, or worth a new test. Trigger keywords: mutation testing, mutation score, PIT, Stryker, survivor triage, equivalent mutant, arid code, static mutant, timeoutFactor, incremental, NoCoverage."
 tags: mutation-testing, test-quality, fault-injection, coverage-analysis, CI-gates
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: sutter-exceptional-cpp
-description: Write and review modern C++ in Herb Sutter's style: explicit failure contracts, ownership semantics, polymorphic boundaries, and concurrency-safe const behavior. Use when code involves exception safety, `noexcept`, moved-from state, `const` plus `mutable`, `pimpl`, `clone`, smart pointers, virtual interfaces, or lock-sensitive callbacks. Triggers: exceptional c++, strong guarantee, basic guarantee, commit or rollback, NVI, `make_unique`, `make_shared`, `weak_ptr`, `noexcept`, `shared_ptr`, `unique_ptr`.
+description: "Write and review modern C++ in Herb Sutter's style: explicit failure contracts, ownership semantics, polymorphic boundaries, and concurrency-safe const behavior. Use when code involves exception safety, `noexcept`, moved-from state, `const` plus `mutable`, `pimpl`, `clone`, smart pointers, virtual interfaces, or lock-sensitive callbacks. Triggers: exceptional c++, strong guarantee, basic guarantee, commit or rollback, NVI, `make_unique`, `make_shared`, `weak_ptr`, `noexcept`, `shared_ptr`, `unique_ptr`."
 tags: exceptions, noexcept, const, concurrency, move-semantics, pimpl, polymorphism, smart-pointers
 ---
 

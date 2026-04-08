@@ -1,6 +1,6 @@
 ---
 name: hejlsberg-language-design
-description: Design semver-sensitive public type surfaces, language features, and compiler-visible APIs in the style of Anders Hejlsberg. Use when evolving TypeScript or C# generics, nullability, overloads, callback/event contracts, extension seams, default interface methods, optional parameters, utility types, or checker-facing abstractions where source compatibility, binary compatibility, runtime behavior, inference quality, and editor performance must all be balanced. Triggers: TypeScript, C#, generics, variance, overloads, optional params, public API, nullability, utility types, default interface methods, extension methods, structural typing, inference, compiler performance, versioning.
+description: "Design semver-sensitive public type surfaces, language features, and compiler-visible APIs in the style of Anders Hejlsberg. Use when evolving TypeScript or C# generics, nullability, overloads, callback/event contracts, extension seams, default interface methods, optional parameters, utility types, or checker-facing abstractions where source compatibility, binary compatibility, runtime behavior, inference quality, and editor performance must all be balanced. Triggers: TypeScript, C#, generics, variance, overloads, optional params, public API, nullability, utility types, default interface methods, extension methods, structural typing, inference, compiler performance, versioning."
 ---
 
 Use this for language and public-surface decisions, not syntax cleanup.

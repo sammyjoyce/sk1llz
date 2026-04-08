@@ -1,6 +1,6 @@
 ---
 name: scarface-mean-reversion
-description: Trade dislocations in the style of Scarface Trades: fade statistically stretched moves only after anchor quality, regime, catalyst, and time-decay checks. Use when evaluating Bollinger/%B/z-score/VWAP/weekly-open/pairs-trading mean-reversion setups, deciding whether an extreme is exhaustion or a band-walk continuation, sizing a fade, or building a short-horizon reversion model. Trigger on: mean reversion, Bollinger Bands, z-score, VWAP reversion, weekly open, overextended move, buy the flush, sell the rip, pair spread, cointegration, half-life, fade extreme.
+description: "Trade dislocations in the style of Scarface Trades: fade statistically stretched moves only after anchor quality, regime, catalyst, and time-decay checks. Use when evaluating Bollinger/%B/z-score/VWAP/weekly-open/pairs-trading mean-reversion setups, deciding whether an extreme is exhaustion or a band-walk continuation, sizing a fade, or building a short-horizon reversion model. Trigger on: mean reversion, Bollinger Bands, z-score, VWAP reversion, weekly open, overextended move, buy the flush, sell the rip, pair spread, cointegration, half-life, fade extreme."
 ---
 
 # Scarface Mean Reversion

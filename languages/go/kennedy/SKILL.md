@@ -1,6 +1,6 @@
 ---
 name: kennedy-mechanical-sympathy
-description: Apply Bill Kennedy's Go engineering style when correctness, latency, or API design depends on how the runtime actually pays for code. Use when working on escape analysis, value vs pointer semantics, channel/goroutine design, scheduler or GC behavior, profiling, tracing, or container tuning. Triggers: mechanical sympathy, data semantics, escape analysis, pprof, go tool trace, schedtrace, GOMAXPROCS, GOMEMLIMIT, channel buffer, sync.Pool, goroutine leaks.
+description: "Apply Bill Kennedy's Go engineering style when correctness, latency, or API design depends on how the runtime actually pays for code. Use when working on escape analysis, value vs pointer semantics, channel/goroutine design, scheduler or GC behavior, profiling, tracing, or container tuning. Triggers: mechanical sympathy, data semantics, escape analysis, pprof, go tool trace, schedtrace, GOMAXPROCS, GOMEMLIMIT, channel buffer, sync.Pool, goroutine leaks."
 tags: go, runtime, scheduler, gc, profiling, tracing, escape-analysis, channels, goroutines, semantics
 ---
 

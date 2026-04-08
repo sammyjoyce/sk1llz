@@ -1,6 +1,6 @@
 ---
 name: hickey-simple-made-easy
-description: Use Rich Hickey's simplicity lens to decomplect value, identity, time, coordination, and side effects in Clojure systems. Use when reviewing atoms/refs/agents/volatiles, choosing seq vs transducer vs eduction vs transient pipelines, or redesigning APIs where "functional" code still behaves unpredictably. Triggers: simple vs easy, complecting, value+time, swap! retries, commute/ensure, chunked laziness, transients, agent failure.
+description: "Use Rich Hickey's simplicity lens to decomplect value, identity, time, coordination, and side effects in Clojure systems. Use when reviewing atoms/refs/agents/volatiles, choosing seq vs transducer vs eduction vs transient pipelines, or redesigning APIs where \"functional\" code still behaves unpredictably. Triggers: simple vs easy, complecting, value+time, swap! retries, commute/ensure, chunked laziness, transients, agent failure."
 ---
 
 This skill is for system-shape decisions, not Clojure syntax.

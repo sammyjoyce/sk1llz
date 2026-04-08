@@ -1,6 +1,6 @@
 ---
 name: bach-exploratory-testing
-description: Apply James Bach-style exploratory testing and Rapid Software Testing to choose session types, size charters, frame bugs with strong oracles, decide when to repeat versus vary tests, improve testability, and debrief testers without collapsing into test-case theater. Use when you need survey, analysis, deep-coverage, or closure sessions; when SBTM is being introduced or audited; when a team is over-counting test cases or over-trusting automation; or when testing GenAI/LLM systems responsibly. Triggers include: exploratory testing, RST, SBTM, session-based test management, charter, oracle, A FEW HICCUPPS, HTSM, SFDPOT, CRUSSPIC STMPL, paired exploratory survey, blink test, pesticide paradox, shallow agreement, Bach, Bolton.
+description: "Apply James Bach-style exploratory testing and Rapid Software Testing to choose session types, size charters, frame bugs with strong oracles, decide when to repeat versus vary tests, improve testability, and debrief testers without collapsing into test-case theater. Use when you need survey, analysis, deep-coverage, or closure sessions; when SBTM is being introduced or audited; when a team is over-counting test cases or over-trusting automation; or when testing GenAI/LLM systems responsibly. Triggers include: exploratory testing, RST, SBTM, session-based test management, charter, oracle, A FEW HICCUPPS, HTSM, SFDPOT, CRUSSPIC STMPL, paired exploratory survey, blink test, pesticide paradox, shallow agreement, Bach, Bolton."
 ---
 
 # Bach-style Exploratory Testing

@@ -1,6 +1,6 @@
 ---
 name: dean-large-scale-systems
-description: Jeff Dean / Google-scale architecture heuristics for services whose real constraints are fanout, tail latency, hot partitions, shared-cluster scheduling, and multi-region mutation cost. Use when choosing sharding, replication, overload behavior, or control-plane/data-plane boundaries for systems that may span dozens of services or thousands of machines. Trigger words: tail latency, hedged requests, tied requests, stragglers, hot shard, micro-partitions, good-enough results, canary requests, commit wait, TrueTime, quota, shared cell, load shedding.
+description: "Jeff Dean / Google-scale architecture heuristics for services whose real constraints are fanout, tail latency, hot partitions, shared-cluster scheduling, and multi-region mutation cost. Use when choosing sharding, replication, overload behavior, or control-plane/data-plane boundaries for systems that may span dozens of services or thousands of machines. Trigger words: tail latency, hedged requests, tied requests, stragglers, hot shard, micro-partitions, good-enough results, canary requests, commit wait, TrueTime, quota, shared cell, load shedding."
 tags: systems, scale, dean, reliability, distributed systems, google scale, fault tolerance, latency, spanner, bigtable, mapreduce, borg, infrastructure, architecture, capacity planning
 ---
 

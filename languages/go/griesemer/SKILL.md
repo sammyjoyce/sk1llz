@@ -1,6 +1,6 @@
 ---
 name: griesemer-precise-go
-description: Design and review Go code in the Robert Griesemer style: spec-first semantics, tight constraints, named-type preservation, and compatibility-safe API evolution. Use when writing or reviewing generics, interfaces, method sets, comparison logic, zero-value behavior, or exported APIs where exact language rules matter. Triggers: Go generics, constraints, comparable, type sets, underlying type, method sets, pointer receivers, zero value, public API compatibility.
+description: "Design and review Go code in the Robert Griesemer style: spec-first semantics, tight constraints, named-type preservation, and compatibility-safe API evolution. Use when writing or reviewing generics, interfaces, method sets, comparison logic, zero-value behavior, or exported APIs where exact language rules matter. Triggers: Go generics, constraints, comparable, type sets, underlying type, method sets, pointer receivers, zero value, public API compatibility."
 tags: go, generics, constraints, comparable, interfaces, method-sets, api-design, compatibility
 ---
 

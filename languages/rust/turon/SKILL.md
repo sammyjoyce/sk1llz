@@ -1,6 +1,6 @@
 ---
 name: turon-api-design
-description: Design Rust public APIs in Aaron Turon's style: borrowed-first async interfaces, zero-cost lower layers, semver-aware trait boundaries, and ecosystem-friendly layering. Use when shaping async I/O crates, public traits, return types, runtime boundaries, re-exports, or extension points. Triggers: async api, futures, tokio, impl Trait, object safety, blanket impl, specialization, backpressure, cancellation, crate facade.
+description: "Design Rust public APIs in Aaron Turon's style: borrowed-first async interfaces, zero-cost lower layers, semver-aware trait boundaries, and ecosystem-friendly layering. Use when shaping async I/O crates, public traits, return types, runtime boundaries, re-exports, or extension points. Triggers: async api, futures, tokio, impl Trait, object safety, blanket impl, specialization, backpressure, cancellation, crate facade."
 tags: rust, async, api-design, futures, semver, traits, object-safety, backpressure, cancellation, ecosystem
 ---
 

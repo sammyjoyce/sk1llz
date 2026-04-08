@@ -1,6 +1,6 @@
 ---
 name: thompson-elegant-systems
-description: Apply Ken Thompson's systems style to choices where simplicity is easy to fake but hard to earn: regex engine selection, UTF-8 byte-boundary handling, filename-safe pipelines, Go concurrency ownership, dependency pruning, and compiler trust. Use when building Unix-style CLIs or services, handling untrusted text or regexes, sharding UTF-8 logs by byte offset, deciding mutex vs channel, reducing dependency trees, auditing toolchains, or deciding rewrite vs patch. Trigger keywords: Thompson, RE2, NFA, ReDoS, UTF-8, overlong, CESU-8, self-synchronizing, find -print0, xargs -0, execdir, mutex or channel, RWMutex, trusting trust, DDC, reproducible build, small tools.
+description: "Apply Ken Thompson's systems style to choices where simplicity is easy to fake but hard to earn: regex engine selection, UTF-8 byte-boundary handling, filename-safe pipelines, Go concurrency ownership, dependency pruning, and compiler trust. Use when building Unix-style CLIs or services, handling untrusted text or regexes, sharding UTF-8 logs by byte offset, deciding mutex vs channel, reducing dependency trees, auditing toolchains, or deciding rewrite vs patch. Trigger keywords: Thompson, RE2, NFA, ReDoS, UTF-8, overlong, CESU-8, self-synchronizing, find -print0, xargs -0, execdir, mutex or channel, RWMutex, trusting trust, DDC, reproducible build, small tools."
 tags: unix, regex, utf-8, plan9, go, systems, trust, concurrency
 ---
 

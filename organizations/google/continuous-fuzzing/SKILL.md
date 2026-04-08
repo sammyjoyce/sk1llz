@@ -1,6 +1,6 @@
 ---
 name: google-continuous-fuzzing
-description: Improve OSS-Fuzz, ClusterFuzz, and CIFuzz integrations for real bug yield: choose harness shape, diagnose plateaued fuzzers, triage unreliable crashes, and avoid corpus-destroying or coverage-killing mistakes. Use when working on OSS-Fuzz project.yaml/build.sh/Dockerfile/CIFuzz, writing or splitting fuzz targets, tuning seed corpora or dictionaries, or debugging timeouts, OOMs, and low-coverage fuzzers. Triggers: oss-fuzz, clusterfuzz, cifuzz, fuzz target, seed corpus, dictionary, timeout, oom, sanitizer, fuzz introspector, unreliable crash.
+description: "Improve OSS-Fuzz, ClusterFuzz, and CIFuzz integrations for real bug yield: choose harness shape, diagnose plateaued fuzzers, triage unreliable crashes, and avoid corpus-destroying or coverage-killing mistakes. Use when working on OSS-Fuzz project.yaml/build.sh/Dockerfile/CIFuzz, writing or splitting fuzz targets, tuning seed corpora or dictionaries, or debugging timeouts, OOMs, and low-coverage fuzzers. Triggers: oss-fuzz, clusterfuzz, cifuzz, fuzz target, seed corpus, dictionary, timeout, oom, sanitizer, fuzz introspector, unreliable crash."
 ---
 
 # Google Continuous Fuzzing

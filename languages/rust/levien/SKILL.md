@@ -1,6 +1,6 @@
 ---
 name: levien-native-ui-mastery
-description: Design Rust native UI stacks in the style of Raph Levien across Xilem, Masonry, Vello, Parley, AccessKit, and Kurbo. Use when building reactive retained or hybrid UIs, GPU vector renderers, virtualized editors or lists, accessibility-sensitive widgets, or multilingual text systems where stable identity, incremental diffing, clip culling, scene encoding, smooth resize, font fallback, or compute-shader tradeoffs matter. Triggers: xilem, vello, masonry, accesskit, parley, kurbo, retained vs immediate, stable widget id, virtualized scroll, text shaping, font fallback, smooth resize.
+description: "Design Rust native UI stacks in the style of Raph Levien across Xilem, Masonry, Vello, Parley, AccessKit, and Kurbo. Use when building reactive retained or hybrid UIs, GPU vector renderers, virtualized editors or lists, accessibility-sensitive widgets, or multilingual text systems where stable identity, incremental diffing, clip culling, scene encoding, smooth resize, font fallback, or compute-shader tradeoffs matter. Triggers: xilem, vello, masonry, accesskit, parley, kurbo, retained vs immediate, stable widget id, virtualized scroll, text shaping, font fallback, smooth resize."
 tags: gui, native-ui, rendering, gpu, graphics, text, accessibility, xilem, vello, parley
 ---
 

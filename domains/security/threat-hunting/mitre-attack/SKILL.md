@@ -1,6 +1,6 @@
 ---
 name: mitre-attack-framework
-description: Turn ATT&CK into defender-grade mappings, hunt hypotheses, and coverage decisions that survive peer review. Use when mapping CTI, incident evidence, raw telemetry, Sigma/EDR detections, Navigator layers, or coverage claims to ATT&CK techniques and sub-techniques. Trigger keywords: map to attack, mitre attack, t10xx, ta00xx, sub-technique, navigator layer, detection coverage, dettect, attack flow, ttp mapping, hunt hypothesis, technique id, attack version.
+description: "Turn ATT&CK into defender-grade mappings, hunt hypotheses, and coverage decisions that survive peer review. Use when mapping CTI, incident evidence, raw telemetry, Sigma/EDR detections, Navigator layers, or coverage claims to ATT&CK techniques and sub-techniques. Trigger keywords: map to attack, mitre attack, t10xx, ta00xx, sub-technique, navigator layer, detection coverage, dettect, attack flow, ttp mapping, hunt hypothesis, technique id, attack version."
 tags: mitre, attack, ttp, detection, threat-hunting, cti, coverage, navigator, dettect, sub-technique
 ---
 

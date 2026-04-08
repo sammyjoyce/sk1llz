@@ -1,6 +1,6 @@
 ---
 name: polya-how-to-solve-it
-description: Apply Pólya-style problem solving corrected by Schoenfeld and Mason for unfamiliar math, algorithm, debugging, proof, and design problems. Use when you are stuck, chasing the wrong lead, can produce examples but not a method, have a result that will not generalize, or need to turn a hunch into a tractable attack. Triggers: "I'm stuck", "don't know where to start", "tried everything", "works on examples only", "what heuristic should I use", "can't see the invariant", "why does this fail", "false lead", "need a proof strategy".
+description: "Apply Pólya-style problem solving corrected by Schoenfeld and Mason for unfamiliar math, algorithm, debugging, proof, and design problems. Use when you are stuck, chasing the wrong lead, can produce examples but not a method, have a result that will not generalize, or need to turn a hunch into a tractable attack. Triggers: \"I'm stuck\", \"don't know where to start\", \"tried everything\", \"works on examples only\", \"what heuristic should I use\", \"can't see the invariant\", \"why does this fail\", \"false lead\", \"need a proof strategy\"."
 ---
 
 # Pólya After The Corrections

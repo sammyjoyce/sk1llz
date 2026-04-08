@@ -1,6 +1,6 @@
 ---
 name: dodds-testing-practices
-description: Pressure-test JavaScript and TypeScript test suites the Kent C. Dodds way: behavior-first, accessibility-first, and network-boundary aware. Use when writing or triaging React Testing Library, DOM Testing Library, Jest, Vitest, user-event, or MSW tests; fixing act warnings; choosing between getByRole, findBy, waitForElementToBeRemoved, test.each, or MSW; or deciding whether a helper abstraction is earning its keep. Trigger keywords: react-testing-library, testing-library, RTL, user-event, MSW, act warning, waitFor, findByRole, getByRole, fake timers, shallow rendering, test IDs, AHA testing.
+description: "Pressure-test JavaScript and TypeScript test suites the Kent C. Dodds way: behavior-first, accessibility-first, and network-boundary aware. Use when writing or triaging React Testing Library, DOM Testing Library, Jest, Vitest, user-event, or MSW tests; fixing act warnings; choosing between getByRole, findBy, waitForElementToBeRemoved, test.each, or MSW; or deciding whether a helper abstraction is earning its keep. Trigger keywords: react-testing-library, testing-library, RTL, user-event, MSW, act warning, waitFor, findByRole, getByRole, fake timers, shallow rendering, test IDs, AHA testing."
 tags: testing, react, javascript, typescript, testing-library, msw, integration-testing, accessibility, jest, vitest
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: vogels-cloud-architecture
-description: Turn vague distributed-systems plans into Vogels-style availability designs: statically stable, blast-radius-limited, explicit about consistency trade-offs, and safe under overload. Use when designing or reviewing AWS-scale APIs, control-plane/data-plane splits, multi-AZ or multi-region services, retry/idempotency policies, queue-based workflows, cells, or noisy-neighbor isolation. Triggers include Werner Vogels, Dynamo, AWS-scale, eventual consistency, static stability, shuffle sharding, blast radius, control plane, data plane, retry storm, overload, and noisy neighbors.
+description: "Turn vague distributed-systems plans into Vogels-style availability designs: statically stable, blast-radius-limited, explicit about consistency trade-offs, and safe under overload. Use when designing or reviewing AWS-scale APIs, control-plane/data-plane splits, multi-AZ or multi-region services, retry/idempotency policies, queue-based workflows, cells, or noisy-neighbor isolation. Triggers include Werner Vogels, Dynamo, AWS-scale, eventual consistency, static stability, shuffle sharding, blast radius, control plane, data plane, retry storm, overload, and noisy neighbors."
 tags: vogels, aws, distributed-systems, reliability, eventual-consistency, static-stability, shuffle-sharding, control-plane, data-plane, cells
 ---
 

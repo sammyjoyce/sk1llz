@@ -1,6 +1,6 @@
 ---
 name: uunet
-description: Think like a UUNET/Verizon backbone operator or DBIR analyst when internet-scale routing, interconnection, physical diversity, or breach-classification mistakes have large blast radius. Use when judging BGP route leaks, RPKI/ROV scope, BGP Role/OTC rollout, hot-potato vs cold-potato delivery, SRLG diversity claims, DDoS blackholing, peering disputes, or VERIS/DBIR-style incident analysis. Triggers: AS701, AS702, AS703, route leak, hijack, max-prefix, OTC, BGP Role, RPKI, maxLength, hot potato, cold potato, peering, depeering, SRLG, diverse circuits, RTBH, VERIS, DBIR, incident vs breach.
+description: "Think like a UUNET/Verizon backbone operator or DBIR analyst when internet-scale routing, interconnection, physical diversity, or breach-classification mistakes have large blast radius. Use when judging BGP route leaks, RPKI/ROV scope, BGP Role/OTC rollout, hot-potato vs cold-potato delivery, SRLG diversity claims, DDoS blackholing, peering disputes, or VERIS/DBIR-style incident analysis. Triggers: AS701, AS702, AS703, route leak, hijack, max-prefix, OTC, BGP Role, RPKI, maxLength, hot potato, cold potato, peering, depeering, SRLG, diverse circuits, RTBH, VERIS, DBIR, incident vs breach."
 tags: bgp, routing, peering, rpki, srlg, backbone, tier1, rtbh, veris, dbir, incident-response
 ---
 

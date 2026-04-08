@@ -1,6 +1,6 @@
 ---
 name: kay-inventing-the-future
-description: Design languages, runtimes, UI platforms, and programmable environments in Alan Kay's style: message-centered boundaries, late binding, executable meta-systems, learning-environment UI, and systems built to survive 10-15 years of change. Use when designing live systems, plugin architectures, reflective tools, end-user programming, educational software, or when requests mention Smalltalk, Dynabook, message passing, live programming, extensibility, or systems that must keep evolving.
+description: "Design languages, runtimes, UI platforms, and programmable environments in Alan Kay's style: message-centered boundaries, late binding, executable meta-systems, learning-environment UI, and systems built to survive 10-15 years of change. Use when designing live systems, plugin architectures, reflective tools, end-user programming, educational software, or when requests mention Smalltalk, Dynabook, message passing, live programming, extensibility, or systems that must keep evolving."
 tags: alan-kay, smalltalk, dynabook, message-passing, late-binding, live-systems, reflective-systems, ui, language-design
 ---
 

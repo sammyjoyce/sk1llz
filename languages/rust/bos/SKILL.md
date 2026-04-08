@@ -1,6 +1,6 @@
 ---
 name: bos-concurrency-rust
-description: Design and review Rust concurrency in the style of Mara Bos: atomics, memory ordering, lock internals, wait/notify, false-sharing avoidance, and contention tuning. Use when implementing or auditing custom `Mutex`/`RwLock`/spinlock/condvar code, choosing `Ordering`, reasoning about `Arc`/`Weak` or `OnceLock`, debugging lock-free races, or testing concurrency with Loom. Triggers: `Atomic*`, `Ordering`, `compare_exchange`, lock-free, spinlock, false sharing, `Arc`, `Weak`, `OnceLock`, `wait`, `notify`, Loom, contention, cache line.
+description: "Design and review Rust concurrency in the style of Mara Bos: atomics, memory ordering, lock internals, wait/notify, false-sharing avoidance, and contention tuning. Use when implementing or auditing custom `Mutex`/`RwLock`/spinlock/condvar code, choosing `Ordering`, reasoning about `Arc`/`Weak` or `OnceLock`, debugging lock-free races, or testing concurrency with Loom. Triggers: `Atomic*`, `Ordering`, `compare_exchange`, lock-free, spinlock, false sharing, `Arc`, `Weak`, `OnceLock`, `wait`, `notify`, Loom, contention, cache line."
 tags: rust, concurrency, atomics, memory-ordering, locks, spinlocks, condvar, arc, weak, once-lock, loom, false-sharing, performance
 ---
 

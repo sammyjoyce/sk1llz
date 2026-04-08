@@ -1,6 +1,6 @@
 ---
 name: jacobson-network-performance
-description: Diagnose queueing, RTT, and TCP control-loop pathologies with Jacobson-style measurement discipline. Use when a path is fast but feels slow, RTT explodes under load, fq_codel/CoDel/CAKE or BBR/CUBIC tuning is on the table, or you must separate real loss from reordering, policers, ACK pathologies, or hidden buffers. Trigger keywords: bufferbloat, standing queue, min_rtt, BDP, fq_codel, CoDel, CAKE, BQL, RACK, DSACK, ACK compression, tcp_notsent_lowat, delayed ACK, BBRv3, CUBIC, ECN bleach, tc qdisc, tcp_rmem, tcp_wmem, Wi-Fi aggregation, satellite TCP.
+description: "Diagnose queueing, RTT, and TCP control-loop pathologies with Jacobson-style measurement discipline. Use when a path is fast but feels slow, RTT explodes under load, fq_codel/CoDel/CAKE or BBR/CUBIC tuning is on the table, or you must separate real loss from reordering, policers, ACK pathologies, or hidden buffers. Trigger keywords: bufferbloat, standing queue, min_rtt, BDP, fq_codel, CoDel, CAKE, BQL, RACK, DSACK, ACK compression, tcp_notsent_lowat, delayed ACK, BBRv3, CUBIC, ECN bleach, tc qdisc, tcp_rmem, tcp_wmem, Wi-Fi aggregation, satellite TCP."
 tags: networking, tcp, congestion-control, bufferbloat, aqm, latency, performance, bbr, fq_codel
 ---
 

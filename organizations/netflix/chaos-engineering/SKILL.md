@@ -1,6 +1,6 @@
 ---
 name: netflix-chaos-engineering
-description: Design and review Netflix-style production chaos experiments for distributed systems. Use when scoping FIT or ChAP style failure injection, choosing steady-state and abort metrics, prioritizing dependency experiments, or diagnosing noisy results from canary versus control chaos runs. Triggers: chaos engineering, FIT, ChAP, failure injection, steady state, blast radius, canary, fallback, retry storm, Hystrix, resilience.
+description: "Design and review Netflix-style production chaos experiments for distributed systems. Use when scoping FIT or ChAP style failure injection, choosing steady-state and abort metrics, prioritizing dependency experiments, or diagnosing noisy results from canary versus control chaos runs. Triggers: chaos engineering, FIT, ChAP, failure injection, steady state, blast radius, canary, fallback, retry storm, Hystrix, resilience."
 tags: chaos-engineering, resilience, failure-injection, distributed-systems, reliability, netflix
 ---
 

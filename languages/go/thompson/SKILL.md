@@ -1,6 +1,6 @@
 ---
 name: thompson-unix-philosophy
-description: Shape Go code in the Thompson/Pike/Bell Labs tradition: small tools, concrete types, data-driven control flow, text/file interfaces, and APIs that stay simple under change. Use when designing CLIs, filters, parsers, code generators, log processors, boundary packages, or small libraries where composition and long-term maintainability matter more than framework breadth. Triggers: "unix philosophy", "thompson style", "pike style", "filter program", "compose pipeline", "plan 9 style", "data dominates", "do one thing well", "concrete types", "table-driven", "small tools".
+description: "Shape Go code in the Thompson/Pike/Bell Labs tradition: small tools, concrete types, data-driven control flow, text/file interfaces, and APIs that stay simple under change. Use when designing CLIs, filters, parsers, code generators, log processors, boundary packages, or small libraries where composition and long-term maintainability matter more than framework breadth. Triggers: \"unix philosophy\", \"thompson style\", \"pike style\", \"filter program\", \"compose pipeline\", \"plan 9 style\", \"data dominates\", \"do one thing well\", \"concrete types\", \"table-driven\", \"small tools\"."
 ---
 
 # Thompson / Pike Style for Go

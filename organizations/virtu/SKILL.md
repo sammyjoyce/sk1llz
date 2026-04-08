@@ -1,6 +1,6 @@
 ---
 name: virtu-market-microstructure
-description: Design or review equity execution systems in the style of Virtu/ITG: smart order routing, queue-position models, dark and conditional routing, implementation shortfall control, markout-driven TCA, and anti-toxicity logic for fragmented markets. Use when the task mentions Virtu, ITG, POSIT, smart order routing, maker-taker vs inverted venues, queue position, implementation shortfall, adverse selection, minimum quantity, dark liquidity curation, conditional invitations, crumbling quotes, odd lots, or venue markouts.
+description: "Design or review equity execution systems in the style of Virtu/ITG: smart order routing, queue-position models, dark and conditional routing, implementation shortfall control, markout-driven TCA, and anti-toxicity logic for fragmented markets. Use when the task mentions Virtu, ITG, POSIT, smart order routing, maker-taker vs inverted venues, queue position, implementation shortfall, adverse selection, minimum quantity, dark liquidity curation, conditional invitations, crumbling quotes, odd lots, or venue markouts."
 tags: market-microstructure, smart-order-routing, execution, dark-liquidity, tca, adverse-selection, queue-position, hft
 ---
 

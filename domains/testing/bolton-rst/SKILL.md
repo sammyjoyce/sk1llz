@@ -1,6 +1,6 @@
 ---
 name: bolton-rapid-software-testing
-description: Diagnose and improve software testing using Michael Bolton and James Bach's Rapid Software Testing heuristics. Use when evaluating a test strategy, reviewing automation or regression plans, creating or coaching exploratory sessions, writing charters or debriefs, framing release risk, surfacing testability issues, or defending exploratory work to managers, auditors, or developers. Triggers: exploratory testing, session-based test management, testing vs checking, FEW HICCUPPS, SFDIPOT, charter, debrief, coverage, testability, bug advocacy, "all tests pass".
+description: "Diagnose and improve software testing using Michael Bolton and James Bach's Rapid Software Testing heuristics. Use when evaluating a test strategy, reviewing automation or regression plans, creating or coaching exploratory sessions, writing charters or debriefs, framing release risk, surfacing testability issues, or defending exploratory work to managers, auditors, or developers. Triggers: exploratory testing, session-based test management, testing vs checking, FEW HICCUPPS, SFDIPOT, charter, debrief, coverage, testability, bug advocacy, \"all tests pass\"."
 ---
 
 # Bolton Rapid Software Testing

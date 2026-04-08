@@ -1,6 +1,6 @@
 ---
 name: vanrossum-pythonic-style
-description: Design and review Python the way Guido-style library maintainers do: preserve debuggability, keep APIs evolvable, and avoid CPython-only traps. Use when deciding public signatures, dataclass layout, slots, caching, encoding defaults, inheritance boundaries, immutable subclasses, or disputed "Pythonic" trade-offs. Triggers: pythonic, Guido, van Rossum, positional-only, keyword-only, dataclass, slots, weakref_slot, __match_args__, cached_property, lru_cache, unsafe_hash, EncodingWarning, __new__, walrus, tail recursion.
+description: "Design and review Python the way Guido-style library maintainers do: preserve debuggability, keep APIs evolvable, and avoid CPython-only traps. Use when deciding public signatures, dataclass layout, slots, caching, encoding defaults, inheritance boundaries, immutable subclasses, or disputed \"Pythonic\" trade-offs. Triggers: pythonic, Guido, van Rossum, positional-only, keyword-only, dataclass, slots, weakref_slot, __match_args__, cached_property, lru_cache, unsafe_hash, EncodingWarning, __new__, walrus, tail recursion."
 tags: python, pythonic, van-rossum, api-design, dataclass, slots, caching, encoding, inheritance
 ---
 

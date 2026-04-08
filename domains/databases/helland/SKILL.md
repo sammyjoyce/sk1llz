@@ -1,6 +1,6 @@
 ---
 name: helland-distributed-data
-description: Apply Pat Helland's distributed-data philosophy to cross-service state, retries, versioned facts, and low-tail-latency coordination. Use when designing entity boundaries, idempotency contracts, outside-data schemas, tentative workflows, reconciliation paths, or quorum behavior under jitter. Trigger keywords: helland, entities, activities, idempotency, outside data, inside data, tentative operations, versioned facts, reconciliation, repartitioning, at-least-once, stale reads, quorum, jitter, fuzzy visibility.
+description: "Apply Pat Helland's distributed-data philosophy to cross-service state, retries, versioned facts, and low-tail-latency coordination. Use when designing entity boundaries, idempotency contracts, outside-data schemas, tentative workflows, reconciliation paths, or quorum behavior under jitter. Trigger keywords: helland, entities, activities, idempotency, outside data, inside data, tentative operations, versioned facts, reconciliation, repartitioning, at-least-once, stale reads, quorum, jitter, fuzzy visibility."
 ---
 
 # Helland Distributed Data

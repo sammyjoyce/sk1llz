@@ -1,6 +1,6 @@
 ---
 name: stepanov-generic-programming
-description: Derive STL-style C++ algorithms from proofs instead of from containers: choose the weakest iterator or concept that preserves correctness, preserve regular and value semantics, and state exact law and operation-count requirements. Use when designing or reviewing generic algorithms, iterators, ranges, comparators, rotate or merge style operations, function objects, or when prompts mention generic programming, regular types, iterator categories, concepts, value semantics, or "make this algorithm truly generic".
+description: "Derive STL-style C++ algorithms from proofs instead of from containers: choose the weakest iterator or concept that preserves correctness, preserve regular and value semantics, and state exact law and operation-count requirements. Use when designing or reviewing generic algorithms, iterators, ranges, comparators, rotate or merge style operations, function objects, or when prompts mention generic programming, regular types, iterator categories, concepts, value semantics, or \"make this algorithm truly generic\"."
 tags: generic-programming, algorithms, iterators, concepts, stl, value-semantics, regular-types, ranges
 ---
 

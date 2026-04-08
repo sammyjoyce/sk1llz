@@ -1,6 +1,6 @@
 ---
 name: ronacher-pragmatic-design
-description: Design Python libraries, Flask/Werkzeug/Jinja/Click code, and extension APIs in Armin Ronacher's style: explicit application objects, composable primitives, sharp but documented escape hatches, and minimal magic. Use when shaping framework or library interfaces, Flask extensions, request-context code, blueprints vs WSGI composition, Jinja environments or filters, or Click CLIs. Triggers: Flask, Werkzeug, Jinja, Click, LocalProxy, current_app, app factory, blueprint, WSGI middleware, autoescape, StrictUndefined, init_app.
+description: "Design Python libraries, Flask/Werkzeug/Jinja/Click code, and extension APIs in Armin Ronacher's style: explicit application objects, composable primitives, sharp but documented escape hatches, and minimal magic. Use when shaping framework or library interfaces, Flask extensions, request-context code, blueprints vs WSGI composition, Jinja environments or filters, or Click CLIs. Triggers: Flask, Werkzeug, Jinja, Click, LocalProxy, current_app, app factory, blueprint, WSGI middleware, autoescape, StrictUndefined, init_app."
 tags: python, flask, werkzeug, jinja, click, wsgi, app-factory, extension-design, api-design, library-design
 ---
 

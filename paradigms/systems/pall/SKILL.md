@@ -1,6 +1,6 @@
 ---
 name: pall-jit-mastery
-description: Mike Pall-style trace-JIT diagnosis and LuaJIT/FFI tuning for hot dynamic-language runtimes. Use when a path flips between interpreted and native code, guard or side-exit churn dominates, FFI callbacks or C boundaries poison traces, or you need to decide whether to reshape code, retune hotloop/hotexit, or disable JIT for one function. Trigger keywords: luajit, trace abort, side trace, guard, -jv, -jdump, -jp, hotloop, hotexit, maxrecord, maxsnap, mcode, bad callback, ffi.
+description: "Mike Pall-style trace-JIT diagnosis and LuaJIT/FFI tuning for hot dynamic-language runtimes. Use when a path flips between interpreted and native code, guard or side-exit churn dominates, FFI callbacks or C boundaries poison traces, or you need to decide whether to reshape code, retune hotloop/hotexit, or disable JIT for one function. Trigger keywords: luajit, trace abort, side trace, guard, -jv, -jdump, -jp, hotloop, hotexit, maxrecord, maxsnap, mcode, bad callback, ffi."
 ---
 
 # Pall JIT Mastery
