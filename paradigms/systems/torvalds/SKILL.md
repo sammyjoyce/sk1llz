@@ -1,72 +1,67 @@
 ---
 name: torvalds-kernel-pragmatism
-description: Write systems code in the style of Linus Torvalds and the Linux kernel community — pragmatic C, "good taste" data-structure design, hard rules about regressions and userspace ABI, kernel-specific idioms (container_of, goto cleanup, ERR_PTR, RCU, READ_ONCE), and bisect-friendly commit discipline. Use when writing or reviewing Linux kernel code, drivers, kernel modules, lockless/concurrent C, or any high-stakes systems code where correctness, latency, and reviewability dominate. Triggers: "kernel patch", "kernel module", "device driver", "Linux kernel coding style", "kernel C", "RCU", "spinlock", "GFP_KERNEL/GFP_ATOMIC", "container_of", "goto cleanup", "ERR_PTR", "memory barrier", "READ_ONCE", "WRITE_ONCE", "lockless", "submit to LKML", "checkpatch", "subsystem maintainer", "git bisect", "Signed-off-by", "kernel review", "torvalds style".
+description: Kernel-maintainer heuristics for Linux C, review, and patch flow: regression triage, bisect-safe patch slicing, calling-context decisions, UAPI immutability, and review-scarred anti-patterns. Use when writing or reviewing Linux kernel code, drivers, modules, lockless/RCU/IRQ paths, ioctl/sysfs/proc/syscall changes, or LKML/stable-ready patch series. Triggers: kernel patch, device driver, kernel module, LKML, stable backport, regression, RCU, spinlock, GFP_ATOMIC, READ_ONCE, ioctl, sysfs, procfs, Fixes tag, checkpatch, git bisect.
 ---
 
-# Torvalds / Linux Kernel Pragmatism⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌​‌‌‌‍​‌‌​​‌​‌‍‌​‌​​‌‌‌‍​‌‌​‌‌‌‌‍​​​​‌​‌​‍​‌​‌‌‌​​⁠‍⁠
+# Torvalds / Kernel Pragmatism
 
-## The mental model
+Treat kernel work as damage control on a live ecosystem, not as a greenfield coding exercise. The winning move is usually the one that preserves userspace, preserves bisectability, and lets an annoyed maintainer verify the change without reconstructing your intent from scratch.
 
-When you write code in this style, you are not "writing a function". You are placing one more block in a structure that **must remain bisectable, revertable, and runnable on every machine that ran it last week**. Three questions decide nearly everything:
+## Before you touch code, ask yourself
 
-1. **Where are the special cases?** Special cases are bugs waiting for an input you didn't think of. Restructure the data so the special case becomes the normal case (see `references/philosophy.md`, the indirect-pointer technique).
-2. **Could this break a userspace program that worked yesterday?** If yes, the answer is no — the kernel's bug is the kernel's to fix, not the user's. There is no "but the old behavior was wrong" exception.
-3. **Can a tired maintainer at 2am revert just this commit and have a working tree?** If your patch only makes sense paired with three other commits, split it again or reorder until each commit compiles, boots, and passes its own tests.
+- **Is this a regression?** If yes, the default is revert-first, not clever-fix-first. The regression docs explicitly say to always consider reverting the culprit, to aim for a fix within 2-3 days when impact is severe, and to avoid letting even current-cycle regressions drift to the end of the cycle.
+- **Is anything userspace-visible?** Syscalls, `ioctl`, `/proc`, `/sys`, netlink payloads, module parameter names, and structured `printk` output are contracts. Internal kernel APIs are disposable; userspace ABI is not.
+- **What exact context am I running in?** Process vs softirq vs hardirq vs NMI vs RCU read-side is not an implementation detail; it determines whether sleeping, locking, and allocation are legal at all.
+- **Can each commit stand trial alone?** If `git bisect` lands on commit N, that commit must build, boot, and justify itself without commit N+1.
+- **Am I solving one real bug, or am I shipping review bait?** Tree-wide cleanups, style churn, and mass API conversions consume reviewer budget while reducing signal.
 
-If you cannot answer all three before writing the patch, you are not ready to write the patch.
+## Heuristics that matter more than style
 
-## Decision rules that take years to internalize
+- Stable backports are deliberately narrow: upstream first, obviously correct, tested, and typically no bigger than 100 lines including context. A fix that needs a long verbal defense is usually not a `stable@` candidate yet.
+- `GFP_ATOMIC` is not "safer kmalloc"; it burns atomic reserves. The MM docs also note that current `GFP_ATOMIC` handling does not cover NMI or contexts that disable preemption under PREEMPT_RT such as `raw_spin_lock()` and plain `preempt_disable()`.
+- `__GFP_NOFAIL` is only honest when the caller truly has no failure policy, may sleep indefinitely, and is not asking the buddy allocator for order > 1. For larger "must succeed" buffers, the docs point you at `kvmalloc()` or a redesign.
+- Plain shared-memory accesses are wrong even on x86. The compiler can fold, refetch, or tear them. For add-only RCU structures, `READ_ONCE()` can be enough; once removal or lifetime changes enter the picture, use `rcu_dereference()` / `rcu_assign_pointer()`.
+- Kernel stacks are small enough to be a design constraint: about 3K-6K on many 32-bit configurations and about 14K on many 64-bit ones, often shared with interrupt handling. VLAs are banned because they generate worse code and can walk off the remaining stack budget.
+- `BUG()` is not a tougher `WARN()`. It destabilizes the machine and can destroy the evidence needed to debug the real problem. Kernel docs now say new code should use `WARN*()`, usually `WARN_ON_ONCE()`, with recovery when possible.
+- UAPI padding is future budget. If you do not reject non-zero unknown fields and padding, random userspace stack garbage becomes part of the ABI forever and you lose extension room.
+- A `Fixes:` tag needs at least 12 hex chars plus the exact original one-line summary. The same docs say not to split the tag across lines because scripts parse it.
+- If you move code between files, do not modify it in the same patch. Kernel submission docs call this out because mixed move+edit commits destroy history tracking and force reviewers to diff noise instead of behavior.
+- For non-trivial series, use `git format-patch --base=auto --cover-letter`. The `base-commit:` trailer is not decorative; it tells reviewers and CI exactly which tree to replay instead of guessing from your branch name.
+- Review throughput drops off hard after about 15 patches in flight. If the series cannot be condensed, post in chunks instead of asking maintainers to hold the entire graph in their heads.
+- Reviewers trust explicit interleavings more than adjectives. For races or ordering bugs, draw the CPU0/CPU1 timeline in the changelog instead of writing "obviously synchronized".
 
-- **3 levels of indentation is the warning siren, not the limit.** When you reach the 4th `if` inside a `for` inside a `while`, the bug is not the indentation — it's that the function is doing something the data structure should be doing. Fix the structure, not the brace.
-- **Functions over ~40 lines or with >5–10 locals are usually two functions.** A human keeps ~7 things in working memory; longer functions silently exceed that and you stop seeing the bug even when it's on screen.
-- **Optimize for the reviewer, not the writer.** Code is written once and read 50 times by people who are angry, sleep-deprived, and bisecting a regression. Every "clever" trick costs them five minutes; multiply by 50.
-- **`likely()`/`unlikely()` are not for "I think this is faster".** They are only correct when the branch ratio is >99/1 (e.g. error paths, slowpath fallbacks). Wrong hints are worse than none — modern branch predictors learn the actual ratio in microseconds, but the compiler emits the wrong layout permanently.
-- **Cache misses dominate over instruction count below ~100 cycles of work.** A pointer chase across a list is ~100–300 cycles per node on cold cache. An array scan of 16 elements is one cache line. "Linked list vs array" is almost never about big-O at small N.
-- **`inline` keyword is mostly noise.** GCC inlines static-used-once functions itself. Hand-inlining anything >3 lines just defeats the maintainer who wants to remove it when it gets a second caller. Exception: macros that depend on `__builtin_constant_p` of an argument.
-- **No raw `kmalloc(sizeof(struct foo), ...)`.** Always `kmalloc(sizeof(*p), ...)` against the destination variable. When `struct foo` is renamed, the type-based form silently allocates the wrong size; the variable-based form breaks the build.
+## NEVER do the seductive thing
 
-## Anti-patterns — never, and the non-obvious reason why
+- **NEVER send tree-wide mechanical conversions** because they look low-risk, reviewers skim them, `git blame` gets noisier, and the one semantic drift hidden in file 173 survives to production. Instead convert only bug-adjacent code or new call sites, and justify each old-site conversion with a real defect.
+- **NEVER rebase published or borrowed history** because reparenting invalidates prior testing and poisons downstream bisects; rebasing onto a random in-between kernel commit is especially bad. Instead clean up only private branches and, if rebasing is unavoidable, move to a stable point such as a release or `-rc` and retest from scratch.
+- **NEVER use `volatile` for shared kernel state** because it suppresses optimization inside already-correct critical sections while leaving the real race untouched. Instead encode the concurrency model with locks, `READ_ONCE`/`WRITE_ONCE`, release/acquire operations, or RCU primitives.
+- **NEVER open-code allocator arithmetic** because overflow becomes an undersized allocation and the eventual heap corruption happens far from the call site. Instead use `kmalloc_array()`, `kcalloc()`, `struct_size()`, and `size_*()` helpers.
+- **NEVER treat `GFP_ATOMIC` as generic defensive coding** because it consumes emergency reserves and still does not make sleeping callers legal. Instead identify the real context and choose `GFP_KERNEL`, `GFP_NOWAIT`, a preallocated pool, or a different call path.
+- **NEVER add or extend an `ioctl` without fixed-width types, explicit padding, zero checks, and feature discovery** because ignored tail fields and garbage padding become ABI commitments. Instead design for 32/64-bit compat on day one and reject unknown bits immediately.
+- **NEVER mark a patch `Cc: stable@vger.kernel.org` just because it feels harmless** because stable rules explicitly reject theoretical races and oversized or under-tested fixes. Instead land upstream first, prove user impact, and test against the actual stable branch you want to target.
+- **NEVER use `BUG_ON()` as a shortcut for error handling** because the seductive part is that it hides unwind code, but the consequence is a less debuggable and sometimes unrecoverable system. Instead use `WARN_ON_ONCE()` for truly impossible states or unwind and return an error.
 
-- **NEVER add a `prev == NULL` (or `i == 0`, or `head->next == NULL`) special case in a list/tree/buffer routine.** It is seductive because it "just handles the edge". The real consequence: you have doubled the paths a reviewer has to verify, and the bug they don't catch will be in the special branch because nobody hits it in testing. Instead, restructure with the indirect-pointer / sentinel / dummy-head technique in `references/philosophy.md`.
-- **NEVER write `if (a) { ... } else { ... }` where both branches do the same store with a different LHS.** It's tempting because it "reads naturally". The consequence: the duplication hides the actual algorithm and rots the moment one branch needs an extra step. Lift the variable LHS into a pointer-to-pointer and do one assignment.
-- **NEVER use `typedef` for a struct just to save typing `struct`.** It looks cleaner. The consequence: a reader can no longer tell from the call site whether they're holding a value, a pointer, or an opaque handle, and review becomes guesswork. The kernel forbids it (`CodingStyle` ch.5) except for genuinely opaque types where hiding the layout is the *point* (`pid_t`, `sector_t`).
-- **NEVER call a sleeping function (`kmalloc(GFP_KERNEL)`, `mutex_lock`, `copy_from_user`, `msleep`) inside `rcu_read_lock()`, a spinlock, an interrupt handler, or any code that ran from `softirq` / NMI / `preempt_disable()`.** The compiler will not stop you. Production will: the box deadlocks under load when reclaim recursively tries to take the lock you're holding. Use `GFP_NOWAIT` in atomic context, `GFP_ATOMIC` only when failure would be worse than depleting reserves. Decision tree in `references/concurrency.md`.
-- **NEVER touch shared memory without `READ_ONCE`/`WRITE_ONCE` (or stronger).** A plain `x = shared` looks identical to the compiler as scratch storage; it is allowed to load it byte-by-byte, refetch it twice, or speculate a value. The bug appears once a month under load and is unreproducible. See `references/concurrency.md`.
-- **NEVER do "trivial" mass cleanup conversions** (`strncpy`→`strscpy`, renaming an API across hundreds of files, reformatting). The consequence Linus has called out by name: each file looks fine, nobody reviews 400 files carefully, and one of them silently flips a return-value sign or truncates a length. New API for new code; convert old code only with a real bug as justification.
-- **NEVER write `if (ret < 0) return ret;` ten times in a function with allocations.** It leaks every resource acquired before the failing call. Use the `goto err_X:` cleanup ladder, unwinding in *reverse order* of acquisition. Pattern in `references/kernel-idioms.md`.
-- **NEVER rebase or force-push a branch you've published.** History is the bisect substrate. Rewriting it makes every downstream tree's bisect lie. Local cleanup before publishing is fine; after `git push`, the history is frozen.
-- **NEVER mark a commit `Cc: stable@` without testing the build on the actual stable branch.** Stable backports that "looked obvious" but never compiled on the older tree are one of Linus's most-quoted rant categories.
-- **NEVER use floating point in kernel code** (no `float`, no `double`, no `printf("%f")`, no SIMD without `kernel_fpu_begin()`/`_end()`). The FPU state belongs to userspace and the kernel doesn't save/restore it on entry. You will silently corrupt a userspace process's registers.
+## Mandatory routing into the local references
 
-## Procedures Claude wouldn't already know
+| Before you do this | Read this first | Do not load this for that task |
+|---|---|---|
+| Touch shared state, ordering, RCU, IRQ/softirq interactions, or lockless polling | `references/concurrency.md` | Do not load `references/userspace-contract.md` unless the change is also userspace-visible |
+| Add allocations, pointer-or-error returns, refcounts, or multi-step cleanup | `references/kernel-idioms.md` | Do not load `references/philosophy.md` unless the core problem is data-shape or special-case elimination |
+| Feel tempted to write `if (first)`, `if (!prev)`, dummy one-off head/tail logic, or duplicate branches with different LHS | `references/philosophy.md` | Do not load `references/concurrency.md` for a purely structural refactor |
+| Change a syscall, `ioctl`, `/proc`, `/sys`, netlink format, commit tags, series splitting, or backport intent | `references/userspace-contract.md` | Do not load `references/kernel-idioms.md` for a commit-message-only task |
 
-### Before writing a new kernel function, in this exact order:
-1. Sketch the **struct** the function operates on. If you can't draw it on paper, you don't understand the problem yet.
-2. Write the **error-unwind ladder first** (the `err_*:` labels at the bottom). This forces you to enumerate every resource the happy path acquires before you write the happy path.
-3. Decide the **calling context**: process / softirq / hardirq / NMI / RCU read-side / spinlock-held. Write it in a comment above the function. This determines every allocation flag and every primitive you're allowed to call.
-4. Only then write the body.
+## Decision tree when the first idea feels "too big"
 
-### Before submitting a patch series:
-1. `git rebase -i` so every commit **builds and boots independently** — `git bisect` will land on each one. A series of 8 commits where commits 1–7 don't compile is a series of 1 commit pretending to be 8.
-2. `scripts/checkpatch.pl --strict` on every patch. Not because checkpatch is right (it isn't always), but because reviewers will run it and you don't want the conversation to be about whitespace.
-3. Each patch's commit message answers **why**, never **how**. The diff is the how. The first line is `subsystem: imperative summary <=50 chars`; blank line; body wrapped at 72; trailers (`Fixes:`, `Reported-by:`, `Signed-off-by:`) at the bottom. Format details in `references/userspace-contract.md`.
-4. For any change touching syscalls, `/proc`, `/sys`, ioctl, or netlink: stop and re-read `references/userspace-contract.md`. The rules there are non-negotiable.
+1. If a regression has a safe revert, ship the revert first and the improved version later.
+2. If the fix is too large for stable or depends on refactoring, split it into: minimal user-visible fix now, cleanup later.
+3. If a race explanation needs adjectives like "subtle" or "probably safe", stop and write the event timeline; if you cannot explain the ordering in columns, you do not understand it yet.
+4. If the patch changes both behavior and cleanup, separate them unless the cleanup is mechanically required for the behavior change.
+5. If this is userland C rather than kernel code, keep the no-regression mindset, bisect-friendly slicing, overflow-safe allocation helpers, and cleanup ladders; drop the kernel-only GFP/RCU/UAPI rules.
 
-## When to load which reference
+## Done looks like this
 
-**MANDATORY** — read the matching reference *before* writing code in these scenarios. Each is short (~100–200 lines) and self-contained.
-
-| You are about to... | READ |
-|---|---|
-| Eliminate a special case, design a list/tree/buffer API, or feel the urge to add an `if first_element` branch | `references/philosophy.md` |
-| Write a function that does ≥2 allocations or acquires ≥2 resources | `references/kernel-idioms.md` (goto cleanup ladder, ERR_PTR, container_of, GFP flag decision tree, kref) |
-| Touch any data shared between CPUs, threads, or interrupt context | `references/concurrency.md` (RCU rules, READ_ONCE/WRITE_ONCE, memory barriers, atomic-context table) |
-| Change a syscall return value, add a new ioctl, modify `/proc` or `/sys` output, write a commit message, or split a series for submission | `references/userspace-contract.md` |
-
-**Do NOT load** every reference reflexively. Loading `concurrency.md` for a pure-userspace bug fix is wasted context. Loading `userspace-contract.md` to write a new helper function is wasted context. Match the file to the actual task.
-
-## Fallbacks when the rules don't fit
-
-- **Userland C, not kernel:** keep the data-structure-first instinct, the goto-cleanup pattern, the commit discipline, and the special-case elimination. Drop the `GFP_*` / `READ_ONCE` / RCU machinery — you have malloc, mutexes, and a real OS underneath.
-- **You inherited a 200-line function with 6 indentation levels and can't restructure it now:** at minimum, extract the deepest block into a helper with a descriptive name. Don't reformat — that destroys `git blame`. Add a `FIXME(torvalds-style):` so the next reader knows you saw it.
-- **A reviewer says "this is unmaintainable" but won't say what:** the answer is almost always *too many special cases* or *the wrong data structure*. Ask "what would this look like if `prev` didn't exist?" or "what if there were always at least one element?" — the elimination usually falls out.
+- The patch solves one real problem and leaves unrelated cleanup for later.
+- The calling context is explicit enough that sleeping/allocation/locking legality is obvious.
+- Any userspace-visible change was treated as ABI work, not as an internal refactor.
+- Every commit builds and can be reverted independently.
+- The references above were loaded only when the task actually needed them.

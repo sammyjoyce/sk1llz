@@ -1,117 +1,79 @@
 ---
 name: thompson-unix-philosophy
-description: Write Go code in the Ken Thompson / Rob Pike Bell Labs tradition — data-dominates design, brute force before cleverness, text as interface, and programs that compose via stdin/stdout. Use when designing CLIs, filters, log processors, build tools, codegen, protocol parsers, or any Go program where simplicity, composition, and long-term maintainability matter more than feature breadth. Triggers: "unix philosophy", "filter program", "compose pipeline", "plan 9 style", "do one thing well", "brute force", "table-driven", "data-oriented Go", "pike style", "thompson style".
+description: Shape Go code in the Thompson/Pike/Bell Labs tradition: small tools, concrete types, data-driven control flow, text/file interfaces, and APIs that stay simple under change. Use when designing CLIs, filters, parsers, code generators, log processors, boundary packages, or small libraries where composition and long-term maintainability matter more than framework breadth. Triggers: "unix philosophy", "thompson style", "pike style", "filter program", "compose pipeline", "plan 9 style", "data dominates", "do one thing well", "concrete types", "table-driven", "small tools".
 ---
 
 # Thompson / Pike Style for Go
 
-> "When in doubt, use brute force." — Ken Thompson
-> "Data dominates. If you've chosen the right data structures, the algorithms will almost always be self-evident." — Rob Pike, *Notes on Programming in C*, Rule 5
+This is a philosophy skill for choosing the shape of a Go program. Use it when the hard part is deciding what the program should be, not when the hard part is wiring a web stack.
 
-This is a **mindset skill**, not a cookbook. Load it when you must *decide* between two plausible Go designs and need a sharper razor than "clean code."
+## Load Only What You Need
 
-## Before you write any Go, ask these four questions
+- Before designing a new command, READ `references/cli-conventions.md`.
+- Before refactoring a parser, dispatcher, or `switch`/`if` ladder with more than ~5 same-shaped branches, READ `references/data-dominates.md`.
+- Do NOT load either reference for a small bug fix, a library-only rename, or a service task with no CLI/parser design work.
 
-1. **What is the data?** Not the functions — the data. If you cannot draw the central data structure on a napkin, you do not yet understand the problem. Design the struct first; the functions fall out.
-2. **How big is N, really?** If N is bounded by something a human edits (files in a repo, flags, config keys, CPU cores, lines in `/etc/hosts`), N ≤ ~10⁴ and a linear scan over a slice beats a `map` on wall-clock every time. Fancy structures have large constants and lose badly until N is genuinely large.
-3. **Can this be a filter?** `stdin → transform → stdout` composes with every tool ever written. If yes, refuse to add flags that change *what* it reads or writes.
-4. **What is the one reason this will change?** Not "what does it do" — "who files the bug that forces an edit." Two reasons to change = two programs. This is the real meaning of "do one thing."
+## First Decision: Is This Even The Right Skill?
 
-If you cannot answer (1) in one sentence and (4) without listing alternatives, stop and redesign before writing code.
+- Use it for filters, one-shot tools, parsers, codegen, filesystem utilities, and library/package boundaries.
+- Use it for API-evolution decisions where the risk is freezing the wrong surface.
+- Do not use it for long-running services, ORM-heavy apps, or UI workflows; Bell Labs tool rules will over-constrain those.
 
-## Expert-only knowledge (the things practitioners learn the hard way)
+## Before Writing Code, Ask Yourself
 
-### The data-dominates razor, stated precisely
-Pike's complete list of data structures for "almost all practical programs" is: **array, linked list, hash table, binary tree**. Four. If your design needs a fifth (skip list, trie, Bloom filter, lock-free queue, B-tree), you owe yourself a benchmark proving the simpler choice loses on *your actual input*. In Go this means: reach for `[]T` first, `map[K]V` second, and treat `container/list`, `container/heap`, and third-party fancy structures as evidence of a design you haven't finished thinking about.
+- **What is the stable data shape?** If you cannot draw the central struct/table on a napkin, you do not understand the problem yet.
+- **Is the interface for programs or humans?** If both, make stdout/stderr/exit codes machine-safe first and add human affordances second.
+- **What becomes public forever if I add it now?** Flags, exported interfaces, wrapped errors, file formats, and exit codes are APIs, not conveniences.
+- **Am I solving a measured hot path or narrating one?** Pike's Rules 1 and 2 still apply: you cannot tell, and you must measure.
+- **Which failure must stay recoverable?** Broken pipe, 10 MB line, malformed UTF-8, Windows rename behavior, or future API extension all force different designs.
 
-### Replace branches with tables
-Long `if/else if` or `switch` chains are almost always a missing data structure. A state machine as a `[N][M]int` transition table is smaller, faster, testable as data, and diff-reviewable. This is the same insight behind Thompson's 1968 NFA regex construction: represent every state simultaneously as data, never as recursive control flow. See `references/data-dominates.md` before refactoring any `switch` with more than ~5 arms.
+## Hard-Won Heuristics
 
-### "Brute force" is a state-space argument, not laziness
-Thompson's 5- and 6-piece chess tablebases work because there are few *distinct positions* even when there are astronomically many *move sequences*. Before reaching for a "smart" algorithm, compute the actual state space. If it fits in RAM — even 10 GB of RAM today — the brute solution is correct by construction, has no edge cases, and compiles in a weekend. A clever solution is a bug generator you will babysit for years.
+- Start with `[]T`, plain structs, and linear scans. Pike's Rule 3 is not "big-O is fake"; it is that fancy algorithms lose until `n` is both real and measured. In Go, slice-plus-sort is often the right first move.
+- Turn repeated control-flow shape into data. If a `switch` has many arms with the same skeleton, the program is probably trying to be a table. Parsers, opcode handlers, protocol states, and token dispatchers should usually be fixed interpreters over data, not sprawling branches.
+- Keep concurrency an implementation detail. The public API should usually be synchronous plus `context.Context`; exporting goroutine choreography forces callers to inherit your scheduling model and leak hazards.
+- Return concrete types from constructors unless polymorphic input is the point. Producer-side interfaces feel "extensible" but actually freeze method sets; adding one method later is a breaking change. Probe optional behavior with side interfaces at use sites instead.
+- Treat zero values as part of the API. Nil slice and empty slice should mean the same thing internally; normalize only at the serialization edge if a wire format cares, especially JSON.
+- `%w` is not just formatting. Wrapping exposes the underlying error to `errors.Is`/`As`, which promotes that error into your public contract. Use `%w` only when callers should branch on the wrapped value; otherwise prefer `%v`.
+- Prefer text or simple records until measurement disproves them. Go's `regexp` is linear-time, so the usual danger is constant-factor overhead and allocation, not catastrophic backtracking. Reach for `strings.Cut`, `HasPrefix`, or a table-driven tokenizer before a regex in a per-line hot path.
 
-### Variable name length is inversely proportional to scope
-Package-level: `maxPayloadBytes`. Function-local loop: `i`, `b`, `np`. A three-line function with `userAccountServicePointer` is *less* readable than one with `u`, because at that scope the context already tells you what it is. Long names in tiny scopes "jangle like bad typography" (Pike). The test: if a reader must scroll to understand a name, it is too short; if they must re-read the line to parse it, it is too long.
+## Edge Cases That Change The Design
 
-### Comments lie; the compiler does not
-A comment is unchecked documentation that drifts the moment someone edits the code beside it. The only comments worth writing in Thompson-style Go are:
-- A package-level doc on the **central data structure** explaining invariants (`// nodes[0] is always the root; parent < child indices`).
-- A `// WHY` comment explaining a non-obvious *reason* (cache locality, protocol quirk, historical CVE).
-- Never a `// WHAT` comment. `i++ // increment i` is the textbook Pike anti-example and it appears in production code constantly.
+- `os.Exit` terminates immediately and skips defers. Portable custom exit statuses live in `[0,125]`; reserve `2` for usage errors. Use the `main { os.Exit(run()) }` pattern for CLI tools.
+- `bufio.Scanner` is a one-shot convenience API, not a parser foundation. It stops unrecoverably on EOF, I/O error, or oversized token; it may advance arbitrarily past the last good token; `Buffer` and `Split` panic after scanning begins. Use `bufio.Reader` when tokens may exceed 64 KiB, when you need exact recovery, or when you need sequential passes.
+- `ScanRunes` hides malformed UTF-8 by returning `U+FFFD`, the same value as a genuine replacement rune. If encoding errors matter, read bytes and decode with `utf8.DecodeRune` yourself.
+- Broken-pipe behavior changes the moment you call `signal.Notify`. Without `Notify`, a write to fd 1 or 2 on a broken pipe exits like a normal Unix CLI; after `Notify(SIGPIPE)`, the write returns `EPIPE` instead. "Adding signal handling later" can silently turn a polite filter into stderr spam.
+- `io.Copy`'s 32 KiB staging buffer is only the fallback. If the source has `WriterTo` or the destination has `ReaderFrom`, `io.Copy` bypasses that buffer entirely. Hand-rolled copy loops often delete the fast path they were meant to optimize.
+- `os.Rename` is only an atomic-replacement story on Unix. Even within one directory it is not atomic on non-Unix platforms, and cross-directory moves have OS-specific restrictions. Temp-file-then-rename is still the right shape, but do not promise atomic visibility cross-platform unless you verified it.
+- `flag` parsing is more opinionated than most wrappers admit: it stops at the first non-flag or `--`, and boolean false must be spelled `-flag=false` because `cmd -x *` would otherwise change meaning under shell expansion.
 
-### Function names: verbs for actions, predicates for booleans
-`if validSize(x)` beats `if checkSize(x)` because the reader instantly knows whether `true` means good or bad. In Go: name predicates `IsX`, `HasX`, `CanX`; name fallible actions after their *outcome* (`Parse`, `Open`, `Fetch`), not their activity (`DoParse`, `TryOpen`). Pike's rule: *procedure names reflect what they do; function names reflect what they return.*
+## NEVER Patterns
 
-### The Unix rule of silence, applied to Go errors
-Error strings must compose when wrapped. Go's convention exists because of this:
-- **lowercase**, no trailing punctuation, no `"failed to "` prefix
-- `fmt.Errorf("parse %s: %w", path, err)` → `parse /etc/x: open /etc/x: no such file or directory`
-- Capitalised or punctuated strings make wrapped errors read like ransom notes.
+- NEVER install `signal.Notify` in a CLI "for completeness" because it disables Go's default SIGPIPE behavior on stdout/stderr. The seductive path is one shared signal block for every binary. The consequence is broken pipelines now surface as `EPIPE` errors or log noise. Instead subscribe only to signals you truly handle, and if you touch `SIGPIPE`, recreate quiet Unix-style exit behavior deliberately.
+- NEVER build a parser or log ingester on `bufio.Scanner` because it looks like the cleanest loop. The non-obvious consequence is unrecoverable stop-on-error, 64 KiB defaults, and reader position drift past the last valid token. Instead use `bufio.Reader` or an explicit tokenizer when records are untrusted, large, or need precise recovery.
+- NEVER replace `io.Copy` with a custom read/write loop just to "fix" the 32 KiB buffer. That constant is only the slow-path fallback; the seductive rewrite often throws away `WriterTo`/`ReaderFrom` optimizations and gets slower. Instead benchmark first, then use `io.CopyBuffer` only if you proved the fast paths do not apply and the buffer size matters.
+- NEVER export an interface from the producer package "for testability" because the interface feels lighter than a concrete type. The consequence is a frozen method set and a harder-to-evolve API. Instead return a concrete type, let consumers define minimal interfaces, and use side-interface probes where optional capability helps.
+- NEVER mutate an exported function signature or pile on speculative flags because "future flexibility" sounds prudent. The consequence is compatibility breakage for function values and permanent CLI surface area. Instead add `FooContext`, `FooConfig`, or a new constructor/function when the real need arrives.
+- NEVER assume a temp-file write plus `os.Rename` is universally atomic because it worked on Linux. The consequence is cross-platform readers observing replacement races or failed moves. Instead create the temp file in the target directory, close and sync it, rename it, and document any non-Unix caveat.
+- NEVER distinguish nil and empty slices in your API because it feels more precise. The consequence is invisible caller state and needless conditionals, with JSON as the main exception. Instead treat them as equivalent internally and normalize only at the boundary that needs `[]` instead of `null`.
 
-### Choose sentinel vs typed errors by *caller need*, not taste
-- **Sentinel** (`var ErrNotFound = errors.New("not found")`) when callers branch on identity and carry no extra data — `io.EOF`, `sql.ErrNoRows`.
-- **Typed** (`type *PathError struct`) when callers need structured fields via `errors.As`.
-- **Plain `fmt.Errorf`** otherwise. If you are defining a sentinel "just in case someone wants to match it," delete it. Unused sentinels become API you cannot remove.
+## Freedom Calibration
 
-## Go-specific gotchas that enforce the philosophy
+- High freedom: internal function layout, local variable brevity, table shape, whether a small helper stays local or becomes a method.
+- Low freedom: stdout vs stderr, exit-status meanings, signal handling, flag semantics, error-wrapping promises, and file-replacement behavior. These are contracts; do not improvise.
+- If unsure, freeze less surface: fewer exported names, fewer flags, fewer sentinels, fewer wrapped implementation errors.
 
-These are the silent failures that turn a Thompson-style program into a broken one. READ the referenced files before writing the relevant code.
+## Decision Tree
 
-| Situation | Gotcha | Fix |
-|---|---|---|
-| Reading lines > 64 KiB | `bufio.Scanner` **silently stops** with `bufio.ErrTooLong`; default `MaxScanTokenSize` is 65536. | `sc.Buffer(make([]byte, 0, 1<<20), 16<<20)` or use `bufio.Reader.ReadBytes('\n')`. |
-| Exit from `main` | `os.Exit(n)` **does not run deferred functions** — open files leak, tempdirs stay. | `func run() int { defer cleanup(); ...; return code }; func main(){ os.Exit(run()) }` |
-| Copying large streams | `io.Copy`'s buffer is hardcoded to **32 KiB**; changing it rarely helps. | If you *know* it matters, use `io.CopyBuffer` with a measured size. Otherwise do not parameterize. |
-| Writing to a closed pipe | `fmt.Println` to stdout in `| head` returns `EPIPE`; ignoring it is the Unix-correct behavior. | Check `errors.Is(err, syscall.EPIPE)` and exit cleanly, or handle `SIGPIPE` via `signal.Notify`. |
-| `flag` exit codes | `flag.Parse` calls `os.Exit(2)` on parse errors. **2 means misuse**. | Preserve this: usage errors = 2, runtime errors = 1, success = 0. Scripts depend on it. |
-| `map` iteration order | Deliberately randomized per run. Tests that print a map will flake. | Sort keys before printing: `keys := maps.Keys(m); slices.Sort(keys)`. |
-| `defer` in a loop | Defers stack until function return; holding 10⁶ files open will crash. | Extract the loop body into a function so `defer` fires each iteration. |
+- Need a new CLI? Read `references/cli-conventions.md`, then design `stdin/files -> transform -> stdout`, with stderr-only diagnostics and exit codes carrying state.
+- Need to extend a public API? Add a new function/method or config struct; do not change an existing signature or public interface.
+- Need dispatch, parsing, or state handling? Read `references/data-dominates.md`; prefer tables and small interpreters.
+- Need to process huge or malformed text? Skip `Scanner`; use `Reader` and explicit decoding.
+- Need concurrent throughput? Start with a single owner goroutine or a synchronous API plus context. Only expose concurrency when the caller truly must schedule work.
 
-Before designing a CLI in this style, READ `references/cli-conventions.md`.
-Before replacing a `switch`/`if` chain with a table, READ `references/data-dominates.md`.
-Do NOT read those files for small edits or single-function changes — they are for design decisions.
+## When The First Design Fails
 
-## Anti-patterns (the wrong path, why it seduces, what it costs)
-
-- **NEVER add a flag "just in case someone needs to configure it."** It seduces because it feels like humility ("I don't know what users want"). The cost: every flag is a permanent API surface, a documentation obligation, an interaction to test, and a future compatibility constraint. Thompson's rule: ship with zero flags; add one only after a real user hits a wall. **Instead:** ship the brute-force default and wait for the first real bug report.
-
-- **NEVER write `io.Copy` variants to "avoid the 32 KiB hardcoded buffer."** It seduces because 32 KiB "feels small" on modern hardware. The cost: you lose the universal composability of `io.Copy` and gain nothing measurable — kernel readahead and page cache already dwarf user-space buffering for files; for network, latency dominates. **Instead:** benchmark first; use `io.CopyBuffer` only when the profile points there.
-
-- **NEVER call `os.Exit(1)` inside a function that has `defer file.Close()` above it.** It seduces because it looks like clean error handling. The cost: the file handle leaks until the OS reclaims it, and on Windows the file stays locked. **Instead:** return an error all the way to `main`, or use the `run() int` pattern so `defer` still fires.
-
-- **NEVER use `bufio.Scanner` on untrusted input without setting `Buffer`.** It seduces because `for scanner.Scan() { ... }` is the idiomatic loop. The cost: one 70 KB log line silently truncates your input, `Err()` returns `bufio.ErrTooLong`, and you process garbage. **Instead:** `sc.Buffer(make([]byte, 0, 64<<10), 16<<20)` or switch to `bufio.Reader.ReadBytes('\n')`.
-
-- **NEVER define a type alias or wrapper struct for "clarity" that has no behavior.** `type UserID string` with no methods seduces because it looks type-safe. The cost: every call site needs conversions, every `fmt.Println` does the wrong thing by default, and you gained zero safety — `UserID("")` still compiles. **Instead:** keep the primitive, document the invariant, and only introduce a named type when you add a method.
-
-- **NEVER capitalize an error string or end it with a period.** It seduces because it reads better in isolation. The cost: wrapped errors become `"Parse failed.: Open failed.: no such file"` — unreadable garbage. **Instead:** lowercase, no trailing punctuation, compose cleanly: `"parse %s: %w"`.
-
-- **NEVER reach for `sync.Mutex` before you've tried a single goroutine owning the data and channels to talk to it.** It seduces because locking feels "how concurrent code is done." The cost: the bugs it introduces (deadlocks, races on fields you forgot, lock ordering) are exactly the bugs Go was designed to avoid. **Instead:** one goroutine, one owner, communicate via channels. Use a mutex only when profiling proves the channel hop is the bottleneck.
-
-- **NEVER commit a regex without a benchmark if it runs on every line of user input.** It seduces because `regexp.MustCompile` is one line. The cost: Go's `regexp` (RE2) is linear-time but has a large constant — on simple prefixes, `strings.HasPrefix` is 20–100× faster. **Instead:** try `strings.Contains`/`HasPrefix`/`Cut` first; use `regexp` only when the pattern is genuinely irregular.
-
-- **NEVER add a `// TODO` without a tracking issue and a date.** It seduces because it feels responsible. The cost: the file is now lying about its intent forever. **Instead:** either fix it now, or delete the thought and open an issue with the context.
-
-## Decision tree: what to build
-
-```
-Is the input a stream of records?
-├─ Yes → filter: stdin → transform → stdout. No flags that change I/O shape.
-│        Use bufio.Scanner with explicit Buffer, or bufio.Reader for > 64 KiB lines.
-└─ No → Is it a build/codegen tool?
-        ├─ Yes → read files from args, write files atomically (tmp + rename).
-        │        Exit 0 on success, 1 on failure, 2 on usage error.
-        └─ No → Is it a long-running service?
-                 ├─ Yes → NOT a Thompson program. Stop and pick a different style.
-                 └─ No → One-shot utility: flags via `flag`, args via `flag.Args()`,
-                          errors to stderr, data to stdout, exit code carries status.
-```
-
-## Fallbacks when brute force actually fails
-
-Brute force fails in exactly three situations. Know them so you don't panic-optimize prematurely:
-
-1. **State space exceeds RAM.** Measure first (`pprof --alloc_space`). If yes, stream with `bufio` and process in chunks; still prefer a linear scan per chunk.
-2. **Real-time constraint (hard deadline < 1 ms).** Then `map` lookups lose to perfect hashing or sorted-slice binary search; profile before choosing.
-3. **Quadratic on large N that is actually large.** If N > ~10⁵ and the algorithm is O(N²), you need a real algorithm. Not before.
-
-Everything else — "it feels slow," "it might scale," "users might have big inputs" — is Pike's Rule 1: *you cannot tell where a program will spend its time.* Measure, then fix only the part that overwhelms the rest.
+- If the simple slice-based approach is actually hot, prove it with `pprof` and replace only the dominating piece, not the whole design.
+- If a filter starts misbehaving in pipelines after "adding graceful shutdown", inspect `signal.Notify` and `SIGPIPE` before touching the write path.
+- If you need richer matching than string primitives, remember Go regexps are linear-time; choose them for irregular structure, not out of fear of backtracking bugs.
+- If a public error needs to become machine-checkable later, wrap your own sentinel or type now; do not leak a dependency's error unless you are willing to support it indefinitely.

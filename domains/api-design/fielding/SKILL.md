@@ -1,132 +1,170 @@
 ---
 name: fielding-rest
 description: >
-  Design network-based software architectures using Roy Fielding's REST constraints
-  with expert-level knowledge of HATEOAS, media type design, caching semantics, and
-  the misunderstood boundaries of REST. Use when designing hypermedia APIs, reviewing
-  API architectures for REST constraint violations, choosing between REST and alternatives
-  (gRPC, GraphQL, JSON-RPC), implementing content negotiation, versioning via media types,
-  or debugging cache invalidation across CDN/proxy layers. Trigger keywords: REST API,
-  HATEOAS, hypermedia, uniform interface, stateless, content negotiation, media type
-  versioning, Cache-Control, ETag, RFC 9457, problem+json, link relations, API evolution.
+  Apply Roy Fielding's REST style to long-lived HTTP APIs that must survive
+  independent client and server evolution. Use when deciding whether REST is
+  the right constraint set, designing hypermedia and media types, choosing
+  between profiles and new media types, setting cache and concurrency
+  semantics, or planning deprecation without URI churn. Trigger keywords:
+  REST, HATEOAS, hypermedia, media type, profile relation, content
+  negotiation, ETag, If-Match, Vary, Prefer, Accept-Patch, Deprecation,
+  Sunset, problem+json.
 ---
 
-# Fielding REST — Expert Decision Guide
+# Fielding REST
 
-## The One Thing Most Get Wrong
+Use this skill for public, partner, standards-like, or multi-tenant HTTP APIs that need years of independent evolution. Do not use it for one-client integrations unless the interface must stay intermediary-visible and independently evolvable.
 
-Fielding's dissertation is NOT a guide to building HTTP APIs. It describes constraints that made the *World Wide Web itself* scale across organizational boundaries. REST is only the right choice when your API crosses trust/org boundaries like the web does. Before adopting REST, ask: **"Do I control all clients?"** If yes, consider gRPC or JSON-RPC — REST's decoupling constraints carry cost you may not need.
+## Mandatory Reads Before Fragile Work
 
-Fielding himself: *"REST is software design on the scale of decades: every detail is intended to promote software longevity and independent evolution. Many of the constraints are directly opposed to short-term efficiency."*
+- Before changing cache or negotiation behavior, read RFC 9111 on `Authorization` and `Vary`, and RFC 7240 if anyone proposes `Prefer`.
+- Before designing additive extensions, read RFC 6906 on `profile`; do not mint a new media type until you know whether semantics are actually changing.
+- Before lifecycle work, read RFC 9745 and RFC 8594; do not treat `Sunset` as a generic warning banner.
+- Do NOT load generic REST primers for this task; they erase the exact trade-offs that matter.
 
-## Decision Framework: Is REST Right Here?
+## First Question: Should This Even Be REST?
 
-```
-Do you control all clients?
-├─ YES → REST's decoupling tax is unnecessary. Use gRPC/JSON-RPC.
-│         Exception: you plan to open the API publicly within 2 years.
-└─ NO  → Does the API cross organizational boundaries?
-         ├─ YES → REST is correct. Invest in media types and link relations.
-         └─ NO  → REST is acceptable but not required.
-              Consider: will intermediaries (CDNs, API gateways) need to
-              understand your traffic? If yes → REST. If no → pick by team skill.
-```
+Before designing anything, ask yourself:
 
-## Expert Constraints — What Fielding Actually Requires
+- How many independent client codebases will exist in 2 years?
+- How many server implementations or deployments must interoperate?
+- What breaks if client and server can coordinate only through runtime metadata and published media types?
+- Which intermediaries must understand or optimize traffic: browser caches, CDNs, reverse proxies, gateways, crawlers, link checkers?
 
-Fielding's 2008 rules (frequently violated even by "REST" APIs):
+Use REST when the answer is "many, unknown, long-lived, and intermediary-visible." If you have one client, one server, and a human coordination channel, REST's constraint tax is usually wasted. Mark Nottingham's rule of thumb is harsh but useful: in homogeneous systems with harmonized models, REST has limited utility.
 
-1. **Descriptive effort goes to media types, not URL schemas.** If your API docs are mostly endpoint lists with URL patterns, you're building RPC with REST branding. The effort should define representation formats and link relations.
+## What Experts Actually Optimize For
 
-2. **No fixed resource hierarchies.** Servers must control their namespace. Clients discover URIs through hypermedia, not documentation. A hardcoded `/api/v2/users/{id}/orders` path in client code means the client and server cannot evolve independently.
+- Independent evolution, not pretty URLs.
+- Representation semantics, not endpoint catalogs.
+- Intermediary correctness, not direct-client convenience.
+- Long-lived defaults, not one-release ergonomics.
 
-3. **Entered with one bookmark.** A REST API is entered with no prior knowledge beyond the initial URI and standard media types. Every subsequent interaction is driven by server-provided links. This is what "state transfer" in REST means — navigating a state machine via hyperlinks, not "transferring resource state over the wire."
+If most of the spec is a URI matrix, you are already drifting into RPC. Fielding's test is where the descriptive effort goes: media types, link relations, forms/templates, and state transitions, not frozen route shapes.
 
-## Media Type Design — The Overlooked Core
+## Freedom Calibration
 
-Before designing any endpoint, ask: **"What media type will carry both the data AND the controls?"**
+- Be rigid about HTTP semantics, validators, cache keys, and lifecycle headers. Invisible protocol mistakes create long-lived breakage.
+- Be flexible about representation shape, URL aesthetics, and how much hypermedia to expose. Match the complexity of the ecosystem, not an ideological purity test.
 
-| Approach | When to use | Trade-off |
-|---|---|---|
-| `application/hal+json` | General-purpose hypermedia API | Lightweight but no forms/actions |
-| `application/vnd.siren+json` | Needs embedded actions + entities | Heavier; clients need Siren parser |
-| `application/vnd.yourco.resource.v1+json` | Per-resource versioned types | Precise but clients must handle negotiation |
-| `application/json` + `Link` headers | Simple APIs, few relations | Loses discoverability inside the body |
+## Decision Heuristics That Matter
 
-**The version-in-media-type pattern** (Fielding-approved over URL versioning):
-- Put version in the subtype, not as a parameter: `application/vnd.acme.order.v2+json` — parameters are often silently stripped by proxies and some frameworks fail to route on them.
-- A backward-compatible addition (new optional field) does NOT require a new version. Only break the version when you remove or rename fields.
-- When both v1 and v2 exist, the server inspects `Accept` and responds with the negotiated version. Return `406 Not Acceptable` if the client requests a version you've sunset.
+### 1. Profiles are cheaper than version forks
 
-## Caching — Where REST Pays Off (or Breaks)
+Use a `profile` when you are adding constraints, conventions, or extensions that do not change base representation semantics. RFC 6906 is explicit: profiles add semantics around a media type; they do not replace it.
 
-Before setting cache headers, ask: **"Who are ALL the caches between my server and the client?"** (Browser, service worker, CDN edge, reverse proxy, API gateway — each has different behavior.)
+- Good fit: stricter validation rules, business conventions, optional extension members, or domain rules layered on an existing media type.
+- Wrong fit: changing meaning, removing fields old clients depend on, or redefining null/array behavior. Mint a new media type or new resource behavior instead.
+- Non-obvious trap: the media type label gets lost when a representation is copied out of conversational context, so RFC 6906 says to also carry the `profile` link relation in the representation or `Link` header.
+- Another trap: profile URIs are identifiers first. Do not build clients that dereference them on the hot path.
 
-**Critical gotchas practitioners learn the hard way:**
+### 2. Custom version headers are a cache bug generator
 
-- **`Vary` header misuse kills CDN hit rates.** `Vary: Authorization` makes every user get their own cache entry — your CDN becomes a pass-through. If you must vary on auth, use `Cache-Control: private` instead and let only the browser cache.
-- **`stale-while-revalidate` is NOT universally honored.** CDNs like Cloudflare support it; many reverse proxies ignore it. Test your actual cache stack before relying on it.
-- **ETags + `Vary` interaction:** If you `Vary: Accept` and serve both JSON and HTML, each variant gets its own ETag. Clients switching `Accept` headers mid-session will always miss cache. Design your API to serve one format per endpoint.
-- **Conditional request race window:** Between `If-None-Match` check and response generation, the resource can change. For write-heavy resources, use short `max-age` (5-30s) with ETag revalidation rather than long TTLs.
-- **Strong vs. Weak ETags matter for range requests.** Weak ETags (`W/"abc"`) cannot be used with `If-Range`. If your API serves partial content (file downloads, paginated byte ranges), you must use strong ETags.
+Custom version headers feel less disruptive than changing URLs or media types. They are a trap. Mark Nottingham's point is practical: once the response depends on that header, caches need `Vary` on it. Teams forget, and intermediaries hand v2 representations to v1 clients.
 
-| Resource type | Recommended strategy | Why |
-|---|---|---|
-| User-specific data | `Cache-Control: private, max-age=0, must-revalidate` + ETag | Never let shared caches store it |
-| Reference/config data | `Cache-Control: public, max-age=3600, stale-while-revalidate=86400` | Stable; background refresh OK |
-| Collection endpoints | `Cache-Control: public, max-age=30` + short TTL | Additions invalidate the list |
-| Immutable resources | `Cache-Control: public, max-age=31536000, immutable` | Versioned URLs (e.g., `/assets/ab3f.js`) |
+Instead:
 
-## Error Responses — Use RFC 9457
+- Use media types when the representation changes incompatibly.
+- Use new resources when capabilities or lifecycle differ materially.
+- Use profiles when semantics are additive.
+- Treat "API version" as documentation and policy, not a request header sprayed on every call.
 
-NEVER invent a custom error format. Use `application/problem+json` (RFC 9457) because it gives you machine-readable `type` URIs, extensible fields, and interop with emerging tooling. The `type` field should be a resolvable URI that documents the problem — this doubles as developer docs.
+### 3. `Prefer` is not negotiation
 
-```json
-{
-  "type": "https://api.example.com/problems/insufficient-credit",
-  "title": "Not enough credit.",
-  "status": 403,
-  "detail": "Balance is 30, cost is 50.",
-  "instance": "/account/12345/txns/abc",
-  "balance": 30
-}
-```
+RFC 7240 explicitly warns against using `Prefer` for content negotiation. If honoring a preference changes the stored response, you owe caches `Vary: Prefer`; `Vary: *` is legal and effectively kills proxy caching.
 
-**Key decisions:**
-- Use `422 Unprocessable Content` for validation errors (not 400) — 400 means the HTTP request itself is malformed; 422 means the server understood the request but the content is semantically wrong.
-- Return ALL validation errors in one response using an `errors` extension array with JSON Pointer `pointer` fields. Forcing clients to fix-resubmit-fix cycles is a UX failure.
-- NEVER return 200 with an error body. Every cache, monitor, and proxy between you and the client treats 200 as success.
+Use `Prefer` for optional behavior such as `return=minimal`, `return=representation`, or `respond-async`, not for selecting the canonical representation type.
 
-## NEVER List — Hard-Won Anti-Patterns
+### 4. Auth caching is subtler than `Vary: Authorization`
 
-**NEVER use URL path versioning** (`/v1/users`) because it implies different resources rather than different representations of the same resource. CDN cache keys differ per path, so v1 and v2 caches are entirely separate even for identical data. Clients cannot use content negotiation to gracefully degrade. **Instead:** version in the `Accept`/`Content-Type` media type.
+The naive move is `Vary: Authorization`. It feels safest and usually destroys shared-cache hit rates. RFC 9111 already says shared caches must not reuse responses to authenticated requests unless you explicitly allow it with `public`, `must-revalidate`, or `s-maxage`.
 
-**NEVER tunnel operations through POST** (`POST /users/search`) because you lose cacheability, idempotency guarantees, and intermediary visibility. A search is a read — use `GET` with query parameters. If the query is too complex for a URL (>2000 chars), use a stored-query pattern: `POST /queries` returns a query resource, then `GET /queries/{id}/results` is cacheable.
+Use:
 
-**NEVER use GET for state-changing operations** because every spider, prefetch, browser link-preview, and monitoring probe will trigger the mutation. This has caused real production data loss.
+- `private` for user-specific documents.
+- `public` or `s-maxage` only when authorization gates access but the entity is actually the same for every authorized user.
+- Stable cache keys that vary on real representation drivers, not on the existence of credentials.
 
-**NEVER omit `Content-Type: application/problem+json`** on error responses because without it, clients parsing `application/json` won't know they've received an error structure — they'll try to deserialize it as the expected success type and produce cryptic failures.
+### 5. Concurrency bugs are protocol design bugs
 
-**NEVER rely solely on `Last-Modified` for concurrency control** because its 1-second resolution means concurrent writes within the same second silently overwrite each other. **Instead:** use strong ETags derived from content hash or DB row version for `If-Match` on writes.
+If multiple writers can touch the same resource, make conditional requests mandatory and return `428 Precondition Required` when clients omit them. RFC 6585 exists for this lost-update problem.
 
-**NEVER expose database IDs as the only resource identifier** because changing your database (sharding, migration) changes every client's hardcoded references. **Instead:** use a stable, opaque identifier (UUID or slug) that survives infrastructure changes.
+- Use strong ETags with `If-Match` for writes.
+- Do not rely on `Last-Modified` for hot resources; one-second resolution loses concurrent edits.
+- Weak ETags are fine for cache revalidation, not for write concurrency or range coordination.
+- If a PATCH flow cannot tolerate stale bases, reject unconditional PATCH and force clients to re-GET, rebase, and retry.
 
-## Pragmatic HATEOAS — When and How Much
+### 6. PATCH is only good when the patch format fits the resource
 
-Full HATEOAS (client knows only the entry point) is the theoretical ideal but almost never achieved in practice. Instead, adopt **graduated hypermedia:**
+Before offering PATCH, ask yourself:
 
-1. **Minimum viable (every API):** Every response includes a `self` link. Collection responses include pagination links (`next`, `prev`, `first`, `last`).
-2. **Useful middle ground:** Responses include `_links` for related resources and available actions. Client code uses link presence to enable/disable UI actions (e.g., `withdraw` link only appears when balance > 0).
-3. **Full HATEOAS:** Client navigates entirely from root. Only pursue this for public APIs intended for unknown future clients.
+- Is partial update materially smaller than full replacement?
+- Can the patch format express intent without ambiguous null/array semantics?
+- Can clients discover supported patch formats?
 
-The litmus test: **"If I change a URL, does any client break?"** If yes, you have insufficient hypermedia.
+Rules:
 
-## When REST Fails — Escape Hatches
+- Advertise support with `Accept-Patch` per RFC 5789.
+- Use `application/merge-patch+json` only for object-heavy documents that do not use explicit null as meaningful data; arrays are replaced wholesale.
+- Use `application/json-patch+json` when array edits, `test`, move/copy semantics, or precise conflict detection matter.
+- If the patch document is usually as large as the full representation, PUT is cleaner.
+- Do not assume PATCH request entity headers mutate resource metadata; RFC 5789 says those headers describe the patch document, not the resource.
 
-| Symptom | Root cause | Alternative |
-|---|---|---|
-| Client makes 8+ requests to render one view | Over-normalized resources | Add composite resource or consider GraphQL |
-| Real-time push needed | REST is pull-only | Add SSE for events; keep REST for commands |
-| File upload > 100MB | HTTP request/response doesn't fit | Use presigned URLs + direct-to-storage upload |
-| Sub-millisecond latency required | HTTP overhead too high | Use gRPC with persistent HTTP/2 streams |
-| Internal microservice-to-microservice | No org boundary crossed | Use gRPC or async messaging |
+### 7. POST is fine, but pay the tax correctly
+
+Fielding is explicit: POST is not un-RESTful; abusing method semantics is. Use POST when the action is unsafe and no standard method conveys more useful semantics to intermediaries.
+
+The expert pattern is:
+
+- Make the stateful thing a resource.
+- POST to an action target or controller resource.
+- Return `303 See Other` to the canonical state resource when the important outcome is a new or changed state view.
+
+That keeps clients on the right representation and lets POST invalidate caches on the relevant URI/Location/Content-Location path instead of leaving stale collection pages around.
+
+### 8. Deprecation and sunset are different phases
+
+Do not collapse them.
+
+- `Deprecation` (RFC 9745) is a runtime hint that a resource will be or has been deprecated. It does not change semantics or behavior.
+- `Sunset` (RFC 8594) is for the later stage where the resource is expected to become unresponsive.
+- `Sunset` must not be earlier than `Deprecation`.
+- Scope is easy to get wrong: the header is attached to one resource, but your docs may define wider scope. If you do that, define the scope explicitly on the home/start resource and link migration guidance with `rel="deprecation"`.
+
+## NEVER Do These
+
+- NEVER hardcode URI hierarchies into client logic because readable paths feel stable and resource-oriented; the concrete result is that namespace moves, host splits, and federated deployments become breaking changes. Instead, consume server-provided links, forms, or URI templates defined by the media type.
+- NEVER invent a custom version header because it feels less disruptive than changing media types or resources; the concrete result is a hidden cache key that requires `Vary` and eventually serves the wrong variant or disables caching. Instead, change media types/resources for incompatible behavior and use profiles for additive conventions.
+- NEVER use `Prefer` for negotiation because it feels like a soft feature flag; the concrete result is `Vary: Prefer` debt or `Vary: *`, which makes proxies effectively uncacheable. Instead, use `Accept` and media types for representation selection and keep `Prefer` for optional processing.
+- NEVER reach for `Vary: Authorization` as your auth-cache strategy because it feels maximally safe; the concrete result is per-token cache fragmentation with no value when the entity is personalized anyway. Instead, use `private` for personalized responses or deliberately cache shared authorized content with `public`/`s-maxage`.
+- NEVER create fake resources purely to avoid POST because CRUD symmetry feels pure; the concrete result is unnatural resources with no reusable meaning and extra round trips. Instead, create a resource only if its state is independently valuable; otherwise POST the action and redirect to the canonical state resource.
+- NEVER treat `Deprecation` as permission to change behavior because it feels like a soft cutover; the concrete result is clients break before the sunset date and cannot trust lifecycle signals. Instead, keep behavior stable, emit `Deprecation`, link migration docs, and reserve `Sunset` for actual shutdown.
+
+## Decision Tree For Real Designs
+
+- One client, one server, shared release cadence:
+  Use HTTP if convenient; do not force hypermedia beyond basic links, validators, and cache semantics.
+- Many clients, one server, public or partner API:
+  Use strong representation contracts, problem details, conditional writes, and selective hypermedia for navigation and capability discovery.
+- Many clients, many servers, or standardizable ecosystem:
+  Invest in registered link relations, media types/profiles, home/start documents, and runtime discoverability. This is where full REST discipline pays back.
+- UI needs 6 or more round trips before a user can act:
+  Stop normalizing everything. Add composite resources or server-directed workflows. REST does not require chatty screens.
+- You cannot explain cache behavior with `Cache-Control`, `ETag`, `Vary`, and method semantics alone:
+  You are probably sneaking RPC semantics through HTTP.
+
+## Fallbacks When The Ideal Is Not Available
+
+- If clients cannot consume hypermedia yet, centralize link generation server-side and emit affordances anyway for new clients; do not freeze public standards around today's client limitations.
+- If CDN behavior is unreliable, optimize first for browser/private-cache correctness, then layer shared-cache policy only where you can test it end to end.
+- If PATCH tooling is weak, ship PUT plus strong validators before inventing partial-update semantics you cannot make discoverable.
+- If deprecation docs are only human-readable for now, that is still better than a bare header. Emit `rel="deprecation"` early and add machine-readable policy later.
+
+## Review Checklist
+
+- Can a client start from one URI and navigate using received affordances?
+- Are incompatible changes expressed as new media types/resources rather than magic headers?
+- Are cache key drivers explicit and testable?
+- Are concurrent writes protected by strong validators?
+- Does every partial-update format have clear discovery and conflict semantics?
+- Is deprecation discoverable before shutdown, with migration docs linked at runtime?

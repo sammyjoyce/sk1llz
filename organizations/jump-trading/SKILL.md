@@ -1,432 +1,102 @@
 ---
 name: jump-trading-fpga-hft
-description: Build trading systems in the style of Jump Trading, the high-frequency trading firm pioneering FPGA-based trading. Emphasizes hardware acceleration, network optimization, and nanosecond-level execution. Use when building FPGA trading systems, network-optimized infrastructure, or ultra-low-latency order execution.
-tags: fpga, hft, low-latency, trading, hardware, networking, market-making, colocation, systems, real-time
+description: Expert playbook for FPGA-first electronic trading systems where wire-to-wire latency, determinism, and feed correctness dominate. Use when building or reviewing tick-to-trade paths, pre-trade risk gates, multicast A/B feed arbitration, 10G or 25G low-latency links, PTP or 1PPS timestamping, microwave-vs-fiber path choices, or FPGA/CPU partitioning for HFT. Triggers: FPGA trading, HFT, low latency, FEC, PTP, multicast gap recovery, cut-through, pre-trade risk, microwave, tick-to-trade.
+tags: fpga, hft, low-latency, trading, hardware, networking, market-data, timestamping
 ---
 
-# Jump Trading Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌​‌‌‌‌‍​​‌​​‌​‌‍‌‌‌‌​‌​‌‍​​‌‌‌‌‌​‍​​​​‌​‌​‍​​‌‌​​​‌⁠‍⁠
+# Jump Trading FPGA HFT
 
-## Overview
+## Read Only What Matters
 
-Jump Trading is a proprietary trading firm known for pushing the boundaries of trading technology. They pioneered FPGA-based trading, invested in microwave networks for faster-than-fiber connectivity, and operate at the absolute frontier of latency optimization.
+- Before changing links, optics, or switch choice, read `Latency Budget and Link Rules`.
+- Before changing feed handlers or book state, read `Feed Arbitration and Recovery`.
+- Before changing timestamps, audit clocks, or compliance timing, read `Timing Discipline`.
+- Before changing WAN path selection, read `Microwave vs Fiber`.
+- Do not spend tokens on `Microwave vs Fiber` for same-rack or same-switch work.
+- Do not spend tokens on `Timing Discipline` for pure strategy math with no external time requirement.
 
-## Core Philosophy
+## Operating Mindset
 
-> "The speed of light is the only limit we accept."
+Before moving logic into FPGA, ask yourself:
 
-> "Software is too slow. Put it in hardware."
+- Is this rule latency-critical, or just frequently executed?
+- Is the rule structurally stable enough to survive timing closure and production change control?
+- If this logic is wrong for 200 ns, do I lose money once, or poison state for minutes?
+- Can I prove correctness under gaps, duplicates, retransmits, and stale packets?
 
-> "Network latency is just physics. Compute latency is engineering failure."
+Jump-style principle: freeze only the part that must be deterministic at line rate. Everything else stays where it can change safely.
 
-Jump believes that when software is too slow, you put the logic in hardware. FPGAs can process market data and generate orders in hundreds of nanoseconds—faster than a CPU can even wake up.
+## Partitioning Heuristics
 
-## Design Principles
+- Put in FPGA: fixed protocol parsing, A/B line arbitration, top-of-book or bounded-depth state, hard pre-trade gates, pacing, deterministic order construction.
+- Keep on CPU or host software: fast-changing models, anything needing dynamic memory, full-history analytics, reconciliation, and slow-control logic.
+- Counterintuitive rule: a smaller FPGA design that closes timing cleanly often beats a "richer" design that adds routing pressure, BRAM contention, and jitter.
+- If the strategy trades only top-of-book, do not rebuild full depth on the hot path. Mirror full depth off-path for audit and research.
 
-1. **Hardware > Software**: When latency matters, use FPGAs.
+## Latency Budget and Link Rules
 
-2. **Network is Critical**: Microwave beats fiber. Co-location beats remote.
+- Queueing kills more alpha than propagation inside a rack. A switch that adds milliseconds during a microburst turns fresh data into stale data; many handlers will mark it stale or drop it.
+- 25G is not automatically faster than a good 10G trading link. On short, clean channels, 25G without FEC helps. Blindly enabling FEC does not.
+- Practical 25G FEC costs matter: BASE-R adds about 80 ns, RS-FEC about 250 ns per link. A few careless hops can burn half a microsecond before strategy logic runs.
+- Use BER to decide, not link-up vanity. Intel's guidance is a good engineering gate: no FEC only when BER is below `1e-12`; BASE-R when BER exceeds `5e-8`; RS-FEC when BER reaches `5e-5`.
+- Real bursts are spiky, but not infinitely spiky. Arista measured BATS around `86 Mb/s` on a one-second average and about `382 Mb/s` over a one-millisecond slice: enough to punish bad buffering on 1G, not enough to justify fake `23:1` multicast fan-in demos on 10G.
+- Prefer same-switch placement for feed handler and execution host. One fewer hop improves both median latency and tail stability.
+- Deterministic L1 or L1+ devices exist for a reason. Single-digit-nanosecond switching and mux latencies on Arista 7130-class gear are materially different from general-purpose switch behavior when the rest of the stack is already tuned.
+- Benchmark wire-to-wire and `p99.9`, not just median. A 20 ns faster median with rare 100 us outliers is a worse trading system.
 
-3. **Picoseconds Matter**: At the frontier, every nanosecond is fought for.
+## Feed Arbitration and Recovery
 
-4. **Deterministic Wins**: Jitter is the enemy of consistent performance.
+- Track last sequence independently for line A and line B.
+- On a gap on one line, stop applying later packets, cache out-of-order traffic briefly, and wait for the missing sequence from the peer line.
+- If both lines miss it, use retransmission. If state is no longer provably correct, clear and rebuild from snapshot or refresh before rejoining real time.
+- Use dual-feed arbitration before retransmission whenever possible. Exchanges such as NYSE explicitly structure recovery in that order.
+- Never let the strategy consume "best effort" book state after a gap. One poisoned book costs more than months of latency work.
+- Keep recovery entirely in hardware or entirely behind a clean ownership boundary. Half-hardware, half-software gap logic creates heisenbugs that only appear under burst loss.
 
-5. **Full Stack Ownership**: Own everything from NIC to exchange.
+## Timing Discipline
 
-## When Building Ultra-Low-Latency Systems
+- Hardware timestamps are mandatory for nanosecond claims. Software timestamps are for ops dashboards, not trading truth.
+- Do not discipline the FPGA clock by syncing only a host NIC with PTP. Without `1 PPS` or PTP packets flowing through the FPGA, the NIC, motherboard, and FPGA clocks drift independently.
+- Commodity oscillators around `20-30 ppm` can drift by about `20 us` per second and roughly `1.7 s` per day if left uncorrected. If holdover matters, bring in `1 PPS` or a `10 MHz` reference.
+- Never step time backwards. Some capture and trading software breaks on backward timestamps. Slew the clock rate with a servo instead.
+- Use boundary or transparent clocks when cross-box correlation matters; ordinary Ethernet switches degrade PTP accuracy.
+- Read MAC, PHY, and FEC errata before trusting a timing path. Example: Intel Stratix 10 25G IP with IEEE 1588 plus RS-FEC had an RX timestamp shift bug in Quartus `<=21.3` that caused about `10 ns` error.
 
-### Always
+## FPGA Implementation Rules
 
-- Measure wire-to-wire latency, not component latency
-- Use FPGAs for time-critical decisions
-- Optimize network path (co-location, cross-connects, switches)
-- Process data in the NIC when possible (smart NICs)
-- Eliminate all unnecessary hops
-- Use hardware timestamps for accurate measurement
+- Implement only the protocol variation and fields the hot path actually needs. A cut-down parser is often dramatically faster than a generic decoder that handles every optional branch.
+- Emit as soon as decisive fields are known, but only if all mandatory risk and compliance checks still complete before the order leaves the box.
+- Optimize for the hot operation mix, not textbook purity. Arbitrary delete by scanning is fatal; constantly updating an on-chip hashmap can also be a trap. Data structures that privilege top-of-book mutation often win, and order-book mutation around `80 ns` is achievable when the structure matches the workload.
+- Measure full fabric, not modules in isolation. Sub-microsecond FPGA trading paths have still lost meaningful latency in stream interconnect and glue logic, even when the business blocks themselves looked fast on paper.
+- Every BRAM lookup, clock-domain crossing, and "nice to have" normalization stage must earn its place in nanoseconds. Clean architecture that misses timing closure is not clean architecture.
 
-### Never
+## Microwave vs Fiber
 
-- Trust software timestamps
-- Use general-purpose switches in the critical path
-- Assume network latency is fixed
-- Ignore the physical layer (cables, optics, switches)
-- Process sequentially when you can pipeline
-- Wait for full message when you can cut-through
+- Air beats glass on propagation, but microwave is not a free win. If the route is materially longer than the fiber path, or weather fade forces retransmission or failover, the edge disappears into jitter.
+- Use microwave where the propagation advantage is real and failure handling is preplanned. Use fiber as the deterministic fallback, not as the thing you discover during a storm.
+- Weather-aware routing is trading infrastructure, not telecom garnish. Rain fade and line-of-sight issues turn "fastest path" into "fastest path until the market moves."
+- Do not choose a WAN path on one-way latency alone. Choose on worst-case arrival time of tradable data.
 
-### Prefer
+## Anti-Patterns
 
-- FPGAs over CPUs for fixed logic
-- Cut-through switching over store-and-forward
-- Microwave/millimeter-wave over fiber for long distances
-- Dedicated lines over shared infrastructure
-- Hardware timestamping over software
-- Parallel processing over sequential
+- NEVER enable RS-FEC by default because clean link-up is seductive. Instead qualify BER and disable FEC on short, clean trading links, or accept that each hop now carries roughly `250 ns` of avoidable latency.
+- NEVER benchmark contrived many-to-one multicast fan-in and call it "real trading" because it flatters mediocre switches. Instead test real A/B fan-out, arbitration, retransmission, and stale-packet handling.
+- NEVER sync only the host NIC and assume the FPGA clock is now correct because dashboards look aligned. Instead drive `1 PPS` or `10 MHz`, or pass PTP through the FPGA and servo that clock directly.
+- NEVER rebuild full-depth book state in hardware when the strategy only trades top-of-book because "complete" feels safer. Instead keep only latency-critical depth on the hot path and mirror the rest off-path.
+- NEVER let mutable business logic accrete in FPGA because "one more branch" feels cheap. Instead keep deterministic gates in hardware and move frequently changing logic out before routing pressure explodes.
+- NEVER trust mean latency because it hides the failures that lose money. Instead track wire-to-wire tails, stale-data drops, and gap-recovery behavior under burst.
+- NEVER step timestamps backwards because it seems like the simplest correction. Instead slew time with a servo so downstream software never sees time reversal.
 
-## Code Patterns
+## Failure-Driven Decisions
 
-### FPGA Market Data Parser (Pseudo-Verilog)
+- If timing closure fails: remove optional protocol branches, narrow state, split mutable logic to CPU, cut clock-domain crossings, and only then chase a faster device or clock.
+- If feed gaps outgrow the arbitration window: stop trading, snapshot-rebuild, and widen observability before tuning queues.
+- If PTP accuracy misses budget: verify hardware timestamps first, then switch type, then `1 PPS` or `10 MHz` presence, then vendor errata. Blaming software first is usually wrong.
+- If a 25G link requires RS-FEC to stay up: accept the new latency class explicitly, or shorten and clean the channel. Do not pretend it behaves like a no-FEC trading link.
 
-```verilog
-// FPGA-based market data parsing and order generation
-// Processes UDP multicast market data, generates orders in ~200ns
+## What Good Looks Like
 
-module market_data_parser (
-    input wire clk_312_5mhz,      // 312.5 MHz clock (3.2ns period)
-    input wire [63:0] eth_data,   // 64-bit data from MAC
-    input wire eth_valid,
-    input wire eth_sof,           // Start of frame
-    input wire eth_eof,           // End of frame
-    
-    output reg [63:0] order_data,
-    output reg order_valid,
-    output reg [15:0] symbol_id,
-    output reg [31:0] bid_price,
-    output reg [31:0] ask_price,
-    output reg [31:0] bid_size,
-    output reg [31:0] ask_size
-);
-
-    // Pipeline stages for parallel processing
-    reg [2:0] state;
-    localparam IDLE = 0, PARSE_HEADER = 1, PARSE_SYMBOL = 2,
-               PARSE_BID = 3, PARSE_ASK = 4, GENERATE_ORDER = 5;
-    
-    // Pre-computed strategy parameters (loaded at startup)
-    reg [31:0] fair_value [0:4095];      // Per-symbol fair value
-    reg [31:0] edge_threshold [0:4095];  // Min edge to trade
-    reg [31:0] max_position [0:4095];    // Position limits
-    
-    // Current positions (updated by fill handler)
-    reg [31:0] positions [0:4095];
-    
-    always @(posedge clk_312_5mhz) begin
-        case (state)
-            IDLE: begin
-                order_valid <= 0;
-                if (eth_valid && eth_sof) begin
-                    state <= PARSE_HEADER;
-                end
-            end
-            
-            PARSE_HEADER: begin
-                // Parse UDP header, extract message type
-                // Skip IP/UDP headers (known fixed offsets)
-                if (is_quote_message(eth_data)) begin
-                    state <= PARSE_SYMBOL;
-                end else begin
-                    state <= IDLE;
-                end
-            end
-            
-            PARSE_SYMBOL: begin
-                symbol_id <= eth_data[15:0];
-                state <= PARSE_BID;
-            end
-            
-            PARSE_BID: begin
-                bid_price <= eth_data[31:0];
-                bid_size <= eth_data[63:32];
-                state <= PARSE_ASK;
-            end
-            
-            PARSE_ASK: begin
-                ask_price <= eth_data[31:0];
-                ask_size <= eth_data[63:32];
-                state <= GENERATE_ORDER;
-            end
-            
-            GENERATE_ORDER: begin
-                // All logic executes in single clock cycle
-                wire [31:0] fv = fair_value[symbol_id];
-                wire [31:0] edge = edge_threshold[symbol_id];
-                wire [31:0] pos = positions[symbol_id];
-                wire [31:0] max_pos = max_position[symbol_id];
-                
-                // Buy if bid is below fair value minus edge
-                wire should_buy = (bid_price < fv - edge) && (pos < max_pos);
-                
-                // Sell if ask is above fair value plus edge  
-                wire should_sell = (ask_price > fv + edge) && (pos > -max_pos);
-                
-                if (should_buy) begin
-                    order_data <= build_buy_order(symbol_id, bid_price, bid_size);
-                    order_valid <= 1;
-                end else if (should_sell) begin
-                    order_data <= build_sell_order(symbol_id, ask_price, ask_size);
-                    order_valid <= 1;
-                end
-                
-                state <= IDLE;
-            end
-        endcase
-    end
-
-endmodule
-```
-
-### Network Topology Optimization
-
-```python
-class NetworkOptimizer:
-    """
-    Jump's network optimization: every nanosecond counts.
-    Model and optimize the full network path.
-    """
-    
-    def __init__(self):
-        self.topology = {}
-        self.latency_measurements = {}
-    
-    def model_path_latency(self, 
-                           source: str, 
-                           destination: str) -> LatencyBreakdown:
-        """
-        Break down latency into components.
-        """
-        path = self.find_path(source, destination)
-        
-        breakdown = LatencyBreakdown()
-        
-        for i, (node_a, node_b) in enumerate(zip(path[:-1], path[1:])):
-            link = self.topology[(node_a, node_b)]
-            
-            # Propagation delay (speed of light in medium)
-            # Fiber: ~5 ns/meter, Microwave: ~3.3 ns/meter
-            prop_delay = link.distance_meters * link.propagation_factor
-            breakdown.propagation_ns += prop_delay
-            
-            # Serialization delay (time to put bits on wire)
-            # 10GbE: 67.2ns for 64-byte frame
-            serial_delay = (link.frame_size_bytes * 8) / link.bandwidth_gbps
-            breakdown.serialization_ns += serial_delay
-            
-            # Switch/router delay
-            if link.device_type == 'cut_through_switch':
-                # Cut-through: forward after seeing destination MAC (~300ns)
-                breakdown.switching_ns += 300
-            elif link.device_type == 'store_forward_switch':
-                # Store-and-forward: wait for full frame (~5000ns for 64B)
-                breakdown.switching_ns += 5000
-            
-            # NIC delay (if applicable)
-            if i == 0:  # Source NIC
-                breakdown.nic_tx_ns += link.nic_tx_latency_ns
-            if i == len(path) - 2:  # Destination NIC
-                breakdown.nic_rx_ns += link.nic_rx_latency_ns
-        
-        return breakdown
-    
-    def compare_microwave_vs_fiber(self, 
-                                    point_a: Location, 
-                                    point_b: Location) -> dict:
-        """
-        Microwave travels at ~c (speed of light in vacuum).
-        Fiber travels at ~0.67c (speed of light in glass).
-        For long distances, microwave wins despite being line-of-sight.
-        """
-        distance_km = self.calculate_distance(point_a, point_b)
-        
-        # Speed of light
-        c = 299792.458  # km/s
-        
-        # Fiber: ~0.67c due to refractive index, plus routing overhead
-        fiber_speed = c * 0.67
-        fiber_distance = distance_km * 1.3  # Routing adds ~30%
-        fiber_latency_ms = (fiber_distance / fiber_speed) * 1000
-        
-        # Microwave: ~0.99c, nearly straight line
-        microwave_speed = c * 0.99
-        microwave_distance = distance_km * 1.02  # Slight deviation for terrain
-        microwave_latency_ms = (microwave_distance / microwave_speed) * 1000
-        
-        return {
-            'fiber_latency_ms': fiber_latency_ms,
-            'microwave_latency_ms': microwave_latency_ms,
-            'savings_ms': fiber_latency_ms - microwave_latency_ms,
-            'savings_percent': (fiber_latency_ms - microwave_latency_ms) / fiber_latency_ms * 100
-        }
-```
-
-### Smart NIC Processing
-
-```cpp
-// Smart NIC (Bluefield/Netronome) for in-NIC processing
-// Process market data before it hits CPU
-
-class SmartNICProcessor {
-public:
-    // Run on NIC's ARM cores / P4 engine
-    struct PacketContext {
-        uint64_t timestamp_hw;    // Hardware timestamp from PHY
-        uint8_t* packet_data;
-        uint16_t length;
-    };
-    
-    // This runs on the NIC, not the host CPU
-    __attribute__((section(".nic_code")))
-    Action process_packet(PacketContext* ctx) {
-        // Parse at line rate
-        auto* eth = reinterpret_cast<EthernetHeader*>(ctx->packet_data);
-        
-        if (eth->ethertype != ETHERTYPE_IP) {
-            return Action::PASS_TO_HOST;
-        }
-        
-        auto* ip = reinterpret_cast<IPHeader*>(eth + 1);
-        auto* udp = reinterpret_cast<UDPHeader*>(ip + 1);
-        
-        // Filter: only process market data multicast
-        if (!is_market_data_multicast(ip->dst_addr, udp->dst_port)) {
-            return Action::PASS_TO_HOST;
-        }
-        
-        auto* msg = reinterpret_cast<MarketDataMessage*>(udp + 1);
-        
-        // Simple filtering: drop if not in our symbol universe
-        if (!is_in_universe(msg->symbol_id)) {
-            return Action::DROP;
-        }
-        
-        // Add hardware timestamp and pass to host
-        ctx->packet_data = prepend_timestamp(ctx->packet_data, ctx->timestamp_hw);
-        
-        return Action::PASS_TO_HOST;
-    }
-};
-```
-
-### Precision Time Protocol (PTP)
-
-```cpp
-// Hardware-based time synchronization
-
-class PTPTimeSync {
-    /*
-     * Jump uses PTP (IEEE 1588) for nanosecond-accurate time sync.
-     * Critical for correlating events across systems and fair latency measurement.
-     */
-    
-public:
-    void configure_ptp_hardware(int nic_fd) {
-        // Enable hardware timestamping
-        struct hwtstamp_config config = {};
-        config.tx_type = HWTSTAMP_TX_ON;
-        config.rx_filter = HWTSTAMP_FILTER_ALL;
-        
-        struct ifreq ifr = {};
-        ifr.ifr_data = (char*)&config;
-        ioctl(nic_fd, SIOCSHWTSTAMP, &ifr);
-        
-        // Get PHC (PTP Hardware Clock) device
-        struct ethtool_ts_info info = {};
-        info.cmd = ETHTOOL_GET_TS_INFO;
-        ifr.ifr_data = (char*)&info;
-        ioctl(nic_fd, SIOCETHTOOL, &ifr);
-        
-        // Open PHC device
-        char phc_device[32];
-        snprintf(phc_device, sizeof(phc_device), "/dev/ptp%d", info.phc_index);
-        phc_fd_ = open(phc_device, O_RDWR);
-    }
-    
-    uint64_t get_hardware_time_ns() {
-        struct ptp_clock_time ptc;
-        ioctl(phc_fd_, PTP_CLOCK_GETTIME, &ptc);
-        return ptc.sec * 1000000000ULL + ptc.nsec;
-    }
-    
-    // Extract hardware timestamp from received packet
-    uint64_t extract_rx_timestamp(struct msghdr* msg) {
-        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg); 
-             cmsg; 
-             cmsg = CMSG_NXTHDR(msg, cmsg)) {
-            
-            if (cmsg->cmsg_level == SOL_SOCKET &&
-                cmsg->cmsg_type == SCM_TIMESTAMPING) {
-                
-                struct scm_timestamping* ts = 
-                    (struct scm_timestamping*)CMSG_DATA(cmsg);
-                
-                // Use hardware timestamp (ts[2]) not software (ts[0])
-                return ts->ts[2].tv_sec * 1000000000ULL + 
-                       ts->ts[2].tv_nsec;
-            }
-        }
-        return 0;
-    }
-
-private:
-    int phc_fd_;
-};
-```
-
-### Wire-to-Wire Latency Measurement
-
-```cpp
-class WireToWireLatency {
-    /*
-     * Measure true latency: from photons arriving at RX NIC
-     * to photons leaving TX NIC.
-     * Software timestamps are useless at these scales.
-     */
-    
-public:
-    struct Measurement {
-        uint64_t rx_hw_timestamp;    // When packet hit our NIC (hardware)
-        uint64_t tx_hw_timestamp;    // When response left our NIC (hardware)
-        uint64_t wire_to_wire_ns;    // Total latency
-        
-        // Component breakdown (if instrumented)
-        uint64_t parse_ns;
-        uint64_t strategy_ns;
-        uint64_t order_build_ns;
-        uint64_t tx_queue_ns;
-    };
-    
-    void record_tick_to_trade(
-        uint64_t market_data_rx_hw_ts,
-        uint64_t order_tx_hw_ts) {
-        
-        uint64_t latency_ns = order_tx_hw_ts - market_data_rx_hw_ts;
-        
-        histogram_.record(latency_ns);
-        
-        // Alert if we exceed target
-        if (latency_ns > target_latency_ns_) {
-            log_slow_path(latency_ns);
-        }
-    }
-    
-    void print_histogram() {
-        // Typical Jump-style output:
-        // p50: 180ns, p99: 320ns, p999: 890ns, max: 1.2us
-        auto stats = histogram_.get_stats();
-        printf("Wire-to-wire latency:\n");
-        printf("  p50:  %luns\n", stats.p50);
-        printf("  p99:  %luns\n", stats.p99);
-        printf("  p999: %luns\n", stats.p999);
-        printf("  max:  %luns\n", stats.max);
-    }
-};
-```
-
-## Mental Model
-
-Jump approaches ultra-low-latency by asking:
-
-1. **What's the physics limit?** Speed of light × distance
-2. **Where's the compute?** Move it to hardware (FPGA/SmartNIC)
-3. **What's the network path?** Optimize every hop
-4. **What's the jitter?** Worst case matters more than average
-5. **Can we pipeline?** Process in parallel, not sequentially
-
-## Signature Jump Moves
-
-- FPGA-based trading logic
-- Microwave networks for long-haul
-- Smart NIC pre-processing
-- Hardware PTP time synchronization
-- Cut-through switching
-- Wire-to-wire latency measurement
-- Nanosecond-level optimization
-- Co-location at every major exchange
-- Full-stack hardware/software ownership
+- Fresh packets arrive, gaps are detected immediately, and no strategy sees state that is not provably ordered.
+- Clock discipline is explicit and measurable, with no confusion between host time and FPGA time.
+- The FPGA bitstream contains only stable, latency-critical logic.
+- The network path is chosen for worst-case tradable arrival time, not marketing bandwidth.

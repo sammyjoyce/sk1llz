@@ -1,197 +1,110 @@
 ---
 name: sutter-exceptional-cpp
-description: Write C++ code following Herb Sutter's exceptional C++ principles. Emphasizes exception safety, const correctness, modern idioms, and defensive programming. Use when writing robust, production-quality C++ that must handle errors gracefully.
-tags: concurrency, move-semantics, smart-pointers, const, exceptions, guidelines, modern, best-practices
+description: Write and review modern C++ in Herb Sutter's style: explicit failure contracts, ownership semantics, polymorphic boundaries, and concurrency-safe const behavior. Use when code involves exception safety, `noexcept`, moved-from state, `const` plus `mutable`, `pimpl`, `clone`, smart pointers, virtual interfaces, or lock-sensitive callbacks. Triggers: exceptional c++, strong guarantee, basic guarantee, commit or rollback, NVI, `make_unique`, `make_shared`, `weak_ptr`, `noexcept`, `shared_ptr`, `unique_ptr`.
+tags: exceptions, noexcept, const, concurrency, move-semantics, pimpl, polymorphism, smart-pointers
 ---
 
-# Herb Sutter Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​​​‌​‌‍​​‌​‌‌​​‍‌‌​‌‌‌​‌‍​‌‌‌​‌​‌‍​​​​‌​‌​‍‌​‌​‌‌​‌⁠‍⁠
+# Sutter Exceptional C++
 
-## Overview
+This skill is for code that must stay correct when construction, allocation, callbacks, or concurrency go wrong. It is not a generic C++ style guide.
 
-Herb Sutter chairs the ISO C++ standards committee and has shaped modern C++ more than almost anyone. His "Exceptional C++" series and "GotW" (Guru of the Week) columns defined how we think about exception safety, const correctness, and defensive C++.
+Do not load generic "clean code" advice for this task. The hard part here is preserving invariants across failure paths and extension points.
 
-## Core Philosophy
+## Start Here
 
-> "Don't optimize prematurely. Don't pessimize prematurely."
+Before changing a type, classify it:
 
-> "Write for clarity and correctness first. Optimize measured bottlenecks."
+- Value type: copyable, equality-preserving, swappable, ordinary moved-from state.
+- Unique owner or handle: move-first, copy maybe deleted, resource lifetime explicit.
+- Polymorphic interface: public virtual surface only when dynamic dispatch is the product; otherwise prefer NVI.
+- ABI firewall: `pimpl` or opaque handle where compilation boundaries matter more than convenience.
 
-Sutter believes in **defensive programming**: code that handles errors gracefully, maintains invariants, and fails safely when the unexpected happens.
+Before writing code, ask yourself:
 
-## Design Principles
+- What is the promised failure contract for each mutating operation: `noexcept`, strong, or basic?
+- Which operations may execute unknown code: virtual dispatch, templates on `T`, comparators, hashers, allocators, deleters, logging sinks, callbacks?
+- Can `const` callers race each other? If yes, is the object truly read-only or internally synchronized?
+- Will a moved-from object still satisfy every invariant that observers assume?
 
-1. **Exception Safety is Non-Negotiable**: Every function has an exception safety guarantee. Know which one yours provides.
+## Sutter Heuristics
 
-2. **Const Correctness**: `const` isn't decoration—it's documentation and enforcement of intent.
+- Default to the rule of zero. A user-declared destructor or copy operation usually means you just took responsibility for move generation, exception guarantees, and self-assignment behavior too.
+- Promise `noexcept` only when you can preserve invariants without fallback allocation, locking, or validation work. `noexcept` is a performance contract to the standard library; a false promise turns an ordinary failure into `std::terminate`.
+- If a type is copyable, treat move as an optimization of copy, not a semantic escape hatch. Generic code exploits move aggressively only when it can trust it not to throw.
+- A moved-from object is still a normal live object. "Valid but unspecified" never means "destroy-only." If `operator<`, `swap`, or reassignment break after move, the type is broken.
+- If move would violate a non-null or non-empty invariant, encode that invariant in the type or suppress move. Do not let a defaulted move silently manufacture states the rest of the interface cannot tolerate.
+- `const` on shareable objects means "read-only or internally synchronized." Sutter's M&M rule applies: `mutable` and `mutex` or `atomic` should travel together.
+- Prefer public nonvirtual functions plus private or protected virtual hooks when a base class must enforce invariants, locking, or exception translation. Public virtuals are harder to defend because overrides can skip the guardrails.
+- Prefer value semantics unless you are expressing ownership or polymorphic lifetime. `shared_ptr` is not a harmless default; it adds control-block cost, weak-cycle design pressure, and cross-thread refcount traffic.
+- Use `pimpl` with `unique_ptr`, not `shared_ptr`, unless sharing the implementation object is the semantic goal. `shared_ptr` silently changes copy semantics and pays for refcounting even when nobody shares.
+- If deep copy of a polymorphic object is required, delete public base copy and move and add `clone`; otherwise callers will eventually slice.
 
-3. **Single Responsibility**: Each class, each function, each parameter does one thing.
+## Failure-Contract Decision Tree
 
-4. **Value Semantics by Default**: Prefer values over pointers. Prefer smart pointers over raw.
+When a mutating operation can fail:
 
-## Exception Safety Guarantees
+- Need caller-visible rollback: stage all throwing work off to the side, then commit with `noexcept` swap or pointer flip.
+- Need peak performance on hot equal-capacity assignment: reuse storage in place, document that you only provide the basic guarantee, and test self-assignment plus self-move.
+- Need both rollback and reuse: split the operation into reserve or prepare and commit steps; do not fake both with a single clever assignment operator.
 
-Every function provides one of these guarantees:
+When choosing smart-pointer factories:
 
-| Guarantee | Meaning |
-|-----------|---------|
-| **No-throw** | Never throws. Destructors, `swap`, move operations should be here. |
-| **Strong** | If exception thrown, state unchanged (commit or rollback) |
-| **Basic** | If exception thrown, invariants preserved, no leaks, valid state |
-| **None** | No guarantees (unacceptable in modern C++) |
+- Multiple allocations appear in one full expression: use `make_unique` or `make_shared` so construction and ownership become one non-interleaved operation.
+- Shared lifetime is real and weak observers are short-lived: prefer `make_shared` for one allocation and better locality.
+- Shared lifetime is real but weak observers can outlive a large object, you need a custom deleter, or you are adopting an existing pointer: construct `shared_ptr` without `make_shared`.
 
-## When Writing Code
+When choosing interface shape:
 
-### Always
+- Concrete or value type: no virtual assignment, no public data races, swap should be cheap and `noexcept`.
+- Polymorphic base: destructor must be public virtual or protected nonvirtual; public copy and move should usually be deleted.
+- Pimpl or firewall: destructor and any assignment operator that may destroy the impl must be defined out of line where the impl is complete.
 
-- Know and document your exception safety guarantee
-- Make `swap` operations `noexcept`
-- Make destructors `noexcept`
-- Make move operations `noexcept` when possible
-- Use `const` member functions when state isn't modified
-- Prefer `auto` for complex types, explicit types for documentation
-- Use RAII for all resources (no leak on any code path)
+## NEVER Rules
 
-### Never
+- NEVER write `f(unique_ptr<T>{new T}, unique_ptr<U>{new U})` because the smart pointers do not exist until after construction finishes, and argument evaluation can interleave and leak on exception. Instead use `make_unique`-style factories at the call site.
+- NEVER add `noexcept` "for STL performance" when move or swap might allocate, lock, or validate because the promise is seductive and benchmarks may improve, but a late throw becomes `std::terminate`. Instead use conditional `noexcept` or let generic code copy.
+- NEVER assume copy-and-swap is always the best assignment pattern because the strong guarantee is seductive, but on large equal-sized buffers it can be an order of magnitude slower and defeats storage reuse. Instead reserve copy-and-swap for rollback-critical paths and write an in-place basic-guarantee assignment when reuse dominates.
+- NEVER leave moved-from objects semantically poisoned because "valid but unspecified" sounds like a license to drop invariants. The concrete consequence is algorithms that compare, swap, or reassign moved-from objects crash far from the bug. Instead leave a normal invariant-preserving state, often default-like.
+- NEVER use `mutable` as a concurrency loophole because old pre-C++11 "logical const" intuition is seductive. Unsynchronized caches inside `const` functions create data races that only appear under load. Instead pair mutable state with a mutex or atomic, or remove the cache.
+- NEVER expose public copy or move on a polymorphic base because it feels uniform with concrete types, but it slices and destroys substitutability. Instead delete the public operations and offer `clone` only if deep copy is required.
+- NEVER reach for `shared_ptr` to avoid making an ownership decision because it feels reversible. The consequence is refcount churn, accidental cycles, and with `make_shared` the object's storage can stay pinned until the last `weak_ptr` dies. Instead default to `unique_ptr` plus raw or reference observers.
+- NEVER call virtual functions, callbacks, comparators, template customization points, or other unknown code while holding a lock or while invariants are temporarily broken. It is seductive because the call site looks local, but the real consequence is deadlock, or even single-threaded reentrant observation of half-mutated state. Instead snapshot what you need, unlock, then call out.
 
-- Throw from destructors
-- Let exceptions escape callbacks/handlers without catch
-- Write functions that provide no exception safety guarantee
-- Use `const_cast` to remove `const` from `const` data
-- Return raw pointers to owned resources
+## Patterns To Apply
 
-### Prefer
+### Assignment
 
-- `make_unique`/`make_shared` over `new`
-- Copy-and-swap for exception-safe assignment
-- Algorithms over raw loops
-- `std::optional` over pointer-or-null patterns
-- `std::variant` over union + type tag
+- For ordinary value types, let the compiler generate copy and move if members already do the right thing.
+- For hand-written assignment, decide explicitly between strong guarantee via temp-and-swap and basic guarantee via storage reuse.
+- Self-assignment and self-move should be correct by construction, not rescued by defensive branches unless measurement justifies them.
 
-## Code Patterns
+### Const Plus Concurrency
 
-### Exception-Safe Assignment (Strong Guarantee)
+- A `const` member may lock; the lock object should itself be `mutable`.
+- A `const` member may update cached data only if callers cannot observe a race and the cache update is synchronized.
+- If you cannot make a `const` observer race-free, it is not really `const` in Sutter's sense.
 
-```cpp
-class Stack {
-    T* data_;
-    size_t size_;
-    size_t capacity_;
-public:
-    // STRONG guarantee via copy-and-swap
-    Stack& operator=(Stack other) noexcept {
-        swap(*this, other);
-        return *this;
-    }
-    
-    friend void swap(Stack& a, Stack& b) noexcept {
-        using std::swap;
-        swap(a.data_, b.data_);
-        swap(a.size_, b.size_);
-        swap(a.capacity_, b.capacity_);
-    }
-    
-    // STRONG guarantee for push
-    void push(const T& value) {
-        if (size_ == capacity_) {
-            // Create new buffer first (might throw)
-            Stack temp;
-            temp.reserve(capacity_ * 2);
-            for (size_t i = 0; i < size_; ++i)
-                temp.data_[i] = data_[i];
-            temp.size_ = size_;
-            
-            // Commit phase (noexcept)
-            swap(*this, temp);
-        }
-        data_[size_++] = value;
-    }
-};
-```
+### Pimpl
 
-### Const Correctness Patterns
+- `unique_ptr<impl>` is the default.
+- Define the destructor out of line.
+- If copy or move assignment can destroy the old impl, define those out of line too; incomplete-type friendliness ends exactly where deletion begins.
 
-```cpp
-class Widget {
-    std::vector<int> data_;
-    mutable std::mutex mutex_;  // mutable: okay for logical const
-    
-public:
-    // Const member function: promises not to modify logical state
-    std::vector<int> getData() const {
-        std::lock_guard<std::mutex> lock(mutex_);  // mutable allows this
-        return data_;  // Return copy
-    }
-    
-    // Non-const overload when modification needed
-    std::vector<int>& data() { return data_; }
-    
-    // Const ref for read-only access (no copy)
-    const std::vector<int>& data() const { return data_; }
-};
-```
+### Polymorphic APIs
 
-### Pimpl Done Right (Sutter's Approach)
+- Public interface establishes preconditions, postconditions, locking, and exception policy.
+- Virtual hook does only the customization work.
+- If callers own through base pointers, deletion must be correct even when they use `unique_ptr<Base>`.
 
-```cpp
-// widget.h
-#include <memory>
+## Review Checklist
 
-class Widget {
-public:
-    Widget();
-    ~Widget();                              // Defined in .cpp
-    Widget(Widget&&) noexcept;              // Defined in .cpp
-    Widget& operator=(Widget&&) noexcept;   // Defined in .cpp
-    
-    Widget(const Widget&);                  // Defined in .cpp
-    Widget& operator=(const Widget&);       // Defined in .cpp
-    
-    void doSomething();
-    
-private:
-    struct Impl;
-    std::unique_ptr<Impl> pImpl_;
-};
+Before finishing, verify:
 
-// widget.cpp
-struct Widget::Impl {
-    std::string name;
-    std::vector<int> data;
-    
-    void doSomethingImpl() { /* ... */ }
-};
+- Every mutating function has an intentional guarantee: `noexcept`, strong, or basic.
+- Every moved-from state still obeys invariants.
+- Every `const` function on a shareable type is race-free.
+- Every ownership edge is explicit: unique, shared, or observing.
+- Every virtual boundary preserves invariants and deletion semantics.
+- Every lock scope excludes unknown code.
 
-Widget::Widget() : pImpl_(std::make_unique<Impl>()) {}
-Widget::~Widget() = default;
-Widget::Widget(Widget&&) noexcept = default;
-Widget& Widget::operator=(Widget&&) noexcept = default;
-
-Widget::Widget(const Widget& other)
-    : pImpl_(std::make_unique<Impl>(*other.pImpl_)) {}
-
-Widget& Widget::operator=(const Widget& other) {
-    *pImpl_ = *other.pImpl_;
-    return *this;
-}
-
-void Widget::doSomething() { pImpl_->doSomethingImpl(); }
-```
-
-## Mental Model
-
-Sutter thinks in terms of **contracts and guarantees**:
-
-1. **Preconditions**: What must be true when function is called?
-2. **Postconditions**: What is guaranteed after function returns?
-3. **Exception guarantee**: What happens if something throws?
-4. **Thread safety**: What synchronization is needed?
-
-## GotW Wisdom
-
-Key lessons from Guru of the Week:
-- Prefer `++i` to `i++`
-- Virtual functions should be private, rarely protected, only public for interfaces
-- Minimize `#include` dependencies
-- Never write `using namespace` in headers
-- Make const-qualified overloads return const (or by value)
-
+If the code still relies on "callers will remember not to do that," it is not Sutter-grade yet.

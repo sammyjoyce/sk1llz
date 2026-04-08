@@ -1,564 +1,89 @@
 ---
 name: roth-detection-engineering
-description: Apply Florian Roth's detection engineering methodology with YARA and Sigma rules. Emphasizes portable detection logic, community sharing, and signature quality. Use when creating detection rules that work across platforms.
-tags: yara, sigma, detection-rules, malware, ioc, scanning, community, open-source, threat-detection
+description: Expert playbook for Florian Roth style detection engineering across Sigma, YARA, YARA-X, LOKI, THOR, and signature-base. Use when writing or tuning portable SIEM detections, scoring YARA hits, reducing false positives, debugging unsupported backend conversions, or fixing slow rules. Triggers: sigma, pysigma, sigma-cli, yara, yara-x, THOR, LOKI, signature-base, rule tuning, false positives, backend mapping, threat hunting.
 ---
 
-# Florian Roth — Detection Engineering⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​‌‌‌​​‍​‌​‌​​‌​‍‌‌‌‌​‌​​‍​​‌​​‌‌​‍​​​​‌​‌​‍‌​‌‌​​‌​⁠‍⁠
+# Roth Detection Engineering
 
-## Overview
+Roth's style is not "write more rules." It is "ship rules that survive backend translation, analyst review, false-positive pressure, and community reuse." A rule that looks elegant in YAML or YARA but dies in conversion, gets suppressed by analysts, or times out under load is not finished.
 
-Florian Roth is CTO of Nextron Systems and creator of some of the most influential detection tools in security: the Sigma rule format, extensive YARA rule sets, and the THOR APT scanner. His work has made detection logic portable, shareable, and accessible to the community.
+## Load Only What You Need
 
-## References
+- Before editing exact Sigma syntax, modifiers, or condition grammar, READ `references/sigma_reference.md`.
+- Do NOT load `references/sigma_reference.md` for a YARA-only task; it is context waste.
+- Do NOT load `scripts/sigma_converter.py` unless you are debugging a local conversion artifact in this package. It hard-codes mappings and is not Roth's source of truth.
 
-- **Sigma**: https://sigmahq.io/
-- **YARA**: https://virustotal.github.io/yara/
-- **GitHub**: https://github.com/Neo23x0
-- **Twitter**: @cyb3rops
+## Core Heuristics
 
-## Core Philosophy
+- Portability is a hypothesis, not a property. Prove it per backend.
+- False-positive cost matters more than cleverness. A noisy high-severity rule gets disabled faster than a modest low-severity hunt rule gets improved.
+- Prefer stable public references or `Internal Research`. Rules that depend on private context do not scale to community use.
+- Separate "broad hunt surface" from "actionable alert." Roth's ecosystems keep both, but they are not the same artifact.
 
-> "Detection should be shareable."
+## Before Writing Sigma, Ask Yourself
 
-> "One rule format to rule them all."
+- Is this an alert, a hunt, an emerging-threat rule, or only a placeholder for later correlation?
+- Which backends must pass today, and which fields or modifiers do those backends actually support after normalization?
+- What benign software, admin workflow, or installer looks closest to this behavior?
+- Which field is carrying the signal: raw log field, mapped field, or pipeline-enriched field? If you cannot answer that, you are not ready to call the rule portable.
 
-> "The community is stronger together."
+## Sigma Procedure
 
-Roth's insight: detection logic shouldn't be locked to a single SIEM. Sigma allows defenders to write once and deploy everywhere, accelerating community-wide defense.
+1. Start from telemetry reality, not ATT&CK labels. Wrong `logsource` is a bigger portability killer than imperfect tagging.
+2. Use the cheapest operator that preserves meaning. `contains`, `startswith`, `endswith`, and `windash` usually survive backend translation better than regex.
+3. Convert against every target backend before you tune severity. Use `sigma-cli --fail-unsupported` in release gates. Use `--skip-unsupported` only during exploration, never as proof the rule is deployable.
+4. If one backend cannot support the rule because of fields, modifiers, or aggregate logic, split the rule into a portable core plus explicit backend-specific variants. Do not pretend a broken universal rule is "good enough."
+5. Set level by review cost, not by emotion. Sigma guidance is conservative for a reason: `low` and `medium` are for hunting, compliance, and correlation; `high` is for alerts that still need human review; `critical` should be close to intolerable-false-positive territory.
 
-## Key Contributions
+## Sigma Failure Modes That Practitioners Learn the Hard Way
 
-### Sigma Rules
-Generic signature format for SIEM systems. Write detection logic once, convert to any SIEM query language.
+- Backend support is uneven. Some pySigma backends reject specific fields or rule types; for example, the InsightIDR backend documents unsupported fields such as `CurrentDirectory`, `IntegrityLevel`, `imphash`, and `LogonId` for process starts, and it does not support deprecated aggregate `count()` style conditions. If you do not gate on that, you create silent coverage gaps.
+- Modifier combinations can be logically correct on paper and broken in practice. Sigma release notes include real fixes where `windash` combined incorrectly with `all` changed rule logic. Treat modifier composition as something to test, not trust.
+- Regex is seductive because it compresses thought, but it raises conversion drift and runtime cost. If a simpler modifier can express the intent, use the simpler modifier first.
 
-### YARA Rules
-Binary pattern matching for malware detection. Extensive rule sets for threat hunting.
+## Before Writing YARA, Ask Yourself
 
-### THOR Scanner
-APT scanner that brings professional detection capabilities to incident response.
+- Am I detecting a family, a capability, an anomaly, or a triage lead?
+- Which strings are truly unique (`$x*`), grouped behavior markers (`$s*`), scope limiters (`$a*`), and false-positive suppressors (`$fp*`)?
+- Which engine will run this: classic YARA, YARA-X, THOR, LOKI, or VirusTotal-style infrastructure?
+- Can any module value be undefined on irrelevant file types, and if so, what happens to my condition?
+- What scan-time budget is acceptable on the real corpus, not on one sample?
 
-## When Implementing
+## YARA Procedure
 
-### Always
+1. Add cheap scope limiters first: magic bytes, file size, file-type/module checks, then threat strings.
+2. Score rules deliberately. In Neo23x0's style guide, `0-39` is capability dust or weak packer evidence, `40-59` is noteworthy anomaly, `60-79` is suspicious heuristic/generic detection, and `80-100` is reserved for high-confidence malware or hack-tool matches.
+3. Use hashes that directly refer to the file you expect to match. Do not use archive/container hashes unless the archive itself is the artifact. Memory-only rules are the exception.
+4. Guard module-dependent logic with `defined` when the file type may vary. In YARA/YARA-X, `undefined` propagates in unintuitive ways: `A or undefined` can still be true, while many direct comparisons on undefined values simply collapse to non-matches.
+5. Profile before "optimizing." In YARA-X profiling, rules under `100ms` are omitted; chase the outliers. If pattern matching time dominates, your atoms/regex/hex patterns are the problem. If condition evaluation dominates, your loops or module-heavy predicates are the problem.
+6. Pick the engine intentionally. Classic YARA is still about `2-3x` faster on already-optimized plain text or simple hex rules, while YARA-X is much better on regex-heavy, complex hex, and loop-heavy rules and materially reduces timeout/rejection pressure on shared scanning systems.
 
-- Write Sigma rules for portability
-- Include MITRE ATT&CK tags
-- Document false positives
-- Test rules before deployment
-- Share rules with the community
-- Version control your rules
+## YARA Failure Modes That Matter
 
-### Never
+- Slow rules do not only hurt themselves. At VirusTotal scale, a single inefficient rule can starve shared capacity; timeouts were severe enough that performance-warning rules were historically rejected, and YARA-X was adopted partly to push timeout impact from about `2%` of scanned files to under `0.2%`.
+- "Compiles" does not mean "can match." YARA-X now warns on unsatisfiable expressions such as comparing lowercase `hash.md5(...)` output to uppercase hex, or comparing `uint8(...)` to values outside `0..255`. Treat those warnings as correctness failures, not lint noise.
+- Neo23x0 signature-base includes rules that rely on external variables for THOR/LOKI. Reusing those rules in another engine without supplying equivalent variables yields `undefined identifier` failures.
 
-- Hard-code SIEM-specific syntax in shared rules
-- Deploy untested rules to production
-- Ignore false positive rates
-- Keep effective rules private
-- Skip metadata (author, date, references)
+## Decision Tree
 
-### Prefer
+- Need one rule to share across multiple SIEMs? Start in Sigma. If conversion fails on one backend, decide whether portability is required. If yes, rewrite to the portable core. If no, fork backend-specific variants and document why.
+- Need file, memory, or artifact scanning? Start in YARA. If the rule is slow or rejected, profile it first; move to YARA-X for diagnosis when regex, complex hex, or loops are involved.
+- Need LOKI/THOR compatibility? Prefer Neo23x0 conventions: scoped scores, explicit false-positive suppressors, and tool-aware variables. If you are outside that ecosystem, strip or replace external-variable logic before you trust the rule.
+- Rule is still noisy after two serious filter passes? Downgrade it to hunt or lower its score/level. Do not promote noisy heuristics and hope operations will tolerate them.
 
-- Sigma over SIEM-specific queries
-- Behavioral patterns over exact strings
-- Community rules as starting points
-- Layered detection (multiple rules per technique)
-- Regular rule review and tuning
+## Anti-Patterns
 
-## Implementation Patterns
+- NEVER call a Sigma rule portable because it compiles once; that is seductive because YAML feels backend-neutral. The consequence is silent blind spots when a backend drops unsupported fields, modifiers, or aggregates. Instead, convert against every target backend and fail the build on unsupported constructs.
+- NEVER lead with regex in Sigma because it feels expressive and future-proof. The consequence is slower queries, conversion drift, and higher odds that the rule gets rewritten or disabled downstream. Instead, exhaust field modifiers first and reserve regex for patterns that genuinely need grammar.
+- NEVER guess `logsource` from ATT&CK technique names because it feels faster than validating telemetry. The consequence is a rule that looks correct but never lands on the event family you actually ingest. Instead, anchor the rule on real source data and only then tag it.
+- NEVER mark a heuristic rule `high` or `critical` because urgent labels get attention. The consequence is analyst fatigue, blanket suppression, and permanent distrust of the ruleset. Instead, keep broad heuristics at hunt-friendly levels until prevalence and filters justify escalation.
+- NEVER copy Neo23x0 signature-base rules blindly into another scanner because THOR/LOKI-specific external variables are convenient and easy to miss. The consequence is `undefined identifier` errors or silently altered logic. Instead, isolate those rules or provide equivalent variables explicitly.
+- NEVER "fix" YARA performance by randomly deleting strings because the slowest rules are usually dominated by bad atoms or unbounded condition work, not by string count alone. The consequence is lower specificity with little speed gain. Instead, profile and attack the dominant cost bucket.
+- NEVER compare module outputs or hashes without thinking about type, case, and range because YARA/YARA-X will happily let you write logic that can never be true. The consequence is silent false negatives that look like clean scans. Instead, use `defined`, normalize case, and treat unsatisfiable-expression warnings as blocking.
 
-### Sigma Rule Anatomy
+## Fallback Tactics
 
-```yaml
-# sigma_rule_template.yml
-# Complete Sigma rule with all recommended fields
-
-title: Suspicious PowerShell Download Cradle
-id: 3b6ab547-8ec2-4991-b9d2-2b06702a48d7    # UUID
-status: experimental    # test | stable | deprecated
-description: |
-    Detects PowerShell download cradle patterns commonly used
-    for malware delivery and living-off-the-land attacks.
-
-references:
-    - https://attack.mitre.org/techniques/T1059/001/
-    - https://lolbas-project.github.io/
-
-author: Florian Roth (Nextron Systems)
-date: 2024/01/15
-modified: 2024/02/20
-
-tags:
-    - attack.execution
-    - attack.t1059.001
-    - attack.defense_evasion
-    - attack.t1140
-
-logsource:
-    category: process_creation
-    product: windows
-
-detection:
-    selection_img:
-        - Image|endswith: '\powershell.exe'
-        - Image|endswith: '\pwsh.exe'
-        - OriginalFileName:
-            - 'PowerShell.EXE'
-            - 'pwsh.dll'
-    
-    selection_commands:
-        CommandLine|contains:
-            - 'IEX'
-            - 'Invoke-Expression'
-            - 'DownloadString'
-            - 'DownloadFile'
-            - 'DownloadData'
-            - 'Net.WebClient'
-            - 'Start-BitsTransfer'
-            - 'Invoke-WebRequest'
-            - 'iwr '
-            - 'curl '
-            - 'wget '
-    
-    filter_legitimate:
-        CommandLine|contains:
-            - 'chocolatey'
-            - 'update-help'
-            - 'Microsoft.PowerShell'
-    
-    condition: all of selection_* and not filter_legitimate
-
-falsepositives:
-    - Legitimate administration scripts
-    - Software deployment tools
-    - Package managers (Chocolatey, etc.)
-
-level: medium
-
-fields:
-    - CommandLine
-    - ParentCommandLine
-    - User
-    - ComputerName
-```
-
-### YARA Rule Anatomy
-
-```yara
-/*
-    YARA Rule: Cobalt Strike Beacon
-    Author: Florian Roth
-    Date: 2024-01-15
-    Reference: https://www.cobaltstrike.com/
-    
-    Detects Cobalt Strike beacon payloads in memory or files
-*/
-
-rule CobaltStrike_Beacon_Encoded
-{
-    meta:
-        description = "Detects Cobalt Strike beacon"
-        author = "Florian Roth"
-        date = "2024-01-15"
-        reference = "https://attack.mitre.org/software/S0154/"
-        hash1 = "abc123..."
-        score = 80
-        
-    strings:
-        // XOR encoded config
-        $config_start = { 00 01 00 01 00 02 }
-        
-        // Sleep mask
-        $sleep_mask = { 48 89 5C 24 08 48 89 6C 24 10 }
-        
-        // Named pipe pattern
-        $pipe = "\\\\.\\pipe\\msagent_" ascii wide
-        
-        // Default watermark (change for specific actors)
-        $watermark = { 01 00 00 00 [4] 00 00 00 00 }
-        
-        // Reflective loader
-        $reflective = "ReflectiveLoader" ascii
-        
-    condition:
-        uint16(0) == 0x5A4D and    // MZ header
-        filesize < 1MB and
-        (
-            ($config_start and $watermark) or
-            ($sleep_mask and $pipe) or
-            ($reflective and $pipe)
-        )
-}
-
-rule Mimikatz_Memory_Strings
-{
-    meta:
-        description = "Detects Mimikatz in memory"
-        author = "Florian Roth"
-        reference = "https://attack.mitre.org/software/S0002/"
-        
-    strings:
-        $s1 = "sekurlsa::logonpasswords" ascii wide nocase
-        $s2 = "sekurlsa::wdigest" ascii wide nocase
-        $s3 = "sekurlsa::kerberos" ascii wide nocase
-        $s4 = "lsadump::sam" ascii wide nocase
-        $s5 = "lsadump::dcsync" ascii wide nocase
-        $s6 = "privilege::debug" ascii wide nocase
-        
-        $author = "gentilkiwi" ascii wide
-        $tool = "mimikatz" ascii wide nocase
-        
-    condition:
-        3 of ($s*) or
-        ($author and $tool)
-}
-```
-
-### Sigma to SIEM Conversion
-
-```python
-# sigma_converter.py
-# Convert Sigma rules to various SIEM formats
-
-from dataclasses import dataclass
-from typing import Dict, List, Optional
-import yaml
-import re
-
-@dataclass
-class SigmaRule:
-    """Parsed Sigma rule"""
-    title: str
-    id: str
-    status: str
-    description: str
-    logsource: Dict
-    detection: Dict
-    level: str
-    tags: List[str]
-    falsepositives: List[str]
-    
-    @classmethod
-    def from_yaml(cls, yaml_content: str) -> 'SigmaRule':
-        data = yaml.safe_load(yaml_content)
-        return cls(
-            title=data.get('title', ''),
-            id=data.get('id', ''),
-            status=data.get('status', 'experimental'),
-            description=data.get('description', ''),
-            logsource=data.get('logsource', {}),
-            detection=data.get('detection', {}),
-            level=data.get('level', 'medium'),
-            tags=data.get('tags', []),
-            falsepositives=data.get('falsepositives', [])
-        )
-
-
-class SigmaConverter:
-    """Convert Sigma rules to SIEM queries"""
-    
-    def __init__(self, rule: SigmaRule):
-        self.rule = rule
-    
-    def to_splunk(self) -> str:
-        """Convert to Splunk SPL"""
-        query_parts = []
-        
-        # Add index based on logsource
-        if self.rule.logsource.get('product') == 'windows':
-            query_parts.append('index=windows')
-        
-        # Process detection selections
-        detection = self.rule.detection
-        condition = detection.get('condition', '')
-        
-        for key, value in detection.items():
-            if key == 'condition':
-                continue
-            
-            if isinstance(value, dict):
-                field_queries = self._convert_selection_splunk(value)
-                query_parts.append(f"({' OR '.join(field_queries)})")
-        
-        # Combine with condition logic
-        query = ' '.join(query_parts)
-        
-        # Add table formatting
-        query += f"\n| table _time, ComputerName, User, CommandLine"
-        
-        return query
-    
-    def _convert_selection_splunk(self, selection: Dict) -> List[str]:
-        """Convert selection to Splunk query parts"""
-        queries = []
-        
-        for field, value in selection.items():
-            # Handle modifiers
-            if '|' in field:
-                field_name, modifier = field.split('|')
-                
-                if modifier == 'endswith':
-                    if isinstance(value, list):
-                        queries.extend([f'{field_name}="*{v}"' for v in value])
-                    else:
-                        queries.append(f'{field_name}="*{value}"')
-                        
-                elif modifier == 'contains':
-                    if isinstance(value, list):
-                        queries.extend([f'{field_name}="*{v}*"' for v in value])
-                    else:
-                        queries.append(f'{field_name}="*{value}*"')
-                        
-                elif modifier == 'startswith':
-                    if isinstance(value, list):
-                        queries.extend([f'{field_name}="{v}*"' for v in value])
-                    else:
-                        queries.append(f'{field_name}="{value}*"')
-            else:
-                if isinstance(value, list):
-                    queries.extend([f'{field}="{v}"' for v in value])
-                else:
-                    queries.append(f'{field}="{value}"')
-        
-        return queries
-    
-    def to_elastic(self) -> str:
-        """Convert to Elastic Query DSL / KQL"""
-        query_parts = []
-        
-        detection = self.rule.detection
-        
-        for key, value in detection.items():
-            if key == 'condition':
-                continue
-            
-            if isinstance(value, dict):
-                field_queries = self._convert_selection_elastic(value)
-                query_parts.append(f"({' OR '.join(field_queries)})")
-        
-        return ' AND '.join(query_parts)
-    
-    def _convert_selection_elastic(self, selection: Dict) -> List[str]:
-        """Convert selection to Elastic query parts"""
-        queries = []
-        
-        for field, value in selection.items():
-            field_name = field.split('|')[0] if '|' in field else field
-            
-            # Map Windows fields to ECS
-            field_map = {
-                'Image': 'process.executable',
-                'CommandLine': 'process.command_line',
-                'ParentImage': 'process.parent.executable',
-                'User': 'user.name',
-                'ComputerName': 'host.name'
-            }
-            field_name = field_map.get(field_name, field_name)
-            
-            if '|' in field:
-                modifier = field.split('|')[1]
-                
-                if modifier == 'contains':
-                    if isinstance(value, list):
-                        queries.extend([f'{field_name}:*{v}*' for v in value])
-                    else:
-                        queries.append(f'{field_name}:*{value}*')
-            else:
-                if isinstance(value, list):
-                    queries.extend([f'{field_name}:"{v}"' for v in value])
-                else:
-                    queries.append(f'{field_name}:"{value}"')
-        
-        return queries
-    
-    def to_qradar(self) -> str:
-        """Convert to QRadar AQL"""
-        # QRadar-specific conversion
-        pass
-    
-    def to_sentinel(self) -> str:
-        """Convert to Microsoft Sentinel KQL"""
-        query_parts = []
-        
-        # Start with appropriate table
-        if self.rule.logsource.get('category') == 'process_creation':
-            query_parts.append("SecurityEvent")
-            query_parts.append("| where EventID == 4688")
-        
-        # Add field filters
-        detection = self.rule.detection
-        for key, value in detection.items():
-            if key == 'condition':
-                continue
-            
-            if isinstance(value, dict):
-                for field, val in value.items():
-                    field_name = field.split('|')[0]
-                    
-                    # Sentinel field mapping
-                    sentinel_fields = {
-                        'CommandLine': 'CommandLine',
-                        'Image': 'NewProcessName',
-                        'User': 'SubjectUserName'
-                    }
-                    sentinel_field = sentinel_fields.get(field_name, field_name)
-                    
-                    if '|contains' in field:
-                        if isinstance(val, list):
-                            conditions = ' or '.join(
-                                [f'{sentinel_field} contains "{v}"' for v in val]
-                            )
-                            query_parts.append(f"| where {conditions}")
-        
-        return '\n'.join(query_parts)
-```
-
-### Rule Quality Framework
-
-```python
-# rule_quality.py
-# Assess and improve detection rule quality
-
-from dataclasses import dataclass
-from typing import List, Dict, Optional
-from enum import Enum
-
-class QualityDimension(Enum):
-    ACCURACY = "accuracy"           # Low false positives
-    COVERAGE = "coverage"           # Catches variants
-    PERFORMANCE = "performance"     # Query efficiency
-    MAINTAINABILITY = "maintainability"  # Easy to update
-    DOCUMENTATION = "documentation"  # Well documented
-
-@dataclass
-class RuleQualityScore:
-    """Quality assessment for a detection rule"""
-    
-    rule_id: str
-    
-    # Scoring (0-100)
-    accuracy_score: int
-    coverage_score: int
-    performance_score: int
-    maintainability_score: int
-    documentation_score: int
-    
-    # Evidence
-    false_positive_rate: float
-    true_positive_samples: int
-    avg_query_time_ms: float
-    
-    # Recommendations
-    improvements: List[str]
-    
-    @property
-    def overall_score(self) -> float:
-        weights = {
-            'accuracy': 0.30,
-            'coverage': 0.25,
-            'performance': 0.15,
-            'maintainability': 0.15,
-            'documentation': 0.15
-        }
-        
-        return (
-            self.accuracy_score * weights['accuracy'] +
-            self.coverage_score * weights['coverage'] +
-            self.performance_score * weights['performance'] +
-            self.maintainability_score * weights['maintainability'] +
-            self.documentation_score * weights['documentation']
-        )
-    
-    @property
-    def grade(self) -> str:
-        score = self.overall_score
-        if score >= 90:
-            return "A"
-        elif score >= 80:
-            return "B"
-        elif score >= 70:
-            return "C"
-        elif score >= 60:
-            return "D"
-        return "F"
-
-
-class RuleQualityAnalyzer:
-    """Analyze and improve rule quality"""
-    
-    def analyze_sigma_rule(self, rule_content: str) -> RuleQualityScore:
-        """Analyze a Sigma rule for quality"""
-        import yaml
-        rule = yaml.safe_load(rule_content)
-        
-        improvements = []
-        
-        # Documentation score
-        doc_score = 100
-        if not rule.get('description'):
-            doc_score -= 30
-            improvements.append("Add detailed description")
-        if not rule.get('references'):
-            doc_score -= 20
-            improvements.append("Add references (ATT&CK, blog posts)")
-        if not rule.get('author'):
-            doc_score -= 10
-            improvements.append("Add author information")
-        if not rule.get('tags'):
-            doc_score -= 20
-            improvements.append("Add ATT&CK tags")
-        if not rule.get('falsepositives'):
-            doc_score -= 20
-            improvements.append("Document known false positives")
-        
-        # Maintainability score
-        maint_score = 100
-        detection = rule.get('detection', {})
-        
-        # Check for overly specific patterns
-        for key, value in detection.items():
-            if isinstance(value, dict):
-                for field, val in value.items():
-                    if isinstance(val, str) and len(val) > 100:
-                        maint_score -= 10
-                        improvements.append(
-                            f"Consider breaking up long pattern in {field}"
-                        )
-        
-        # Check for filters
-        if not any('filter' in k for k in detection.keys()):
-            maint_score -= 20
-            improvements.append("Add filter for known false positives")
-        
-        return RuleQualityScore(
-            rule_id=rule.get('id', 'unknown'),
-            accuracy_score=70,  # Requires testing to determine
-            coverage_score=70,  # Requires testing
-            performance_score=80,  # Requires benchmarking
-            maintainability_score=maint_score,
-            documentation_score=doc_score,
-            false_positive_rate=0.0,  # Unknown
-            true_positive_samples=0,  # Unknown
-            avg_query_time_ms=0.0,  # Unknown
-            improvements=improvements
-        )
-```
-
-## Mental Model
-
-Roth approaches detection engineering by asking:
-
-1. **Is this portable?** Can it work across SIEMs?
-2. **Is this documented?** Metadata, references, false positives
-3. **Is this testable?** Can we validate it works?
-4. **Is this shareable?** Can the community benefit?
-5. **Is this maintainable?** Will it survive updates?
-
-## Signature Roth Moves
-
-- Sigma rules for portable detection
-- YARA rules for binary/memory patterns
-- Comprehensive rule metadata
-- Community sharing and collaboration
-- Detection-as-code in version control
-- Continuous rule quality improvement
+- If a portable Sigma rule loses too much fidelity, keep a small portable detector for shared coverage and pair it with backend-native enrichment rules for precision.
+- If benign tools collide with malicious strings in YARA, move benign markers into `$fp*` logic or tool-specific false-positive filters instead of globally excluding whole directories.
+- If LOKI filename IOCs are noisy, use its `Regex;Score;False-positive Regex` format before resorting to broad path exclusions.
+- If references are unstable or private, prefer `Internal Research` over dead links and preserve the analytic rationale in metadata, not in tribal memory.

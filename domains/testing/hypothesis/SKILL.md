@@ -1,200 +1,148 @@
 ---
-name: maciver-hypothesis-testing
-description: >-
-  Expert patterns for Python's Hypothesis property-based testing library.
-  Covers strategy performance traps, shrinking internals, stateful testing
-  with Bundles, health check tuning, CI database management, and target()
-  coverage guidance. Use when writing @given tests, debugging flaky
-  Hypothesis failures, designing composite strategies, testing stateful
-  APIs with RuleBasedStateMachine, or tuning Hypothesis settings/profiles.
-  Keywords: hypothesis, property-based testing, @given, strategies,
-  shrinking, stateful testing, st.composite, health checks, PBT, fuzzing.
+name: hypothesis-testing-execution-guide
+description: Expert Hypothesis playbook for turning property-based tests into reproducible, high-yield bug hunts. Use when writing or debugging Hypothesis tests with `@given`, `RuleBasedStateMachine`, `target()`, health checks, seeds, deadlines, `max_examples`, `stateful_step_count`, example databases, or flaky CI failures.
 ---
 
-# Hypothesis — Expert Practitioner Guide
+# Hypothesis Execution Guide
 
-## Thinking Framework
+Use this skill when the hard part is not Hypothesis syntax, but deciding where search budget, shrinkability, and reproducibility are leaking away.
 
-Before writing any Hypothesis test, ask:
+## Mandatory loading
 
-1. **What property actually holds universally?** Most bugs come from asserting
-   something that's only *usually* true. Round-trips, idempotency, invariant
-   preservation, and "does not crash" are safe starting points.
-2. **Can I generate valid inputs directly, or am I filtering?** If >5% of
-   generated values get rejected, your strategy is wrong — restructure with
-   `@st.composite` and constrained ranges, not `filter()`/`assume()`.
-3. **What's my oracle?** The best PBT tests compare against a simpler reference
-   implementation, not just assert structural properties.
-4. **Will the shrunken example be meaningful?** If your test uses `.map()` with
-   a lossy transform, the shrunken output may not help diagnosis.
+Before writing or rewriting strategies, READ `references/patterns.md`.
 
-## Strategy Performance — The Non-Obvious Traps
+Do NOT load `references/patterns.md` when you are only:
+- replaying failures
+- tuning settings
+- diagnosing flakiness
+- deciding between `@example`, `@reproduce_failure`, seeds, or databases
 
-| Trap | Why It's Seductive | Consequence | Fix |
-|------|-------------------|-------------|-----|
-| `st.text()` inside `st.recursive()` without `max_size` | Seems natural | Generation time explodes; triggers `too_slow` health check | Always `st.text(max_size=N)` in recursive contexts |
-| `.filter()` with >50% rejection | Looks clean | Silent performance death; 10× slower, worse shrinking | Restructure as `@st.composite` with constrained draws |
-| `st.from_type()` on complex classes | Avoids writing strategies | Generates nonsensical instances; `__init__` side effects | Write explicit `@st.composite` or `st.builds()` with constrained args |
-| `st.floats()` without `allow_nan=False` | Default seems fine | NaN breaks almost every comparison; test "passes" with wrong logic | Always decide: `allow_nan=False, allow_infinity=False` unless testing IEEE behavior |
-| Unbounded `st.lists(st.lists(...))` | Nested collections seem harmless | Quadratic+ generation/shrinking time | Set `max_size` at every nesting level |
+That file is for construction patterns. This file is for execution control.
 
-### `assume()` vs `.filter()` — The Real Difference
+## Before you touch anything, ask yourself
 
-`assume()` discards the **entire test case** and starts over. `.filter()` on a
-strategy discards only that one draw and retries internally (up to a limit).
-This means `.filter()` on an element strategy inside `st.lists()` is
-exponentially more efficient than `assume()` on the whole list — a list of 5
-filtered booleans has ~60% success rate vs ~3% with `assume(all(...))`. **Use
-`.filter()` at the narrowest possible scope, `assume()` only for cross-argument
-constraints you can't express in strategies.**
+Before raising `max_examples`, ask: is the miss caused by a weak oracle, a bad input distribution, or an insufficient search budget? `max_examples` only fixes the third.
 
-### `@st.composite` vs `.flatmap()` — No Performance Difference
+Before suppressing a health check, ask: what silent degradation is it warning about, and can I already see the same symptom in statistics?
 
-They are exactly equivalent — `@st.composite` is syntactic sugar over
-`.flatmap()`. The Hypothesis numpy `arrays()` strategy uses `.flatmap()`
-internally only to avoid redundant argument validation on recursion, not for
-performance. Choose `@st.composite` for readability in all application code.
+Before adding `@example`, ask: am I preserving a proven regression, or freezing an unshrunk counterexample that will hide a simpler bug shape?
 
-## Shrinking — What Experts Know
+Before using `deadline`, ask: am I measuring algorithmic work or host jitter? Deadline failures sit on a threshold and shrink toward misleading boundary cases.
 
-Hypothesis does NOT shrink by type (unlike QuickCheck). It shrinks the
-underlying **byte stream** ("choice sequence"). This means:
+Before increasing `stateful_step_count`, ask: do I need deeper programs or more independent programs? This setting multiplies runtime with `max_examples`.
 
-- **`.map()` preserves shrinking quality** — the byte stream shrinks, then gets
-  mapped. Use `.map()` freely.
-- **`.filter()` degrades shrinking** — rejected candidates during shrinking
-  force backtracking. Heavy filtering makes shrinking slow and produces
-  suboptimal minimal examples.
-- **`@st.composite` with many `draw()` calls** — each draw adds a segment to
-  the byte stream. More draws = more shrinking dimensions = better results.
-  Don't fear many small draws.
-- **Shrinking targets human readability** — integers shrink toward 0, strings
-  toward shorter/simpler, booleans toward False. Design strategies so the
-  shrink direction aligns with "simpler test case."
+Before blaming Hypothesis for flakiness, ask: does the test depend on external state, per-example isolation, thread timing, or a changing draw sequence?
 
-## Stateful Testing — Where the Real Bugs Hide
+## Operating model
 
-NEVER skip stateful testing for anything with mutable state. `RuleBasedStateMachine`
-finds bugs that unit tests structurally cannot: state-dependent interactions,
-ordering bugs, resource leaks across operations.
+Treat `max_examples` as a budget of satisfying examples, not as a function-call count. The default profile starts at `max_examples=100`, `stateful_step_count=50`, and `deadline=200ms`, but Hypothesis can stop early when it exhausts a finite space, or call the test more times because of `assume()`, `.filter()`, oversized examples, shrinking, and `Phase.explain`.
 
-**Critical gotchas:**
+Run `pytest --hypothesis-show-statistics` before changing settings. The stop reason and invalid-example counts usually tell you whether the problem is strategy shape, oracle shape, or actual search depth.
 
-- **`@initialize` runs after `__init__` but before any `@rule`**. Use it to
-  seed Bundles so rules that `consumes()` items don't starve on the first step.
-- **`consumes(bundle)` removes the item** — this models deletion correctly but
-  means subsequent rules can't reference it. Use plain `bundle` for read-only
-  references, `consumes(bundle)` for destructive operations.
-- **`@precondition` without `@rule`/`@invariant` silently does nothing** (since
-  v6.136.2 this raises an error, but older versions just ignored it).
-- **`@invariant()` runs after every single rule** — make it cheap. An expensive
-  invariant multiplied by hundreds of steps kills performance.
-- **Step count defaults to ~50 steps**. Increase `stateful_step_count` in
-  settings if you need deeper sequences (but expect slower runs).
+The built-in CI profile is a triage profile, not a discovery profile: it uses `derandomize=True`, `deadline=None`, `database=None`, `print_blob=True`, and suppresses `too_slow`. Keep a separate local profile if you want the example database and exploratory randomness to keep finding fresh bugs.
 
-**MANDATORY — READ [`references/patterns.md`](references/patterns.md)** before
-writing stateful tests. It contains the Bundle/initialize/consumes patterns.
+`@seed` and `derandomize=True` are run-level reproduction tools. `@example` is a permanent regression guard. `@reproduce_failure` is a temporary cross-machine replay tool. The example database is an iteration cache, never a correctness mechanism.
 
-## Health Checks & Settings — The Expert Tuning Guide
+## Decision tree
 
-NEVER blanket-suppress health checks with `suppress_health_check=list(HealthCheck)`.
-This hides real problems. Suppress individually and understand why:
+If the test is slow, first inspect the data-generation fraction in statistics.
+- If generation dominates, redesign the strategy.
+- If the SUT dominates, only then consider `deadline`, lower-cost oracles, or a smaller domain.
 
-| Health Check | When to Suppress | When It's a Real Problem |
-|---|---|---|
-| `too_slow` | Test does I/O or setup per example | Strategy generates data too slowly — restructure it |
-| `filter_too_much` | Never suppress — fix your strategy | Filter rejection >50% means your strategy is wrong |
-| `large_base_example` | Intentionally testing large data | Unintentional — constrain `max_size` |
-| `differing_executors` | Multi-threaded test runners | Usually a real configuration bug |
+If the test misses bugs, inspect the stop reason.
+- If it stopped because of `max_examples`, you may need more budget.
+- If invalids or oversized examples dominate, redesign the generator first.
+- If the space exhausted early, adding `max_examples` is wasted motion.
 
-### Deadline: The Most Misunderstood Setting
+If a failure appears only in CI, decide what kind of replay you need.
+- For one-off local reproduction, use the printed `@reproduce_failure` blob and remove it after extracting a readable case.
+- For a permanent regression, convert the minimized case to `@example`.
+- For team-wide replay, share a database only when Hypothesis versions are aligned.
 
-`deadline=200` (ms) is the default. It measures **per-example wall clock time**.
-NEVER set `deadline=None` globally because it hides performance regressions.
-Instead:
-- CI with variable machine speed: `deadline=None` in CI profile only
-- Tests with I/O: `deadline=timedelta(milliseconds=1000)` per-test
-- Threaded tests: deadline is automatically disabled (since v6.136.3) because
-  thread scheduling adds unpredictable latency
+If a stateful test is underperforming, decide whether you need depth or breadth.
+- Raise `stateful_step_count` when the shortest plausible failing program is longer than the current budget.
+- Raise `max_examples` when bugs probably live in many short histories.
+- Do not raise both until you know which axis is starving the search.
 
-### `derandomize=True` — CI Trap
+If targeted testing is tempting, decide whether you have a real search metric.
+- Use `target()` only for metrics you genuinely want to maximize.
+- Expect little effect below about `max_examples=1000`, and obvious effect closer to ten thousand examples per label.
+- Keep the label count small; many labels dilute the same search budget.
+- If the metric is only weakly correlated with the bug, `target()` can steer search away from the bug.
 
-`derandomize=True` makes tests deterministic by seeding from the test source.
-This means **changing the test source changes the seed**, so a "passing" test
-may start failing after an unrelated refactor. Use it for CI reproducibility,
-but don't rely on it for correctness — pair with committed `.hypothesis/`
-database.
+## Hard-won heuristics
 
-### `max_examples` Diminishing Returns
+For equivalent predicates, `.filter()` is usually cheaper than `assume()` because Hypothesis can retry within a single example instead of rejecting the whole example. That does not make `.filter()` good by default; it only means it is the lesser evil when constructive generation is awkward.
 
-- **100** (default): Catches most shallow bugs. Fine for development.
-- **1,000**: Catches interaction bugs. Good for CI.
-- **10,000+**: Diminishing returns on random generation. Only useful if
-  combined with `target()` for coverage guidance.
-- Going from 100→1000 finds ~10× more bugs. Going from 1000→10000 finds ~2×.
+When you see the classic `filter_too_much` failure or statistics full of invalids, do not think "more examples." Think "my generator is lying about the domain." Rejection-heavy strategies distort the distribution and burn the shrinker on garbage.
 
-## The Example Database — CI Pitfalls
+Health checks such as `function_scoped_fixture` and `differing_executors` are often the first signal that your test harness, not your property, is broken. Treat them as design feedback until you can explain precisely why the warning is a false positive.
 
-- `.hypothesis/examples/` stores **choice sequences**, not generated values.
-  They're compact but version-sensitive.
-- **Commit `.hypothesis/` to VCS** — this is the #1 thing teams skip. Without
-  it, CI rediscovers the same bugs from scratch every run.
-- **CI caching the database across runs** works but beware: a schema change in
-  your code can make old database entries produce `InvalidArgument` on replay.
-  If CI starts failing with deserialization errors after a refactor, clear the
-  cache.
-- `@reproduce_failure` blobs are **version-pinned** — they break across
-  Hypothesis upgrades. Use `@example()` for permanent regression tests instead.
+Use `Bundle.filter(...)` when rule validity depends on the drawn object itself. Use `@precondition` when rule validity depends on machine-wide state. This distinction matters because bundle filtering removes only bad candidates, while a precondition can make the entire rule disappear from the schedule.
 
-## NEVER List
+Multiple `@initialize()` methods all run exactly once, but their order varies. If order matters, they are not independent initializers; collapse them or make the dependency explicit through normal rules and bundles.
 
-NEVER suppress `filter_too_much` — it means your strategy is architecturally
-wrong, not that the check is too strict. A >50% rejection rate makes shrinking
-nearly useless and generation 10× slower. Restructure with constrained ranges.
+`Phase.target` requires `Phase.generate`, and `Phase.explain` requires `Phase.shrink`. If you switch to a replay-only mode such as `phases=[Phase.explicit, Phase.reuse]`, you are validating known failures, not exploring.
 
-NEVER use `random.random()` inside a Hypothesis test — it introduces
-non-determinism that breaks shrinking and reproducibility. All randomness must
-flow through Hypothesis strategies.
+`Phase.explain` can disappear under instrumentation. On Python 3.11 and earlier, coverage and debuggers can disable it, and PyPy is treated conservatively. Missing explanations do not imply a weak counterexample.
 
-NEVER call `.example()` inside a test — it bypasses the Hypothesis engine
-entirely (no shrinking, no database, no reproducibility). It exists for REPL
-exploration only.
+`@example` inputs do not shrink. Promote a failing case to `@example` only after you have the minimal human-readable counterexample you want to keep forever.
 
-NEVER set `max_examples` below 20 for "fast" local runs. Below ~30 examples,
-Hypothesis can't effectively explore the input space OR shrink failures. Use
-profiles: `settings.register_profile("dev", max_examples=100)` with
-`HYPOTHESIS_PROFILE=dev`.
+The example database is keyed to the test and can be invalidated by version upgrades or code changes. If a shared database behaves strangely across environments, align Hypothesis versions before you debug anything else.
 
-NEVER write `@given(st.integers().filter(lambda x: x > 0 and x < 10))` when
-you can write `@given(st.integers(min_value=1, max_value=9))`. The filter
-version rejects ~99.99% of integers. Hypothesis has smart filter rewriting for
-some cases, but don't rely on it.
+Hypothesis is thread-safe in modern releases, but thread-timed data generation is still a flakiness trap. Generate data on the main thread, then pass immutable payloads into workers; do not let thread timing change the draw sequence of `@composite`, `data()`, `event()`, `target()`, or `assume()`.
 
-NEVER put `@reproduce_failure` in committed code — it's pinned to a specific
-Hypothesis version and will break on upgrade. Convert to `@example()` instead.
+## NEVER do these
 
-## Decision Tree: Which Property Pattern?
+NEVER "fix" `filter_too_much` by raising `max_examples`, because that is seductive linear thinking: more attempts feels like more coverage. Instead redesign the generator so valid cases are constructed rather than rejected; otherwise the concrete consequence is more CPU spent on the same blind spots and worse shrinking.
 
-```
-Input → Output with known inverse?
-  YES → Round-trip test (encode/decode, serialize/deserialize)
-  NO  → Is there a simpler reference implementation?
-    YES → Oracle test (compare fast impl vs slow-but-correct impl)
-    NO  → Can you state an invariant over all outputs?
-      YES → Invariant test (sorted output is same length, sum preserved, etc)
-      NO  → "Does not crash" test (still valuable! catches ~40% of real bugs)
-```
+NEVER commit `@reproduce_failure` as the permanent regression, because the opaque blob feels like a quick win but is version-bound and run-format-specific. Instead replay with it once, extract the minimal readable case, and keep that as `@example`; otherwise the concrete consequence is a brittle test that breaks on version drift without teaching future readers anything.
 
-## When Primary Approach Fails
+NEVER rely on function-scoped pytest fixtures or decorator-based mocks for per-example isolation, because normal pytest semantics make this feel safe while Hypothesis reuses the same fixture across many examples. Instead do setup and teardown inside the test body or a context manager so each example starts clean; otherwise the concrete consequence is false flakiness from stale state that shrinking cannot explain.
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `HealthCheck.too_slow` | Strategy too complex or test does I/O | Profile the strategy with `--hypothesis-show-statistics`; move I/O to fixture |
-| Flaky failures | Non-determinism outside Hypothesis | Check for global state, time-dependent logic, dict ordering |
-| Shrunk example is unhelpful | Heavy `.filter()` or lossy `.map()` | Restructure strategy; ensure `.map()` transform is invertible or at least monotonic |
-| `Unsatisfied assume()` | Precondition rejects >90% | Move constraint into strategy construction |
-| Database replay crashes after refactor | Choice sequences reference old structure | Delete `.hypothesis/` cache and re-run |
-| Stateful test never exercises some rules | Preconditions too restrictive or Bundle empty | Add `@initialize` to seed Bundles; loosen preconditions |
+NEVER raise both `max_examples` and `stateful_step_count` blindly, because "more search" sounds reasonable while actually trading breadth for depth in a multiplicative cost explosion. Instead choose the axis that matches the bug shape you are chasing; otherwise the concrete consequence is slower runs with fewer useful programs per minute.
 
-**Do NOT load `references/patterns.md`** for simple `@given` property tests —
-it's only needed for stateful testing, recursive strategies, or CI profile setup.
+NEVER let multiple `@initialize()` rules depend on one another, because separate methods look modular while their randomized ordering creates empty bundles and pseudo-flaky state machines. Instead use one initializer or model the dependency explicitly; otherwise the concrete consequence is a failure mode that looks nondeterministic but is actually scheduler-induced.
+
+NEVER add `target()` just because you want Hypothesis to "try harder," because a weak metric is worse than no metric: it spends budget maximizing the wrong thing. Instead use `target()` only when you can name the monotonic quantity that should increase as the failure gets more interesting; otherwise the concrete consequence is search pressure being pulled away from the actual bug.
+
+NEVER treat the example database as proof that a regression is covered, because replay feels reassuring while database entries are cache-like and may disappear after version or test-shape changes. Instead use `@example` for permanent correctness and the database for speed; otherwise the concrete consequence is a suite that passes locally until the cache changes.
+
+## Fallback playbooks
+
+If local runs are green but CI produced a blob:
+- replay with the blob
+- extract the minimized readable case
+- convert it to `@example`
+- remove the blob
+
+If statistics show many invalid examples:
+- move constraints into strategy construction
+- only keep `.filter()` for predicates that truly depend on generated structure
+- use `assume()` last, not first
+
+If a state machine never reaches the interesting transition:
+- seed the required resource into a bundle with `@initialize`
+- lower rule fan-out before raising budgets
+- use bundle filtering for per-object validity instead of global preconditions
+
+If deadline failures hover right at the boundary:
+- do not widen the deadline blindly
+- separate the performance property from the correctness property
+- inject deterministic clocks or counters when possible
+
+If explanations disappear or look weak:
+- remember that shrinking optimizes simplicity, not severity
+- rerun without coverage/debugger if explanation matters
+- inspect statistics or targeted scores to recover the lost severity signal
+
+## Output contract when using this skill
+
+Return:
+1. the dominant failure mode
+2. the reproduction mechanism to use
+3. the search-budget decision you made
+4. the shrinkability risk you are accepting
+5. the exact next lever to pull if the first fix fails
+
+Do not end with "ran more examples." End with what changed in search quality or reproducibility.

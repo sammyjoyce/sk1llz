@@ -1,91 +1,129 @@
 ---
 name: wadler-monadic-elegance
-description: Write Haskell (or any typed functional code) the way Philip Wadler would — type-driven, parametricity-aware, choosing the weakest abstraction that fits, and avoiding the well-known landmines (WriterT space leaks, StateT/ExceptT order semantics, seq breaking free theorems, MonadFail silent failures). Use when designing a new effect API, picking between Functor/Applicative/Selective/Monad/effect-system, debugging a space leak in an mtl stack, refactoring `IO`-soaked code into something testable, or deciding between mtl, effectful, polysemy, free monads, and tagless final. Trigger keywords: monad, monad transformer, mtl, effectful, polysemy, free monad, tagless final, WriterT, StateT, ExceptT, MaybeT, MonadFail, applicative, selective functor, parametricity, free theorem, propositions as types, type-driven, Haskell space leak, ReaderT IO pattern.
+description: Decide how far to escalate from parametric polymorphism to Applicative, Selective, Monad, transformers, or effect handlers in Haskell and similar typed FP systems, with emphasis on rollback, concurrency, and performance traps. Use when designing or refactoring effectful code, choosing between ReaderT/StateT/WriterT/ExceptT, diagnosing transformer-order bugs, recovering lost Applicative structure, or evaluating free/freer/effect-system trade-offs. Trigger keywords: monad, applicative, selective, applicativedo, ReaderT, StateT, WriterT, ExceptT, MonadFail, free monad, Codensity, effect handler, polysemy, fused-effects, effectful.
 ---
 
-# Wadler-Style Functional Design
+# Wadler: Spend Algebraic Power Carefully
 
-A senior Haskeller's checklist. Skip the textbook material — Claude already knows what a monad is, the laws, and `do`-notation. This file is the things that took ten years and several production outages to learn.
+The central habit is not "use monads elegantly." It is "spend as little semantic power as possible."
 
-## The Wadler Question (ask before every type signature)
+Every extra constraint destroys something:
+- `Functor` to `Applicative`: you lose nothing about branch independence.
+- `Applicative` to `Selective`: you admit value-dependent choice, but the branch set stays statically visible.
+- `Selective` to `Monad`: you give up static shape, many free theorems, and optimizer freedom.
+- Direct style to reified effects: you buy inspection and rewriting, but you now pay an interpreter cost model.
 
-Before writing any function, work the type top-down:
+If a signature can honestly stay weaker, keep it weaker. That preserves laws, testing surface, refactoring freedom, and often performance.
 
-1. **What is the weakest abstraction that admits this implementation?** Functor < Applicative < Selective < Monad < `IO`. Picking a stronger class than needed throws away static analysis, parallelism, and free theorems for nothing.
-2. **How many total implementations does this type permit?** If the answer is "many," your type is too weak — add parametricity or refine. `forall a. a -> a -> a` has exactly two total implementations; `Int -> Int -> Int` has infinity.
-3. **Can I make the illegal state unrepresentable instead of validating it?** A phantom-typed `Connection 'Open` that only `read` accepts is a Curry-Howard proof, not a runtime check.
-4. **If this type is polymorphic, what free theorem does it give me?** `reverse :: [a] -> [a]` for free gives `map f . reverse = reverse . map f`. If you can't name the free theorem, the type variable is doing nothing.
+## Before adding power, ask yourself
 
-## Decision tree: which abstraction?
+Before changing a type from `Applicative` to `Monad`, ask:
+- Is there a real value dependency, or did syntax create a fake one?
+- Are all possible branches known up front? If yes, try `Selective` before `Monad`.
+- Did a failable or strict pattern in `do` force `>>=` even though the computation is structurally applicative?
+- Am I spending proof power for convenience alone?
 
-| Symptom | Right tool | Why not the next one up |
-|---|---|---|
-| Pure value transformation, no effects | `Functor` (`fmap`) | `Applicative` adds nothing |
-| Multiple independent effects, want `traverse` to parallelize | `Applicative` | `Monad` forbids parallelization (later effects may depend on earlier results) |
-| Conditional effect, but you can list **all possible branches up front** (build systems, parsers, form validation) | `Selective` (Mokhov 2019) | `Monad` makes the dependency graph un-analyzable; Selective lets you statically enumerate all reachable effects |
-| Effect choice depends on a runtime value's contents | `Monad` | You actually need `>>=`; nothing weaker works |
-| Need to combine ≥3 distinct effects in production code | **`ReaderT Env IO` with `IORef`/`MVar` fields**, NOT `StateT s (ExceptT e (ReaderT r IO))` | mtl stacks pay a continuation-passing tax per layer; the ReaderT-IO pattern is what large Haskell shops actually ship |
-| Need to combine effects AND want pure tests | `effectful` or `cleff` (evidence-passing effect systems) | Free-monad libraries (`polysemy`, `freer-simple`) build a runtime program tree and walk it — measurably slower, often by 5–50× |
-| Need nondeterminism + `bracket`/`fork` in the same code | You can't have both. Pick: `eff`/`speff` for nondeterminism, `effectful`/`cleff` for `MonadUnliftIO`. This is a fundamental design split, not a missing feature. |
+Before choosing a transformer stack, ask:
+- On failure, should state disappear, survive for auditing, or survive only at selected boundaries?
+- Under async exceptions or `concurrently`, does the state need to remain visible?
+- Do I need to inspect or rewrite the program before running it, or only execute it?
+- Is the hot path dispatch-heavy, or will I/O dominate enough that interpreter overhead is irrelevant?
 
-## NEVER list (each costs a production outage)
+Before introducing a new effect abstraction, ask:
+- Is this exposing semantics, or just hiding plumbing?
+- Will the next person be able to state the failure contract without mentally expanding the whole stack?
+- Can I write the fully unwrapped type? If not, I do not understand the design yet.
 
-- **NEVER use `Control.Monad.Writer` (any version) for accumulating logs or counters.** It is seductive because the type screams "append-only". The reality: `WriterT`'s `>>=` must hold both sub-results before calling `mappend`, so a million `tell`s build a million-deep thunk before any combination happens. Even `Strict.WriterT` is strict in the *monad*, not the accumulator — the accumulator is unreachable from outside, so you can't even bang-pattern your way out. **Instead:** use `Control.Monad.Trans.Accum` (lets you `look` at the running accumulator, which forces strictness), or `StateT s` with a strict record + `modify'`, or just an `IORef` in `ReaderT IO`.
+## Mandatory decision procedure
 
-- **NEVER assume `Control.Monad.State.Strict` is actually strict.** It is strict in the *monadic bind*, not the state value. `runState (do modify (+1); modify (+1)) 0` builds a thunk `(0+1)+1`. Strict StateT requires **all three** of: `{-# LANGUAGE StrictData #-}` on the state record, `modify'` (not `modify`), and `put $! x` (not `put x`) when assigning. Miss any one and you leak.
+Before touching any `StateT`/`ExceptT`/`WriterT` combination, write the unwrapped type on paper or in comments:
+- `StateT s (ExceptT e m) a` means `s -> m (Either e (a, s))`
+- `ExceptT e (StateT s m) a` means `s -> m (Either e a, s)`
 
-- **NEVER pick `StateT s (ExceptT e m)` and `ExceptT e (StateT s m)` by coin flip.** They have different semantics that bite in catch handlers:
-  - `StateT s (ExceptT e m)` desugars to `s -> m (Either e (a, s))`. State **vanishes** on `throwError` — you cannot read the state in your handler. This is the right choice for transactional rollback (parser backtracking, search).
-  - `ExceptT e (StateT s m)` desugars to `s -> m (Either e a, s)`. State **survives** the throw — handlers see whatever was last `put`. This matches imperative-language exception semantics.
-  - Pick the wrong order and `catchError` will silently see the wrong state.
+Choose the one whose failure contract matches reality. Do not choose by aesthetics or library habit.
 
-- **NEVER use polymorphic `seq` without realizing it weakens free theorems.** Wadler's parametricity assumes no `seq`. In a Haskell with `seq`, `forall a. a -> a` is no longer guaranteed to be `id` — `\x -> x \`seq\` x` and `\x -> x \`seq\` undefined` have the same type. Free theorems still hold *up to bottom*, which is why GHC's rewrite rules sometimes invalidate optimizations that look obviously sound. If you depend on a free theorem for correctness (not just intuition), the type must be in a `seq`-free fragment or you must prove it manually.
+Before "upgrading" to `Monad`, test whether `ApplicativeDo` is being blocked by syntax:
+- A strict or failable pattern in `do` forces `>>=` to preserve strictness.
+- GHC only recognizes the final line as applicative if it is literally `return E`, `return $ E`, `pure E`, or `pure $ E`.
+- `-foptimal-applicative-do` finds better splits, but the algorithm is `O(n^3)` and is a bad default for generated `do` blocks once you get into roughly 100+ statements.
 
-- **NEVER write `do Just x <- m` in a `Monad` you don't fully understand.** This desugars to a call to `fail`, whose behavior is monad-specific: in `Maybe` it returns `Nothing` (silently swallowing the pattern failure), in `IO` it throws a runtime exception, in `STM` it `retry`s, in `[]` it returns `[]`. Same syntax, four wildly different runtime behaviors. **Instead:** use explicit `case` or `MonadFail`-aware code, and add `{-# LANGUAGE NoMonadFailDesugaring #-}` if you can.
+If those are the blockers, rewrite the syntax, not the abstraction.
 
-- **NEVER reach for `Monad` when `Applicative` works.** It looks innocuous but it costs you: `traverse` can no longer parallelize, `Const`-based static analysis stops working, your type has more inhabitants so refactors are harder to verify. Specifically, if you find yourself writing `do { x <- foo; bar }` where `bar` doesn't reference `x`, you wanted `foo *> bar`.
+## Decision tree
 
-- **NEVER pick `polysemy` for greenfield production code in 2024+.** It is seductive because the API is the cleanest of any effect library. Reality: it builds a runtime tree of effect operations and traverses it on every bind, costing an order of magnitude vs. `effectful`/`cleff`. Use it for prototypes and DSLs only. **Instead:** start with the `ReaderT IO` pattern and graduate to `effectful` when you need typed effect tracking.
+- Need only independent effectful arguments and static structure matters:
+  Use `Applicative`. This keeps parallelization, static analysis, and stronger free theorems available.
 
-- **NEVER add a new monad transformer "to be principled."** Each layer adds CPS overhead and a `lift` that breaks `MonadUnliftIO` for things like `bracket`, `withFile`, async/forkIO. The cost compounds: a 4-deep stack is roughly 16× slower than `IO` for tight loops. **Instead:** flatten to `ReaderT Env IO` where `Env` carries `IORef`s for state and a `Logger` handle for output.
+- Need runtime choice, but the set of branches is known ahead of time:
+  Use `Selective`. This is the sweet spot people skip because `Monad` is familiar.
 
-- **NEVER use `liftIO` deep in business logic.** It is the smell of a missing abstraction. If a function is in `IO`, it can do anything and tests can do nothing. **Instead:** parameterize over a small effect (`MonadReader Logger m`, `MonadDB m`) or use a tagless-final algebra so you can run it in `Identity` for tests.
+- Need to synthesize the next effect from a runtime value:
+  Use `Monad`, but only for that boundary. Keep outer APIs weaker when you can.
 
-## Hard-won knowledge
+- Need application wiring, resource acquisition, logging sinks, shared mutable cells, async exceptions, or concurrency:
+  Default to `ReaderT Env IO` or a Reader-like effect system whose operational story is just as explicit.
 
-### Type-driven implementation, in practice
+- Need rollback semantics inside pure or bounded logic:
+  Use local `StateT`/`ExceptT`/`WriterT`, but make the failure contract explicit by expansion first.
 
-Start at the type, derive the body. The trick: at each step, ask "what *can't* this expression do?" The smaller the answer, the closer you are. For a polymorphic `f :: forall a. (a -> a) -> a -> a`, the only useful structure is "apply the function some natural number of times" — there are countably many implementations. For `f :: forall a b. (a -> b) -> [a] -> [b]`, by parametricity it must be `map`-shaped (or always return `[]`). When you finish writing a function and notice "I could have written this several genuinely different ways and they'd all type-check," your type is too weak — add a constraint or a phantom parameter.
+- Need to inspect, optimize, reorder, or reinterpret programs:
+  Reify with free/freer/algebraic effects only at that seam. Do not drag a reified IR through the whole hot path.
 
-### Free theorem as a debugging tool
+## NEVER do these
 
-When optimizing, the free theorem of the type tells you what rewrites are sound *without proof*. `map f . reverse ≡ reverse . map f` lets you fuse passes. But: this assumes `f` is total. If `f` can be `undefined` or use `seq`, the equation only holds up to ⊥. GHC's `RULES` pragmas exploit free theorems — when you write your own `RULES`, ask "does this rule survive the introduction of `seq`?" If not, gate it on a non-bottom type.
+- NEVER add a `Monad` constraint because `do` notation reads better. That is seductive because the code stops fighting you immediately. The hidden cost is lost static structure, weaker theorems, and fewer optimization opportunities. Instead first check for `ApplicativeDo` blockers such as strict patterns or a final line GHC cannot recognize, then ask whether `Selective` is enough.
 
-### Tagless final vs free monad — the actual rule
+- NEVER recommend `-Wmissing-monadfail-instances` as protection against bad `do` patterns. Old posts mention it, so it feels like institutional wisdom. Since GHC 8.8 it has no effect, which means you think you installed a guardrail when you did not. Instead ban failable patterns in polymorphic `do`, use explicit `case`, and rely on normal exhaustiveness warnings.
 
-Both let you defer commitment to a concrete monad. They are not interchangeable:
+- NEVER put `ExceptT e` on top of `IO` for application-core error semantics because `IO` can still throw anything at any time. It is seductive because the type looks "documented." The consequence is a false failure model and undefined team expectations around cancellation and `concurrently`. Instead keep `Either` in pure/domain layers and convert to exceptions or boundary errors at the application shell.
 
-- **Tagless final** (an `mtl`-style typeclass per algebra): less boilerplate, runs directly in the target monad, easy to combine algebras. Stack safety inherits from the target. Pattern matching on the program is hard. **Use for** the bulk of business logic where you mostly want to swap interpreters for tests.
-- **Free monad** (an ADT per operation, interpreted by `foldFree`): the program is reified as data, so you can pattern-match it for batching, caching, transactions, optimization. Stack-safe by construction. Boilerplate to combine algebras (Coproducts + `Inject`). **Use for** cross-cutting concerns where you genuinely benefit from inspecting the program: database transaction coalescing (Slick's `DBIOAction`), build system dependency analysis (Shake), query optimization.
+- NEVER use `StateT` for shared application state because it looks pure and linear in single-threaded examples. Under exceptions you lose the threaded state, and under concurrency the semantics are cloning-plus-arbitrary-survivor, not shared mutation. With `put 4 >> concurrently (modify (+1)) (modify (+2)) >> get`, plausible outcomes are `4`, `5`, or `6`, not `7`. Instead move shared state into `IORef`/`TVar` fields inside `Env` and make the mutation story explicit.
 
-A common pattern: tagless-final at the application boundary, compiled down into a free-monad DSL when you cross into the optimization-friendly subsystem.
+- NEVER default to `WriterT` for production logging because "strict" sounds like it fixed the classic issue. The seductive part is the pleasant API. The consequence is retained thunks, memory growth, and poor failure visibility exactly where logs are supposed to help you. Instead use explicit logger handles or mutable accumulators in `ReaderT`; reserve `WriterT` for small, bounded, morally pure builders that you have benchmarked.
 
-### `Identity` is the test oracle
+- NEVER choose transformer order by habit. `StateT s (ExceptT e m)` and `ExceptT e (StateT s m)` expose different business truths about rollback and auditability even when their surface code looks similar. Instead expand both to the unwrapped type and choose the one that matches retry, compensation, and debugging requirements.
 
-The benefit of writing code over an abstract `m` is not philosophical purity — it is that `runIdentity :: Identity a -> a` (or `runWriter`, `runState`) lets you test pure semantics without any IO. If your "tagless final" code can only be run in `IO`, your effects are leaking abstractions. Concretely: any operation whose interpreter must call `getCurrentTime`, `randomIO`, or `forkIO` should be its own algebra, not buried inside a generic `MonadIO m =>` constraint.
+- NEVER assume `MonadUnliftIO`, `MonadBaseControl`, lifted `bracket`, or lifted concurrency are semantics-preserving on stateful stacks. This is seductive because the code compiles and simple tests pass. The consequence is cleanup running with stale state or state updates disappearing across exception boundaries. Instead unlift only through Reader/Identity-style stacks with no monadic state, or move mutable state into explicit refs that survive exceptions.
 
-## When to load reference files
+- NEVER reach for free or freer effects because handler syntax looks elegant. The hidden trap is cost: left-associated binds over free structures are the classic quadratic failure mode, and "the interpreter is pure" does not change that. Instead keep direct monads in hot paths, and if reification is truly required, use Codensity/fusion techniques or lower to a concrete carrier early.
 
-Most tasks need only this file. Load deeper material **only** when the trigger applies:
+## Cost-model heuristics experts use
 
-- **Debugging a space leak, deciding transformer order, or seeing a `WriterT` in code** → MANDATORY: read [`references/transformer-traps.md`](references/transformer-traps.md) end-to-end before proposing a fix. It contains the exact desugaring of all four common stacks and the rewrite rules to flatten them.
-- **Designing a new effect API or library, or choosing between Functor/Applicative/Selective/Monad** → MANDATORY: read [`references/abstraction-ladder.md`](references/abstraction-ladder.md). It has runnable code for each rung and the laws each level must satisfy.
-- **Routine bug fix in existing well-typed code** → do NOT load either reference. The decision tree above is sufficient.
+- Treat every extra transformer in a polymorphic `mtl`-style stack as part of the bind cost model. In dispatch-heavy code, deep stacks can become materially slower because each bind walks layer by layer.
+- A published `effectful` benchmark on GHC 9.2.4 / Ryzen 9 5950X found the deep `mtl` countdown case about 50x slower than the `ST` baseline, precisely because bind dispatch became the hot loop. The same benchmark showed that once real I/O entered the picture, the gap narrowed sharply.
+- The heuristic is therefore: benchmark dispatch when dispatch is the work; benchmark end-to-end when I/O dominates. Do not generalize from one regime to the other.
+- `WriterT` is not forbidden everywhere. It can be the right answer in a bounded builder with no concurrency, no need to survive exceptions, and measured evidence that alternatives are worse.
+- Free/freer interpreters are not forbidden everywhere. They are justified when the program shape itself is an asset: optimization passes, alternate backends, effect elimination, or static inspection.
 
-## Signature Wadler moves
+## Practical review patterns
 
-- Always pick the weakest typeclass that compiles.
-- Make illegal states unrepresentable with phantom types and GADTs before adding runtime checks.
-- Treat every polymorphic type as a free theorem; name it before optimizing around it.
-- Default to `ReaderT Env IO` for production; reach for an effect system only when you need typed effect tracking and have measured the cost.
-- When in doubt about transformer order, write out the desugared `s -> m (Either e (a, s))` form on paper.
+When reviewing an API, ask:
+- Could this signature be weakened from `Monad` to `Applicative` or `Selective` without lying?
+- Did someone add `MonadIO` merely to reach logging, randomness, or time? If so, a narrower capability or environment handle is probably the better boundary.
+- Did a refactor make a function "more convenient" by adding constraints? If yes, ask what free theorem just got spent.
+
+When debugging a stack bug, do this in order:
+1. Expand the stack to unwrapped types.
+2. Mark every place where failure, cancellation, or `catch` can happen.
+3. Decide whether state/logs/resources should be visible after each failure site.
+4. Only then change transformer order or carrier choice.
+
+When a free/freer system feels slow, do this in order:
+1. Check whether the hot path is interpreter dispatch or real I/O.
+2. Look for left-associated bind growth and repeated reinterpretation.
+3. If the program shape is no longer being exploited, collapse back to direct style.
+
+## Edge-case reminders
+
+- If you care about preserving applicative structure, avoid failable patterns in `do`; pattern-match after the fact.
+- If you need shared state across threads, `StateT` is the wrong story even when the type is shorter.
+- If your logs matter during failure investigation, do not hide them in a transformer that disappears on exceptions.
+- If you cannot explain the cancellation behavior of your error model, the model is not ready for concurrent code.
+
+## Do not use this skill for
+
+- Beginner explanations of what monads, functors, or monad laws are.
+- Local syntax fixes where no abstraction or failure-semantics decision is being made.
+- Category-theory exposition detached from code-shape, runtime behavior, or API design.
+
+Use this skill when the question is not "how do I write the code?" but "what semantic power am I willing to spend, and what will that cost me later?"

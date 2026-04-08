@@ -1,113 +1,177 @@
 ---
 name: aqr-factor-investing
-description: Build factor-investing systems the way AQR actually runs them, with hard-won corrections to academic formulas (HML Devil, 12-1 skip-month, capped value weights, non-micro universes), honest drawdown arithmetic, and the discipline to resist factor timing. Use when building value/momentum/quality/defensive factors, designing a multi-factor long-short book, writing a backtest that must match live P&L, attributing live returns to factor exposures, or deciding whether a drawing-down factor is broken. Triggers:  factor model, Fama-French, HML, HML Devil, UMD, QMJ, BAB, betting against beta, momentum crash, value spread, factor timing, factor zoo, craftsmanship alpha, quant winter, systematic equity, long-short portfolio, tercile sort, winsorize, z-score, factor attribution, implementation shortfall.
+description: AQR-style factor-investing heuristics for building and diagnosing live value, momentum, quality, defensive, and size-when-quality-controlled portfolios. Use when constructing long-only or long-short factor books, fixing backtests that look too academic, deciding how to integrate factors, model costs, or interpret a brutal drawdown, or when terms like HML Devil, 12-1 momentum, QMJ, BAB, integrated portfolio, value spread, factor timing, size minus junk, or implementation shortfall appear.
 tags: quantitative, factor-investing, risk-management, portfolio, backtesting, finance
 ---
 
 # AQR Factor Investing
 
-This skill encodes the construction details, drawdown mathematics, and implementation traps that separate a live-capital AQR-style factor book from a textbook Fama-French backtest. Almost everything here is what Asness, Frazzini, Israel, Moskowitz, Pedersen, and Ilmanen published *after* getting burned by the easy version.
+This skill is for the gap between a pretty academic factor and a book you can
+actually survive in live capital. The AQR lesson is that data lags, neutrality
+choices, turnover management, portfolio integration, and governance usually
+matter at least as much as the headline factor.
 
-## Before writing any factor code, ask yourself
+## Before you build anything, ask yourself
 
-1. **Would this survive removing every stock below the NYSE 20th percentile of market cap?** Most published anomalies die here. The Jensen-Kelly-Pedersen replication study dropped ~27 points of replication rate just by switching from uncapped deciles to non-micro terciles. If yours dies too, you are harvesting a micro-cap illusion, not a factor.
-2. **Am I using *current* prices in the denominator of B/P, or Fama-French's 6-month-lagged ones?** Lagged prices contaminate HML with ~20% of a poorly-constructed momentum factor (Asness-Frazzini 2013, "The Devil in HML's Details"). If you want "pure value," you must rebuild it.
-3. **What is my expected drawdown *duration*, not depth?** A Sharpe-0.4 factor has ~16% probability of making nothing for a full decade from a mere −1σ event. Plan for that, not for a 2-sigma catastrophe that probably never comes.
-4. **If this factor stops working, how will I distinguish structural decay from a value-spread-widening drawdown?** Without a pre-committed answer, you will capitulate at the bottom.
+1. Am I trying to replicate Ken French or implement AQR-style live factor
+   investing? If it is the latter, lag accounting data by at least six months
+   but do not lag price.
+2. Does the premium survive after removing microcaps? If it vanishes outside
+   the bottom tail, you found a liquidity artifact, not a durable factor.
+3. Is this long-only core equity or long-short factor extraction? Long-only
+   wants integrated scores and tax-aware turnover; long-short wants cleaner
+   factor isolation, explicit neutrality, and a risk target.
+4. Am I willing to accept tracking error to the academic portfolio to save
+   costs and taxes? AQR's live answer is usually yes.
+5. If this factor spends five bad years getting cheaper, what exact evidence
+   would make me cut it? Decide now, not inside the drawdown.
 
-## Craftsmanship alpha: the details that matter more than which factors you pick
+## Where the information ratio actually comes from
 
-Asness's "Little Things Mean a Lot" arithmetic: each construction decision below is worth roughly 0.10 Sharpe viewed alone. Ten of them together is ~0.32 Sharpe — which still has a 37% chance of subtracting in any given year and an 8% chance of subtracting over 20 years. Adopt them as a bundle of priors, not as individual bets you can evaluate.
+- AQR's large-cap appendix is the right mental model. Simple cap-weighted
+  top-50% value had about 0.05 IR. Using current price lifted it to 0.14.
+  Multiple value measures lifted it to 0.29. Concentrating into the top 25%
+  and blending cap and signal weighting lifted it to 0.56. Adding momentum and
+  profitability lifted it to 0.91. Theme selection mattered less than
+  construction quality.
+- Treat backtest Sharpe as a sketch, not a forecast. AQR's century study found
+  factor premia roughly 30% lower out of sample than in sample even before
+  governance mistakes, financing frictions, and taxes.
+- "Craftsmanship alpha" should be judged as a bundle. Many 0.1-Sharpe
+  decisions will look statistically weak one by one and still be indispensable
+  together.
+- Real trading costs can be far below legacy academic estimates. AQR's
+  $1.7T live-trade study found actual costs about an order of magnitude
+  smaller than many older papers suggested. Do not kill a high-turnover signal
+  with toy cost assumptions.
+
+## Construction rules that change the answer
 
 ### Value
-- Composite of ≥4 ratios (B/P, E/P, CF/P, sales/P, forward E/P). Single-metric value fails from noise, not from crowding — "if the strategy is so popular that it won't work anymore, someone forgot to tell the prices" (Asness).
-- **Use current market price in the denominator**, not Fama-French's 6-month-lagged price. This is the entire point of "HML Devil."
-- **Intra-industry**, not cross-industry. Cross-industry value is a bet on whichever sector is structurally cheap (banks 2008, energy 2020), not on value.
-- In tax-aware long-only books, value is the *expensive* factor to run because its tax drag comes from dividend income, which you cannot optimize away without destroying the signal. Momentum's drag is capital gains, which you can.
+
+- Lag fundamentals, not price. The six-month gap exists to avoid look-ahead on
+  accounting data; applying the same lag to price is the Devil error.
+- Use a composite. Default to at least four measures such as B/P, E/P, CF/P,
+  and sales-to-price or enterprise-value variants. Single-ratio value is too
+  noisy to deserve capital.
+- Rank within industry. Cross-industry value quietly becomes a sector macro bet
+  right when you most want a valuation signal.
+- If you are approximating AQR's public long-short valuation series, the
+  relevant defaults are monthly rebalance, best 30% versus worst 30%,
+  market-cap weighting, industry neutrality, and about 7% annualized
+  volatility target.
 
 ### Momentum
-- **12-month return, skipping the most recent month** (the 12-1). Novy-Marx claimed 7-12 dominates 2-6; Goyal-Wahal replicated across 36 countries and found 12-1 dominated in 35. Skip-month is not optional — the last-month reversal is microstructure noise (bid-ask bounce, short-term reversal) and including it materially drags the Sharpe.
-- **Momentum crashes are conditional beta risk, not tail risk.** After a bear market, momentum is long low-beta / short high-beta. A sharp upswing (Mar-May 2009, Aug 1932) crushes the short leg. Daniel-Moskowitz showed 100% of the crash comes from the short side, not the winners. The correct fix is **not** to hedge the market beta — it is to **combine with value**, which rallies in exactly those moments.
-- **Momentum works best in expensive stocks**, not cheap ones (Asness 1997). Removing the 10% most expensive stocks drops momentum Sharpe with a −3.16 t-stat on a 50-year sample. Do not "cleanse" bubble stocks from a momentum book.
 
-### Quality (QMJ)
-- Four sub-components: profitability, growth stability, safety (low leverage + low volatility + low beta), payout. Drop any one and the factor becomes unstable. Safety alone is roughly BAB.
-- Negative correlation to value (cheap stocks are usually junk) is a feature: a QMJ book hedges a value book during junk rallies (1999, mid-2020).
+- Default to 12-1 with the skip-month. The last month is where reversal and
+  microstructure junk leak in.
+- Do not fetishize exact replication of the academic portfolio. AQR's momentum
+  implementation work accepts some factor tracking error if it buys a large
+  reduction in costs or taxes.
+- A momentum screen can reduce turnover inside a value book rather than raise
+  it. In AQR's appendix, adding momentum screens cut turnover from about 63% to
+  the high-50s while turning a negative UMD loading positive.
+- Do not purge the expensive tail. Momentum's best payoffs often live there;
+  cleansing "obvious bubbles" feels prudent and usually amputates the strategy.
 
-### Defensive / Betting-Against-Beta
-- BAB is dollar-neutral AND **beta-neutral**: lever the low-beta long leg to match the short leg's beta. Long-only low-vol implementations lose most of the premium because they cannot apply the leverage step.
-- The premium comes from leverage aversion (Frazzini-Pedersen 2014). Cheaper financing — not crowding — is what would erode it.
+### Quality, defensive, and size
 
-### Construction hygiene for all factors
-- **Tercile sort with NYSE 20th-percentile breakpoint**, not raw deciles. Tercile+non-micro is the AQR-house tradability-vs-power tradeoff.
-- **Capped value weighting**: weight by market cap winsorized at NYSE 80th percentile. Prevents mega-cap dominance (Nokia was ~70% of Finland in 1999-2000) without the microcap overfit of equal-weighting.
-- Scale factor monthly idiosyncratic vol to 10%/√12 (~10% annualized). This normalizes comparisons across methodologies.
-- Winsorize z-scores at ±3σ **after** standardizing; do not clip raw ratios before ranking. Outliers in B/P are informative up to that point.
+- QMJ is not just profitability. AQR's version uses profitability, growth,
+  safety, and payout together because each rescues the others when accounting
+  or regime noise hits.
+- BAB is beta-neutral, not merely "owns low-vol stocks." If you do not lever or
+  beta-match the low-beta leg, you built a defensive tilt, not BAB.
+- Size only belongs after you control for junk. Plain SMB is too often a
+  portfolio of low-quality distress with heroic backtest marketing wrapped
+  around it.
 
-## The drawdown arithmetic you must internalize
+### Long-only portfolio construction
 
-- Sharpe 0.3 (roughly the long-run market itself) can make nothing for a decade from a single −1σ event. Sharpe 0.4 is ~16% probability over a decade. Sharpe 1.0 multi-factor books still have ~24% chance of a down 5-year period.
-- Every factor has had ≥1 multi-year drawdown. Value: 1999-2000, 2018-2020 (the worst in Samonov's 220-year dataset). Momentum: Mar-May 2009, Aug 1932. If your strategy cannot survive 2018-2020 *emotionally and financially* (margin calls, redemptions, staff cuts), you are not running the strategy you think.
-- AQR itself went from $226B (2018) to $98B (2020), cut staff from ~1,000 to ~600, then printed +43.5% in 2022. Asness's own postmortem: "the best we've got is that value holistically lost." There was no mechanical explanation.
-- **Never publish the backtest Sharpe as the expected Sharpe.** Every experienced AQR researcher privately discounts backtest Sharpes by 30-50% before setting client expectations. Asness has admitted this in print for decades.
+- Integrate factors before portfolio construction. AQR's U.S. large-cap example
+  showed integrated value-momentum-profitability beating the sleeve-mix
+  approach on both Sharpe and volatility.
+- Blend cap and signal weighting. Pure cap-weight dilutes the signal; pure
+  equal-weight imports microcap noise, tax drag, and capacity lies.
+- In international books, country neutrality is not cosmetic. AQR notes that
+  holding country weights closer to benchmark increases the useful negative
+  correlation between value and momentum.
+
+## Decision tree: what are you actually building?
+
+- If the goal is factor research or exposure attribution, build clean long-short
+  portfolios with explicit neutrality, monthly rebalancing, and a volatility
+  target.
+- If the goal is a taxable core-equity product, build one integrated long-only
+  book, allow some tracking error to the academic factor, and optimize trading
+  and tax lots before chasing purer signals.
+- If the goal is public-factor replication, copy the paper exactly and label it
+  replication, not implementation.
+- If the goal is live implementation, start from AQR-style defaults and only
+  simplify when you can defend the lost information ratio in dollars, taxes, or
+  governance capacity.
+- If you cannot model borrow, impact, and financing honestly, do not fake
+  precision. Shrink toward larger-cap names or move to long-only until the
+  short-book economics are credible.
+- If governance cannot survive multi-year droughts, solve that with lower
+  leverage or broader factor diversification, not with improvised factor
+  timing.
 
 ## NEVER / INSTEAD
 
-- **NEVER time factors on macroeconomic regimes**, because the macro→factor link is noise in virtually every implementation (Ilmanen et al 2021, Asness-Chandra-Ilmanen-Israel 2017). Factor timing requires being "right twice" — forecast the regime *and* the factor's sensitivity to it — and the second part barely exists. **INSTEAD**, hold a disciplined multi-factor portfolio and let cross-factor diversification do the work.
+- NEVER lag price along with accounting data because the lag is only justified
+  for stale fundamentals; lagging price quietly injects stale momentum
+  avoidance into value. Instead lag the accounting variables and recompute the
+  denominator with current price every rebalance.
+- NEVER reject a signal because older cost papers say it is "untradeable"
+  because that false prudence is built on crude cost models and academic
+  rebalance mechanics; the consequence is throwing away implementable alpha.
+  Instead model spread, impact, and borrow separately and allow controlled
+  tracking error to the paper factor.
+- NEVER combine long-only factor sleeves by averaging their portfolios because
+  the seductive part is governance simplicity, but the consequence is that
+  stocks attractive on multiple styles cancel against one-style names. Instead
+  aggregate the signals first and build one portfolio from the composite score.
+- NEVER add size raw because the seductive part is the famous SMB chart, but
+  the consequence is a portfolio dominated by junky small firms with ugly
+  crashes, borrow pain, and weak live capacity. Instead add size only after
+  explicit junk or quality control.
+- NEVER "fix" momentum by excluding very expensive stocks because the seductive
+  part is narrative comfort during bubbles, but the consequence is destroying a
+  part of the payoff AQR found especially important. Instead let value fight
+  the expensive tail and let momentum own it when it is still working.
+- NEVER run continuous valuation-based factor timing because the seductive part
+  is the truism that "price matters," but the consequence is paying turnover to
+  fight a value premium you already own. Instead keep risk targets steady and
+  reserve any timing sin for rare, explicit extremes.
+- NEVER use trigger-band rebalancing as your default because it looks adaptive,
+  but the consequence is trading against time-series momentum exactly when
+  trends are strongest. Instead use a calendar schedule and only widen it when
+  your explicit turnover budget requires it.
 
-- **NEVER use a trigger-threshold (±20%) rebalance rule** on a factor book, because triggers fire during trend moves and force trades *against* time-series momentum. AQR's 43-year rebalancing study shows fixed-calendar annual rebalancing beats trigger-based on Sharpe *and* on turnover cost. **INSTEAD**, rebalance on a fixed schedule (monthly or annually), widen only if turnover cost exceeds your budget.
+## Drawdown triage
 
-- **NEVER drop "bubble" or "expensive" stocks from the universe**, because momentum works best exactly in that tail (expensive-stock momentum has roughly twice the Sharpe of cheap-stock momentum; the −3.16 t-stat drop from cleansing them is the single largest construction mistake in the literature). **INSTEAD**, let value underweight and momentum overweight the same bubble name; the offsetting exposures are the point.
+1. Did the factor get cheaper because prices moved or because fundamentals
+   worsened? Price-only pain is compression; worsening fundamentals is a
+   different problem.
+2. Did the value spread widen versus the start of the drawdown? Wider usually
+   means higher expected return, not a broken signal.
+3. Is the damage concentrated in the short leg during a violent rebound? That
+   is usually a momentum-crash signature, not proof the factor died.
+4. Did borrow costs or financing frictions jump on the short book? Crowding
+   shows up there before it fully shows up in returns.
+5. Are you tempted to change signal weights because of pain rather than
+   precommitted evidence? That is the -5 Sharpe strategy Asness warns about.
+6. If you truly must de-risk, cut total portfolio risk first. Changing leverage
+   is usually less destructive than rewriting the signal stack in the middle of
+   a panic.
 
-- **NEVER use Fama-French HML off Ken French's website for a "pure value" book**, because its 6-month lag on price mixes ~20% momentum into HML. Your stated "60/40 value/momentum" allocation is then actually ~50/50 of pure value and pure momentum (which is why AQR uses 60/40 HML+UMD, not 50/50 — the weights are *already* compensating for the contamination). **INSTEAD**, rebuild HML with current prices ("HML Devil") if you need clean factor interpretation.
+## Mandatory references
 
-- **NEVER treat a wide value-spread as a go-long timing signal**, because Asness's own "Contrarian Factor Timing Is Deceptively Difficult" showed value-spread timing has out-of-sample Sharpe indistinguishable from zero. Spreads can and do widen further — 2020 set a 220-year record. **INSTEAD**, use spreads to set *expected return* (wider = higher prospective Sharpe), but keep *risk targeting constant*. Only in a genuine once-a-century extreme should you make a small (<10%) "venial value-timing sin," and Asness himself only did it twice in 30 years (1999, 2019).
-
-- **NEVER run a long-only multi-factor portfolio by blending single-factor sleeves** (50% value sleeve + 50% momentum sleeve), because at the stock level a cheap-junk name and an expensive-quality name cancel, destroying the cross-factor interaction. Fitzgibbons-Friedman-Pomorski-Serban (2017), "Don't Just Mix, Integrate." **INSTEAD**, compute a composite per-stock score across all factors and build one portfolio off it.
-
-- **NEVER equate "the factor is down" with "the factor is broken."** A Sharpe-0.4 factor needs only ~55% of months positive over the long run. Real decay would show as a slow premium compression with a *narrowing* value spread; real drawdowns show as a *widening* spread. **INSTEAD**, check three things: (1) Is the spread wider or narrower than at drawdown entry? (2) Have 13F filings of systematic funds actually grown materially in the same strategy? (3) Are other quant shops also drawing down? If spread wider + AUM flat + peers also down, it is a normal painful drawdown — hold the position.
-
-## Decision tree: a factor is drawing down, what do I do?
-
-```
-Is the factor's spread (value spread, momentum strength) at a historical
-extreme of CHEAPNESS vs its own history?
-├── YES (spread wider than entry)
-│   └── The factor is COMPRESSING, not DECAYING. Rebalance on schedule,
-│       do not cut. If spread > 2σ wide, consider a small (<10%) tilt up
-│       — a "venial" factor-timing sin. Do NOT scale to the spread; scale
-│       at most once.
-└── NO (spread narrower than entry, or unchanged)
-    ├── Has AUM in known factor funds grown materially? (Check 13F.)
-    │   └── YES → possible crowding decay; trim by 10-20%, do not zero.
-    ├── Is there a real economic story for structural decay (e.g.,
-    │   rates regime change with a mechanical link)?
-    │   └── Almost always NO. Macro-factor links are noise.
-    └── Is the drawdown concentrated in the short leg during a sharp
-        market upswing?
-        └── YES → this is a momentum-crash pattern (Daniel-Moskowitz).
-            Hold; your value leg is almost certainly up in the same
-            window and is your natural hedge.
-```
-
-## Multi-factor portfolio construction rules
-
-1. Weight factors by **risk contribution**, not dollar. A 60/40 HML/UMD by dollar is ~50/50 by risk because momentum vol is higher.
-2. The canonical 60/40 HML/UMD benchmark exists **because HML already contains ~20% momentum** (the Devil). 60/40 HML/UMD is really ~50/50 of pure value and pure momentum. Do not generalize the 60/40 to other pairs.
-3. Target total portfolio vol with a floating leverage factor; do not lever individual positions. Vol-targeting is the only form of timing that survives Asness's own skepticism.
-4. For long-only: **integrate, don't mix.** One composite score per stock, one portfolio.
-
-## Signals your skill is broken
-
-- Backtest Sharpe > 2.0 gross of costs on liquid stocks → you have a bug. The real ceiling for a tangency portfolio of factors across all markets and asset classes is ~1.5 (Ilmanen et al 2021).
-- Your "value" factor makes money during a momentum crash (e.g., Mar-May 2009), but the magnitude is <20% of momentum's loss → the sign is right but your "value" has contamination; check for Devil-in-HML issues.
-- Your momentum factor has <100%/year turnover on monthly rebalance → it is a long-term trend factor, not momentum; it will decorrelate from published UMD.
-- Your long-short book has large sector tilts → you forgot to industry-neutralize; you are running a sector bet with a factor label.
-
-## Heavy references — load only when implementing
-
-- `references/construction-code.md` — Python reference for HML Devil (current-price B/P), 12-1 momentum with skip-month, QMJ composite, capped value weights, and the winsorize→z-score pipeline. **READ this before writing any factor construction code.** Do not re-derive from academic papers.
-- `references/backtest-frictions.md` — transaction cost, borrow cost, and market impact models calibrated to Frazzini-Israel-Moskowitz's $1T-of-live-trades paper. **READ this before running any long-short backtest.**
-- `references/attribution.md` — factor attribution and spread diagnostics. Load only when decomposing live P&L or diagnosing a drawdown.
-
-Do **NOT** load these files for conceptual discussions, philosophy questions, or "should we use factors at all" conversations. They are strictly implementation artifacts.
+- Before writing factor-construction code, READ `references/construction-code.md`.
+- Before running any long-short backtest or capacity memo, READ
+  `references/backtest-frictions.md`.
+- Before explaining live P&L or deciding whether a drawdown is decay versus
+  compression, READ `references/attribution.md`.
+- Do NOT load the reference files for conceptual debates, asset-allocation
+  conversations, or "should we believe factors at all?" discussions. They are
+  implementation documents and will bias you toward premature concreteness.

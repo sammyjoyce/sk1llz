@@ -1,186 +1,98 @@
 ---
 name: crockford-good-parts
-description: 'Write or refactor JavaScript in Douglas Crockford''s "Good Parts" style — a defensive subset that bans `this`, `new`, `class`, `==`, `for...in`, `++`, and ASI-reliant code, replacing them with factory functions returning `Object.freeze({...})`, closure-based privacy, and JSLint-grade discipline. Use when authoring or reviewing JavaScript that must survive ten-plus years (financial code, browser-shipped libraries, security-sensitive widgets, JSON/data interchange, ad sandboxes), when refactoring class/`this`-heavy code toward immutable factories, when debugging surprising behavior from automatic semicolon insertion, `typeof null`, `for...in` prototype leaks, `hasOwnProperty` shadowing, `NaN`, or boxed primitives, when porting code to be JSLint-clean, or when the user mentions Crockford, "Good Parts", JSLint, "Ice Factory", frozen objects, class-free OOP, POLA / capability-based security, or ADsafe.'
-tags: closures, prototypes, objects, functions, scope, json, patterns, clean-code, browser, web
+description: >-
+  Write or refactor JavaScript in Douglas Crockford's later defensive subset:
+  class-free, this-free, semicolon-full, JSLint-clean code for long-lived,
+  browser-exposed, JSON-heavy, or security-sensitive modules. Use when auditing
+  or rewriting code with coercion, ASI, prototype leakage, ambient authority,
+  frozen-object, `for...in`, `eval`, or unsafe-number bugs, and when the user
+  mentions Crockford, Good Parts, JSLint, ADsafe, capability security, frozen
+  factories, or class-free JavaScript.
 ---
 
-# Douglas Crockford Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​‌​​‌​‍​​‌‌‌‌‌​‍​​​‌‌‌‌‌‍​​‌​‌​​​‍​​​​‌​​‌‍​‌​​​​​‌⁠‍⁠
+# Crockford After The Book
 
-## What this skill encodes
+Treat Crockford as a risk-control doctrine, not a nostalgia act. The point is not to look old-fashioned; the point is to stay out of the parts of JavaScript where parser ambiguity, capability leakage, prototype tricks, and silent coercion hide bugs for years.
 
-Crockford's style is not "old JavaScript." It is a **defensive subset** designed for code that ships into adversarial environments — browsers running other people's scripts, financial systems, JSON parsers eating untrusted bytes, ad sandboxes embedded in third-party pages. Every rule is a scar from a real production bug. Treat each NEVER as "this caused an outage I can describe."
+This skill is strongest for code that crosses trust boundaries, gets embedded in hostile pages, consumes attacker-controlled JSON, or must remain understandable after frameworks churn. It is too strict for framework-owned glue unless you deliberately confine the non-Crockford code to a thin adapter.
 
-His thinking has **evolved** — modern Crockford (2014+) is *not* the 2008 book:
+## Pick The Lane First
 
-- He no longer recommends `Object.create` (which the book advocates). He abandoned it because prototype chains still leak via `for...in` and `instanceof` still crosses the trust boundary.
-- He no longer recommends prototypal inheritance at all.
-- His current pattern is: **factory function → close over private state → return `Object.freeze({...})`**. Lowercase factory name. No `new`, no `this`, no `class`, no `Object.create`, no prototype chain.
-- He has accepted ES6 *destructuring*, `let`/`const`, template literals, and shorthand methods.
-- He still rejects `class`, arrow functions for methods, hoisted function statements, `++`/`--`, and `==`.
+| Situation | Default | Why | Allowed deviation |
+|---|---|---|---|
+| Browser widget, third-party embed, sandbox, plugin host, JSON boundary | Full Crockford subset | Ambient authority and prototype surprises are the real enemy | None without a written reason |
+| Legacy class/framework integration | Quarantine `this`/`class` in an adapter; keep domain logic Crockford-clean | Rewriting framework-owned surfaces is churn, not risk reduction | Thin outer shim may use framework conventions |
+| Performance-critical hot loop | Keep the semantic bans, relax `freeze` only if profiling proves object creation is the bottleneck | `Object.freeze` and per-instance closures cost real throughput | Prefer typed arrays or data-oriented structures before reintroducing classes |
+| Routine app code with no trust boundary | Keep the hard bans (`eval`, `==`, ASI reliance, boxed primitives, unsafe numbers) | Those bugs stay expensive even in internal code | Full class-free style is optional if it fights the framework |
 
-If your reflex is "this looks old-fashioned," you have not yet hit the bug it prevents.
+## Before You Touch Code, Ask Yourself
 
-## Three questions before any line
+- **Authority:** Does this function really need a global, clock, random source, logger, DOM handle, or service singleton, or should that capability be passed in explicitly?
+- **Prototype behavior:** If `Object.prototype` is polluted, or the value comes from another realm/iframe, will this code still behave the same?
+- **Parser ambiguity:** Would a newline, concatenation boundary, or formatter rewrite change the parse?
+- **Value model:** Is this value truly arithmetic, or is it an opaque identifier that must never become a `Number`?
+- **API shape:** Am I exposing a message-oriented object, or just leaking a mutable property bag with getters/setters?
 
-1. **"Could this line behave differently if `this` is rebound?"** If yes, you wrote it wrong. Crockford-style code never reads `this`. Pass dependencies explicitly or close over them.
-2. **"If a stranger augments `Object.prototype`, does my code still work?"** If no, you used bare `for...in`, or you trusted `instanceof` across realms, or you used `obj.hasOwnProperty(...)` directly.
-3. **"Does the failure mode produce a wrong answer or a thrown error?"** Crockford prefers throws-loudly over silently-coerces. Every `==`, `++`, ASI-relying line is a vote for silent wrongness.
+## What Modern Crockford Actually Means
 
-## The pattern (modern Crockford, post-2014)
+- Later Crockford is more anti-`this` and more anti-inheritance than the 2008 book. The security reason matters: detached methods and implicit receivers leak authority in ways closures do not.
+- `Object.freeze` is only loud in strict code. In sloppy mode, writes to frozen properties can fail silently. If the file is not an ES module, strictness is part of the pattern, not a garnish.
+- Prototypes and freezing do not mix well. Using `Object.create(proto)` as a "cheap copy" looks elegant until `proto` is frozen: writes can throw, and inserting a new property forces ancestor checks up the entire chain.
+- `Object.create(null)` is for dictionaries, not ordinary records. It avoids prototype leakage and the frozen-prototype insertion scan, but it also removes conveniences like `toString`, `instanceof Object`, and `obj.hasOwnProperty`.
+- Treat JSON text and arbitrary objects differently. Copying a general object with spread or `Object.assign` runs getters; copying `JSON.parse` output does not. The shortcut is safe for parsed JSON, not for arbitrary host objects.
+- Crockford-style public APIs should be verbs, not field toggles. If callers mostly call `set_x`, `set_y`, `set_z`, you have exposed representation, not behavior.
 
-```javascript
-'use strict';
+## Non-Obvious Heuristics
 
-function make_account(spec) {
-    const {initial_balance = 0} = spec;
-    let balance = initial_balance;          // private via closure
+- Prefer a lowercase factory that returns `Object.freeze({...})`. Capitalized names imply `new`; lowercase is a defense against accidental constructor calls.
+- For attacker-controlled string keys, choose `Map` when key identity matters, choose `Object.create(null)` when you need JSON-like serialization, and choose a plain object only when the key set is trusted.
+- Use `typeof` only for primitive-ish checks: `"undefined"`, `"string"`, `"number"`, `"boolean"`, `"function"`. For everything else, assume `typeof` is trying to trick you.
+- Treat all values above `2^53 - 1` as already corrupt if they passed through `Number`. Database IDs, snowflakes, and nanosecond timestamps belong in strings or `BigInt`, not doubles.
+- If a line begins with `(` or `[`, assume concatenation can misparse it unless the previous statement is terminated. Defensive leading semicolons are a parser guard, not a style tic.
 
-    function deposit(amount) {
-        if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-            throw new Error('deposit: positive finite number required');
-        }
-        balance += amount;
-        return balance;
-    }
+## Never Trade Clarity For Cleverness
 
-    function withdraw(amount) { /* ... */ }
-    function get_balance() { return balance; }
+- **NEVER use direct `eval`, `new Function`, or string-based `setTimeout`/`setInterval`** because the seductive shortcut is "I can interpret this little DSL later", but the real consequence is caller-scope access, CSP breakage, disabled inlining, and runtime name lookups. Instead parse data, dispatch on an allowlist, or pass explicit capabilities into a predeclared function.
+- **NEVER traverse records with bare `for...in`** because the seductive part is the one-line loop, but the consequence is inherited keys, prototype-pollution surprises, and guards that explode when data contains its own `hasOwnProperty`. Instead use `Object.keys`, `Object.entries`, `Map`, or `Object.create(null)` plus explicit copying.
+- **NEVER build "immutable copies" by inheriting from frozen prototypes** because it feels cheaper than copying, but the consequence is write exceptions and slower property insertion due to ancestor scans. Instead copy own data into a fresh object and freeze that result.
+- **NEVER store money or opaque IDs in `Number`** because one numeric type looks convenient, but the consequence is silent rounding for decimals and false equality above `9007199254740991`. Instead use minor units or `BigInt` for arithmetic, and strings for identifiers.
+- **NEVER rely on automatic semicolon insertion** because formatters and line wraps make it look harmless, but the consequence is `return`-newline-object bugs, accidental call continuations, and hard-to-see parse changes at bundle boundaries. Instead terminate every statement and keep the returned/thrown expression on the same line as the keyword.
+- **NEVER put function expressions in loops or block-scoped function statements in lint-clean code** because the inline callback feels local and tidy, but the consequence is JSLint rejection, closure capture mistakes, and anonymous stack traces. Instead declare helpers outside the loop or bind the current value explicitly before creating the function.
+- **NEVER use boxed primitives or "generic object checks"** because `new Boolean(false)` and `typeof x === "object"` feel object-oriented, but the consequence is truthy false values, `typeof null === "object"`, arrays passing as objects, and `NaN` passing as a number. Instead use literals, `value === null`, `Array.isArray`, `Number.isNaN`, and `Number.isFinite`.
+- **NEVER give business logic ambient access to `Date.now`, `Math.random`, globals, or mutable service singletons** because it is faster to code once than to inject capabilities, but the consequence is non-reproducible tests, hidden nondeterminism, and authority leaks in sandboxes. Instead pass clock, RNG, storage, and I/O in explicitly.
 
-    return Object.freeze({deposit, withdraw, get_balance});
-}
+## JSLint Rules That Still Surprise Experienced Developers
+
+- JSLint expects expression statements to be assignments or calls. A stray object literal, ternary, or comma expression in statement position is treated as a bug, not an aesthetic choice.
+- JSLint accepts function statements at file/function-body scope, not inside blocks. This matters because block function semantics were historically divergent across engines.
+- JSLint allows arrow functions only in the expression-body form when you are chasing strict lint cleanliness; block-bodied arrows are rejected to avoid ambiguity.
+- JSLint treats `+ +x`, `a+++b`, and similar plus/minus adjacency as bug magnets. If numeric coercion is intended, write `Number(x)` or add parentheses.
+- JSLint distrusts `for` itself, not just `for...in`. If the loop body is a collection transform, expect the more Crockford answer to be `forEach`, `map`, `reduce`, or a purpose-built helper.
+
+## Operating Procedure
+
+1. Classify the code path: boundary, adapter, hot path, or routine app code.
+2. Remove ambient authority first. Pass dependencies in before touching syntax.
+3. Choose the object model deliberately:
+   - Message-oriented frozen factory for most modules.
+   - `Map` or null-prototype dictionary for attacker-controlled keys.
+   - Typed arrays or data tables before classes for hot paths.
+4. Eliminate parser and value traps before style cleanup:
+   - `==`, ASI, `for...in`, boxed primitives, `Number` IDs, string eval.
+5. Only then normalize the surface shape: lowercase factories, explicit semicolons, no `this`, no inheritance-driven reuse.
+
+## Loading Triggers
+
+**MANDATORY:** Before designing or refactoring sandboxed code, capability-based APIs, or any module where the question is "can this code be given less power?", read [`references/philosophy.md`](references/philosophy.md) for the ADsafe and POLA context behind the subset.
+
+**Do NOT load** [`references/philosophy.md`](references/philosophy.md) for routine one-file cleanups, equality fixes, ASI fixes, or frozen-factory refactors. The checklist in this file is enough.
+
+**MANDATORY:** Before claiming a file is Crockford-clean, run:
+
+```bash
+node languages/javascript/crockford/scripts/jslint_check.js path/to/file.js
 ```
 
-Five non-obvious things in those twelve lines:
+Treat the bundled checker as a preflight, not the final judge. It does not catch restricted-production ASI traps, function-in-loop issues, or the stricter arrow/function-position rules from upstream JSLint.
 
-1. **Lowercase `make_account`.** Capitalised names are reserved by convention for `new`-able functions. Lowercase tells the reader "do not put `new` in front of me." Mixing the two is how `new make_account()` ends up returning the wrong `this`.
-2. **`Object.freeze` is shallow.** If you return `{items: []}`, the array is still mutable. Freeze nested mutable state explicitly, or do not return it.
-3. **`Object.freeze` fails *silently* in sloppy mode.** Without `'use strict';` (or an ES module context) reassigning a frozen property does nothing and throws nothing. Always emit modules or `'use strict';` at the file top.
-4. **`Number.isFinite`, not global `isFinite`.** Global `isFinite('5')` is `true` because it coerces. `Number.isFinite('5')` is `false`. Same trap with `isNaN` vs `Number.isNaN`.
-5. **`throw new Error(...)`, never `throw 'string'`.** A thrown string has no stack, no `name`, and breaks `err instanceof Error` checks downstream — silently swallowing the bug at the catch site.
-
-## Specific landmines Claude does not naturally avoid
-
-### ASI: the `return\n{` trap and the `(`-leading-line trap
-
-Automatic semicolon insertion does **not** insert a semicolon when the next token continues a valid expression. The two famous victims:
-
-```javascript
-// Trap 1: return + newline → silently returns undefined
-return                          // ASI inserts ';' here (return is a "restricted production")
-{                               // because '{' on its own line at statement
-    status: true                //   position is parsed as a *block*, not an object
-};
-
-// Trap 2: line starting with '(' is parsed as a continuation
-const a = b + c
-(d + e).print()                 // becomes: const a = b + c(d + e).print()
-```
-
-Rules that defuse both:
-
-- **K&R braces are not aesthetic.** `{` MUST be on the same line as the keyword. This is the only way `return {...}` and `if (x) {...}` survive ASI.
-- **Defensive leading semicolon.** Any file or IIFE that starts with `(` or `[` MUST start with `;`, so concatenation cannot turn the previous statement into a call.
-- **Never break before `++` / `--`** — ASI inserts a semicolon, then `++c` becomes its own statement, silently changing meaning.
-- **`return`, `throw`, `break`, `continue`, postfix `++`/`--`** are all "restricted productions": a newline immediately after them triggers ASI even if the next line would have parsed.
-
-### `for...in` is broken without `hasOwnProperty`
-
-`for...in` walks the entire prototype chain. The moment any code on the page (a polyfill, a third-party library, an `Object.prototype` augmentation) adds an enumerable property to `Object.prototype`, your loop visits it.
-
-```javascript
-// WRONG: leaks inherited keys
-for (const key in obj) { use(obj[key]); }
-
-// RIGHT: filter, and call hasOwnProperty via Object.prototype to dodge shadowing
-for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        use(obj[key]);
-    }
-}
-
-// BETTER: do not use for...in at all
-Object.keys(obj).forEach(function (key) { use(obj[key]); });
-```
-
-Why `Object.prototype.hasOwnProperty.call(obj, key)` and not `obj.hasOwnProperty(key)`? Because untrusted JSON like `{"hasOwnProperty": 1}` shadows the method on that one object — `obj.hasOwnProperty` is now a number, and your guard throws "is not a function." This is the canonical "untrusted JSON destroys your guard" bug, and it is the reason `Object.create(null)` exists.
-
-### `typeof` lies in four places
-
-| Expression          | `typeof` returns | Use instead                              |
-|---------------------|------------------|------------------------------------------|
-| `typeof null`       | `'object'`       | `value === null`                         |
-| `typeof []`         | `'object'`       | `Array.isArray(value)`                   |
-| `typeof NaN`        | `'number'`       | `Number.isNaN(value)` (not global `isNaN`, which coerces) |
-| `typeof /regex/`    | impl-defined     | `value instanceof RegExp` *and accept it fails across realms / iframes* |
-
-Heuristic: in Crockford-style code, `typeof` should only be checking against `'undefined'`, `'string'`, `'number'`, `'boolean'`, or `'function'`. Any other use is suspicious.
-
-### Numbers are IEEE-754 doubles — and Crockford hates it
-
-- `0.1 + 0.2 === 0.30000000000000004`. Crockford proposed DEC64 (decimal floats) to fix this; nobody adopted it. So in Crockford-style code, money MUST be integer minor units (cents) or `BigInt` — never `Number`. The moment you see `*100` followed by `Math.round`, you have a compounding bug.
-- `Number.MAX_SAFE_INTEGER` is `2^53 - 1 ≈ 9.007e15`. Above that, integer arithmetic is *wrong*, not "imprecise": `9007199254740993 === 9007199254740992` is `true`. Database IDs, Twitter snowflakes, nanosecond timestamps routinely exceed this. **Use strings for IDs.**
-
-### `Object.freeze` does not stop class-style mutation
-
-Frozen factory output is immutable. But objects produced by `class` constructors are **not** — and worse, modifying `SomeClass.prototype.method` after instances exist mutates *every existing instance retroactively*. This is the strongest single reason Crockford banned `new` and `class`. If your codebase mixes paradigms, `Object.freeze(cart)` is no defense if `cart` was made with `new ShoppingCart`.
-
-### Boxed primitives are a falsy-check bomb
-
-`new Boolean(false)` is an *object*, and all objects are truthy:
-
-```javascript
-if (new Boolean(false)) { /* THIS RUNS */ }
-typeof new Number(0) === 'object'   // not 'number'
-```
-
-Never `new String`, `new Number`, `new Boolean`, `new Object`, `new Array`. Use literals.
-
-## Decision tree
-
-| Situation                                          | Crockford answer                                                  |
-|----------------------------------------------------|-------------------------------------------------------------------|
-| "Should this be a class?"                          | No. Factory function returning `Object.freeze({...})`.            |
-| "I need inheritance."                              | Compose: `const {method} = make_base(spec);` then re-export.      |
-| "I need private state."                            | Closure variables. Do not return them.                            |
-| "I need this method to remember the instance."     | Reference the closure variable. The function literally never sees `this`. |
-| "I want to detect an array."                       | `Array.isArray(x)`. Never `instanceof`, never `typeof`.           |
-| "I want to test equality."                         | `===`. Even for null: `x === null`, never `x == null`.            |
-| "I want to iterate object keys."                   | `Object.keys(obj).forEach(...)`. Never bare `for...in`.           |
-| "I want to define a method on a built-in."         | Don't. If you must, gate with `if (!Array.prototype.x) {...}`.    |
-| "I need to parse JSON."                            | `JSON.parse(text)` inside `try`/`catch`. Never `eval`.            |
-| "I need to handle money."                          | Integer minor units or `BigInt`. Never `Number`.                  |
-| "Should this `return` span multiple lines?"        | The expression must start on the *same* line as `return`.         |
-| "Should I use a function statement or expression?" | Expression assigned to `const`, so hoisting cannot bite.          |
-| "Method on a returned object: arrow or `function`?"| Named `function`. Arrows steal `this` and produce anonymous frames in stack traces. |
-
-## NEVER list (with consequences, not just bans)
-
-- **NEVER `==` / `!=`** because coercion has 100+ silent rules: `'' == 0` is `true`; `[1] == true` is `true`; `[null] == false` is `true`. The bugs are silent and rare, so reviewers stop noticing them. Instead use `===`; if you genuinely need both null and undefined, write `value === null || value === undefined` explicitly.
-- **NEVER `eval` or `new Function(...)`** because it bypasses every static analysis tool, runs in caller scope, **deopts the whole enclosing function in V8** (named the "eval poison" in V8 internals), and enables RCE if any input is user-controlled. Instead build the data structure directly, or `JSON.parse` for data.
-- **NEVER `with`** because it makes every name resolution a runtime lookup; one new property on the scope object silently shadows your locals. Strict mode forbids it. Instead destructure: `const {x, y} = obj;`.
-- **NEVER `++` / `--`** because they encourage `arr[i++] = arr[j++]` which fuses sequencing, side effect, and value-returning into one operator — bugs land in the seam. Instead use `i += 1`. The discipline cost is one character; the bug rate drops measurably.
-- **NEVER bare `function name() {}` at statement position** because function statements hoist to the top of the function, so reading order differs from running order, and `function f() {}` inside an `if` is implementation-defined. Instead `const f = function f() {...};` (the inner name aids stack traces).
-- **NEVER `new String('x')` / `new Number(1)` / `new Boolean(true)`** because they create *boxed* objects, which are truthy even when wrapping `false`. The single most surprising falsy-check failure in JavaScript. Instead use literals.
-- **NEVER `arguments`** because it is not a real array (no `.map`, no `.filter`); in non-strict mode it aliases parameters bidirectionally; arrow functions don't have one. Instead use rest parameters: `function f(...args) {}`.
-- **NEVER bare `for...in`** — see the landmines section. Default to `Object.keys` / `Object.entries`.
-- **NEVER throw a non-`Error`** because strings have no stack, no `name`, no `instanceof Error`, and tooling silently drops them. Instead `throw new Error('message')` or a subclass.
-- **NEVER mutate inputs** because Crockford-style functions return new frozen values; input mutation creates spooky-action-at-a-distance and breaks `Object.freeze` discipline at the call site. Instead spread: `return Object.freeze({...input, changed: value});`.
-- **NEVER use arrow functions for methods on a returned object** because they capture `this` from the definition site, and Crockford-style code has no `this` to capture. Instead use named function expressions so stack traces are readable.
-- **NEVER omit `'use strict';` outside ES modules** because without it, `Object.freeze` violations, accidental globals, and `delete` of non-configurable properties all fail silently.
-- **NEVER use a `Number` for an ID** because once it crosses `2^53`, equality lies. Instead use strings or `BigInt`.
-
-## Edge cases and fallbacks
-
-- **Codebase already uses `class` heavily.** Don't rewrite — *isolate*. Wrap class instances in a Crockford-style facade: `function make_x(class_instance) { return Object.freeze({...}); }`. New code uses the facade; legacy stays untouched.
-- **Framework requires `this` (older React class components, Node streams, Express middleware bound to `req`).** Frameworks override Crockford. Quarantine the `this` to one thin adapter file; keep your business logic in pure factories the adapter calls.
-- **Performance-critical hot loop creating millions of objects.** Frozen factories are 2–10× slower than `class` instantiation in V8 because they cannot share hidden classes. Profile first; if and only if object creation is the actual bottleneck, drop to `class` for that one hot path with a comment explaining the deviation. Crockford's own answer: "if you have a million-object hot loop, use a typed array instead."
-- **You consume an API that returns prototype-bearing objects.** Convert at the boundary: `const safe = Object.freeze({...untrusted})`. The spread breaks the prototype chain *for own enumerable properties* and the freeze prevents downstream mutation. Note: the spread does not copy non-enumerable properties or symbols — if those matter, use `Object.create(null)` plus explicit copying.
-- **You must accept untrusted JSON keys.** Build the destination with `Object.create(null)` so prototype keys (`__proto__`, `constructor`, `toString`) cannot be smuggled in via prototype pollution. Or use `Map`.
-
-## Loading triggers
-
-**Before** starting a multi-module design that needs capability-based security or sandboxed execution, **READ** [`references/philosophy.md`](references/philosophy.md). It contains the POLA (Principle of Least Authority) patterns, the historical evolution from `object()` → `Object.create` → frozen factories, the `Function.prototype.method` augmentation pattern, and ADsafe context that informs why each rule above exists.
-
-**Do NOT load** `references/philosophy.md` for routine "make this code Crockford-style" tasks — the rules in this file are sufficient and the philosophy file is historical context, not a checklist.
-
-**Before** declaring any code "Crockford-clean," **RUN** `node scripts/jslint_check.js path/to/file.js`. JSLint catches the cases your eyes will miss: ASI traps near closing parens, `==` hidden inside long boolean expressions, `for...in` without `hasOwnProperty`, `++`/`--` in expression position, missing `'use strict'`. Crockford's own rule: **JSLint warnings are errors, not suggestions.**
+**If the change touches parser-sensitive code, loop-created closures, sandboxing, or security boundaries:** also run upstream JSLint if it is available in the environment. A green result from the local script alone is not enough for those cases.

@@ -1,90 +1,98 @@
 ---
 name: hettinger-idiomatic-python
 description: >
-  Write Python code in the style of Raymond Hettinger, Python core developer
-  and author of collections, itertools, and functools. Emphasizes idiomatic
-  transformations, iterator algebra, and leveraging the stdlib over hand-rolled
-  logic. Use when refactoring Python to be more Pythonic, choosing between
-  collections/itertools/functools abstractions, designing cooperative
-  inheritance with super(), or transforming imperative loops into composable
-  generator pipelines. Trigger keywords: Pythonic, idiomatic, itertools,
-  collections, functools, lru_cache, defaultdict, Counter, namedtuple,
-  generator pipeline, refactor Python, "there must be a better way".
+  Encode Raymond Hettinger-style Python design judgment: iterator algebra,
+  container choice, sorting and caching trade-offs, and cooperative
+  inheritance. Use when refactoring loops into stdlib primitives, deciding
+  between `defaultdict`/`Counter`/`deque`/`ChainMap`, tuning `lru_cache` or
+  `cached_property`, designing `super()`-friendly hierarchies, or replacing
+  comparison-heavy code with key-based sorts. Trigger keywords: pythonic,
+  idiomatic Python, Hettinger, itertools, collections, functools, sort key,
+  groupby, tee, defaultdict, OrderedDict, ChainMap, lru_cache,
+  cached_property, total_ordering, super, MRO.
 ---
 
 # Hettinger-Style Idiomatic Python
 
-## Thinking Framework
+## Load Boundaries
 
-Before writing or refactoring any code, ask in order:
+- Before transforming real code, READ `references/philosophy.md` for before/after rewrites and pipeline shapes.
+- Before running a repo-wide cleanup, READ `scripts/pythonic_check.py` to see what it can and cannot catch; it is intentionally shallow.
+- Do NOT load `references/philosophy.md` for cache, sort, container, or MRO design questions; this file is the decision layer.
+- Do NOT trust `scripts/pythonic_check.py` as style authority; it will not detect iterator ownership bugs, cache leaks, or non-cooperative inheritance.
 
-1. **Is there a stdlib tool for this?** Check `collections`, `itertools`, `functools` — Hettinger built them to eliminate hand-rolled logic. If you're writing a loop that counts, groups, caches, chains, or combines, the tool already exists.
-2. **Am I working at the right abstraction level?** One `Counter` arithmetic expression replaces 15 lines of loop-and-dict code. Prefer the declarative operation.
-3. **Can this be lazy?** If the consumer only needs one item at a time, yield — don't build a list. But if you need `len()`, indexing, or multiple passes, a list is correct.
-4. **Would a 6-month-from-now reader understand this?** Hettinger's "Beyond PEP 8" point: a clever one-liner that takes 30 seconds to parse is worse than three clear lines. Chunk complex expressions into named sub-expressions.
+## Operating Mindset
 
-## Expert Decision Trees
+Before you rewrite anything, ask:
 
-### Choosing a collections type
+- **Is the source one-shot?** Generators, file iterators, `map`, `zip`, `groupby`, and cursors are linear resources. Once you split or partially consume them, ownership becomes the real bug.
+- **Am I compressing logic or compressing readability?** Hettinger code gets shorter by choosing better primitives, not by golfing. Prefer a named intermediate over a tuple key or nested comprehension that hides invariants.
+- **Will laziness help or hurt?** Lazy pipelines shine when data is large and strictly single-pass. The moment you need peeking, replay, cross-branch fanout, or rich error reporting, materialize on purpose.
+- **Is the bottleneck dispatch or algorithm shape?** `itemgetter`, `attrgetter`, `Counter`, and `deque` help, but the big wins usually come from deleting quadratic behavior or repeated Python-level comparisons.
+- **Am I designing for composition?** When classes may be mixed later, signatures, root methods, and `super()` discipline matter more than today's inheritance tree.
 
-| Need | Use | NOT |
-|---|---|---|
-| Count occurrences | `Counter` | `dict` + manual increment |
-| Group items by key | `defaultdict(list)` | `dict.setdefault()` — it creates a new list *every call* even on hits, just to discard it |
-| Ordered keys (insert order + reorder) | `OrderedDict` — still needed for `move_to_end()` and equality semantics (order-sensitive `==`) | Plain `dict` if you need reordering or order-aware equality |
-| Lightweight immutable record | `namedtuple` — 64 bytes/instance, `__slots__` automatic, picklable | `dataclass` when you need mutability or default values; `namedtuple` when you need tuple protocol (unpacking, hashing, use as dict keys) |
-| FIFO/LIFO with O(1) ends | `deque` — `appendleft`/`popleft` are O(1) | `list` — `insert(0, x)` is O(n), silently quadratic on large data |
-| Scope chain / layered config | `ChainMap` — lookups fall through parents; mutations only hit the first map | Merging dicts with `{**a, **b}` loses the ability to track which layer owns a key |
+## Iterator and Pipeline Heuristics
 
-### Choosing between caching strategies
+- Treat `tee()` as a last resort, not a harmless splitter. It buffers the lag between consumers, can raise `RuntimeError` under simultaneous use, and the docs explicitly say to use `list()` instead when one branch will run far ahead.
+- `groupby()` groups runs, not values. It is right only when adjacency is meaningful or when you sort first with the same key function. For arbitrary arrival order, use `defaultdict(list)` or `Counter`.
+- `takewhile()` consumes the first failing item. If that boundary record matters later, `takewhile()` is the wrong primitive unless you wrap the stream.
+- Fully consuming `islice(it, start, stop)` advances the shared iterator by `max(start, stop)`. This matters when slicing a live cursor or generator other code still expects to read.
+- `zip_longest()` against a possibly infinite iterable must be fenced with `islice()` or `takewhile()`, otherwise the finite side stops protecting you.
+- Prefer `iter(callable, sentinel)` for block readers and polling loops. It expresses "keep calling until EOF or stop token" without `while True` bookkeeping.
 
-| Situation | Use | Why |
-|---|---|---|
-| Pure function, hashable args | `@lru_cache(maxsize=128)` or `@cache` | `@cache` is `lru_cache(maxsize=None)` — unbounded, faster, but leaks memory if args are diverse |
-| Method on mutable instance | `@cached_property` | `lru_cache` on a method pins `self` in cache, preventing GC of the instance — silent memory leak |
-| Class with `__slots__` | Stack `@property` over `@lru_cache` | `cached_property` writes to `__dict__` which doesn't exist on `__slots__` classes — raises `TypeError` |
-| Function that returns generators | DO NOT cache | `lru_cache` returns the *same exhausted* generator object on subsequent calls — returns empty |
-| Need TTL expiry | Roll your own with `time.monotonic()` | `lru_cache` has no expiry; stale data persists until `cache_clear()` |
+## Containers: Choose By Failure Mode
 
-### Generator vs List decision
+- `defaultdict` is for mutating reads. `__missing__` only fires on `d[key]`; `d.get(key)` still returns `None`. If you need a non-mutating probe, `defaultdict` is the wrong signal.
+- `setdefault()` is seductive because it looks single-step, but `setdefault(k, [])` builds the default object before Python knows whether the key exists. For hot grouping code, that means repeated throwaway allocations. Prefer `defaultdict(list)` unless you truly need plain-`dict` semantics.
+- `Counter` arithmetic has different cleanup rules: `a - b` drops zero and negative counts, `subtract()` preserves them, and unary `+c` strips non-positives. Use the operator when you want inventory semantics; use `subtract()` only when debt is meaningful.
+- `Counter` math preserves encounter order: first from the left operand, then new keys from the right. That matters when tests or UIs depend on deterministic tie order after arithmetic.
+- `deque` is for ends, not middles. Appends and pops on either end are O(1); lookups toward the middle degrade, and `extendleft()` reverses the incoming order.
+- `ChainMap` is for layered lookup, not shared mutation. Writes only hit `maps[0]`. If an update must land in an existing inner mapping, use an explicit merge or the docs' `DeepChainMap` pattern.
+- `OrderedDict` still earns its keep when you need cheap reordering, `move_to_end(last=False)`, FIFO `popitem(last=False)`, or order-sensitive equality. Do not keep it out of habit now that plain `dict` preserves insertion order.
+- Do not compare record types with `sys.getsizeof()` alone. A regular dataclass often looks smaller than a `namedtuple` until you count the per-instance `__dict__`. If memory matters, measure the object and its attached storage, or use slots.
 
-- **Use generator when**: single pass, pipeline stage, data larger than memory, feeding `sum()`/`any()`/`all()`/`min()`/`max()`
-- **Use list when**: need `len()`, indexing, multiple iteration, or the data will be consumed in a non-linear order
-- **Trap**: a generator assigned to a variable and iterated twice silently yields nothing the second time — no error, just empty. If there's any chance of re-iteration, materialize with `list()`.
+## Sorting and Key-Function Rules
 
-## NEVER (with reasons)
+- Favor key functions over comparison functions. `cmp_to_key()` is mainly a migration bridge and locale escape hatch; comparison logic reintroduces Python-level work on every pairwise comparison.
+- Use stable multi-pass sorts when directions differ or when a single tuple key would bury business rules. Timsort exploits existing order, so "minor key first, major key second" is often clearer and still fast.
+- `itemgetter` and `attrgetter` are primarily clarity tools on modern CPython. They may be a bit faster, but if you need a benchmark to justify them, your bigger problem is elsewhere.
+- For locale-aware sorts, use `locale.strxfrm()` as the key when possible; reach for `strcoll` plus `cmp_to_key` only when you truly need comparator semantics.
+- Sorting calls the key once per element. Spend effort on making the key canonical and cheap, not on micro-optimizing rich comparison fallbacks.
 
-**NEVER use `@lru_cache` on a method** without understanding it pins `self`. The cache holds strong references to every unique `self` that calls it, so instances never get garbage-collected. For 10K objects each calling a cached method, that's 10K entries leaking. Use `@cached_property` for instance-level caching, or use a module-level function that takes the relevant data (not `self`) as args.
+## Caching and Memoization Rules
 
-**NEVER use `groupby` on unsorted data** — it only groups *consecutive* identical keys, so `[A,A,B,A]` gives three groups (`A,A`, `B`, `A`), not two. Always `sorted(data, key=keyfunc)` first, or use `defaultdict(list)` if data arrives in arbitrary order.
+- Start with `lru_cache(maxsize=128)` only because that is the stdlib default, not because 128 is magic. Check `cache_info()` under realistic traffic; if misses stay high, the cache is probably noise.
+- `lru_cache` is thread-safe for the cache structure, not for exactly-once execution. Concurrent misses may compute the same value twice before the first result lands.
+- Keyword order can fragment the cache: `f(a=1, b=2)` and `f(b=2, a=1)` may occupy separate entries. Canonicalize calling conventions when cache density matters.
+- `typed=True` only separates immediate argument types. It will distinguish `Decimal(42)` from `Fraction(42)` as direct args, but not the same values nested inside equal tuples.
+- `lru_cache` keeps references to arguments and return values until eviction or `cache_clear()`. On methods, that includes `self`, so cache growth can accidentally pin whole object graphs.
+- `cached_property` is right for per-instance values on normal objects, but it writes into each instance `__dict__`, interferes with PEP 412 key-sharing savings, and since Python 3.12 the getter may run more than once under races. If the class uses `__slots__` or memory density matters, stack `property()` over `lru_cache()` or memoize explicitly.
+- Never cache generators, coroutines, open files, or mutable containers you expect callers to mutate. You are caching identity, not just computation.
 
-**NEVER use `Counter.subtract()` and assume non-negative counts.** Unlike `-` operator which drops zero/negative, `subtract()` happily goes negative: `Counter(a=1).subtract(Counter(a=3))` → `Counter(a=-2)`. If you need floor-at-zero, use `counter1 - counter2` (the operator), or `+counter` to strip non-positives.
+## Cooperative Inheritance Rules
 
-**NEVER pass `maxsize=None` to `lru_cache` on functions with unbounded argument domains** (e.g., string inputs from users). The cache grows without limit. Use bounded `maxsize` or `@cache` only when you know the domain is finite.
+- Every override in a cooperative chain must call `super()`, even if today's parent is `object`. Future mixins change the MRO; hardwiring a parent name freezes composition.
+- When the callee is not guaranteed to exist on `object`, provide a root class that terminates the chain and assert that no later class also implements the method. This turns a silent MRO bug into an immediate failure.
+- Flexible `**kwargs` signatures are not style fluff here; they are how unrelated mixins strip what they need and forward the rest.
+- If you adapt a non-cooperative third-party class, write an adapter that owns the impedance mismatch. Do not contaminate the cooperative chain with one-off positional signatures.
+- When subclassing builtins, audit the whole method family. Overriding `__setitem__` on `dict` does not automatically affect `update()`, `setdefault()`, or constructor behavior.
 
-**NEVER build a `list` just to call `len()` on a generator.** Use `sum(1 for _ in gen)` for counting, or better, restructure to track count during generation.
+## NEVER Do These
 
-**NEVER use `functools.total_ordering` in performance-hot paths.** It synthesizes comparison methods with two indirections per call (~2x slower than hand-written comparisons). Write all six comparison methods when objects are sorted in tight loops.
+- NEVER use `tee()` because "I might need two passes." That is seductive because it preserves laziness, but the hidden buffer grows with branch skew and simultaneous use can explode at runtime. Instead snapshot with `list()` or redesign as a single-pass pipeline.
+- NEVER use `defaultdict` and then read it with `.get()` expecting auto-vivification, because `default_factory` is ignored outside `__getitem__`. Instead use `d[key]` when creation is intended, or use a plain `dict` for non-mutating probes.
+- NEVER reach for `setdefault(k, [])` in hot grouping code because it looks concise. It eagerly constructs throwaway defaults on hits. Instead use `defaultdict(list)` and make mutation explicit.
+- NEVER use `cmp_to_key()` for ordinary business sorting because comparison functions feel "general." The concrete consequence is Python-level work on every comparison and harder-to-read ranking rules. Instead compute a canonical key or use stable multi-pass sorts.
+- NEVER treat `lru_cache` as a lock or dedup barrier because the cache is coherent, not single-flight. The concrete consequence is duplicate expensive work under concurrent misses. Instead add your own synchronization if duplicate execution is harmful.
+- NEVER put `lru_cache` on instance methods with many live objects because it is easy and benchmarks well in isolation. The consequence is that `self` stays strongly referenced until eviction, which can look like a memory leak. Instead use `cached_property`, a module-level helper, or explicit instance memo fields.
+- NEVER use `cached_property` on space-sensitive fleets of objects because it silently breaks key-sharing dict savings and cannot work on slot-only classes without `__dict__`. Instead use `property` over `lru_cache()` or a dedicated slot-backed cache field.
+- NEVER override one builtin method and assume the type is now instrumented, because sibling methods may bypass your hook. Instead prefer composition or `UserDict`, or audit and override the whole mutating surface.
+- NEVER use `total_ordering` in a comparison hotspot because it is convenient. The consequence is extra Python call frames and slower rich comparison dispatch. Instead hand-write the full ordering set when profiling says comparisons matter.
+- NEVER use `namedtuple(rename=True)` on external schemas because it feels forgiving. The consequence is silent field renames like `_1` and `_3`, which hide upstream data-contract breaks. Instead validate field names and fail fast.
 
-## Cooperative Inheritance (Hettinger's super() Protocol)
+## When Stuck
 
-Before designing a class hierarchy, ask: "Will anyone compose this via multiple inheritance?" If yes, follow these three rules from Hettinger's "super() considered super":
-
-1. **Every overriding method must call `super()`** — even if your immediate base is `object`. Breaking the chain silently drops all downstream mixins.
-2. **Use `**kwargs` to forward unknown arguments** — the MRO can insert classes you didn't anticipate. Rigid positional signatures break when composed.
-3. **Create a root class that stops the chain** — a `Root.draw()` that doesn't call `super().draw()` prevents `AttributeError` when `object` is reached.
-
-To incorporate a non-cooperative third-party class, write an adapter that translates between the cooperative `**kwargs` protocol and the rigid class.
-
-## Hettinger's Refactoring Heuristic
-
-From "The Mental Game of Python":
-- **Don't write `def` first.** Write the operation inline 2-3 times. Let the pattern emerge, *then* extract a function. Premature abstraction creates the wrong abstraction.
-- **Chunk aggressively.** If a line has >7 symbols, alias sub-expressions into named variables. `uniform(50, 250)` beats `50 + random() * 200` — same result, half the cognitive load.
-- **Let inheritance discover itself.** Build two concrete classes independently. The shared base class becomes obvious only after you see the duplication. Planning the hierarchy upfront yields unused methods and missing ones.
-
-## Reference Loading
-
-**For code examples and patterns**: READ `references/philosophy.md` when you need specific before/after code transformations or stdlib usage examples.
-
-**Do NOT load** `references/philosophy.md` if you only need the decision trees above — they are self-contained.
+- If the refactor makes iterator ownership ambiguous, materialize once and document the boundary.
+- If cache tuning is guesswork, instrument with `cache_info()` before changing `maxsize`.
+- If sorting rules read like a mini-language, split them into stable passes or named helper keys.
+- If the MRO story takes longer than a comment to explain, prefer composition.

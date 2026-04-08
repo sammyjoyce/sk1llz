@@ -1,359 +1,125 @@
 ---
 name: jane-street-functional-trading
-description: Build trading systems in the style of Jane Street, the elite market maker known for functional programming and intellectual rigor. Emphasizes OCaml, correctness by construction, real-time systems, and principled risk management. Use when building market making systems, pricing engines, or mission-critical financial software.
-tags: ocaml, functional, trading, market-making, finance, type-safety, correctness, low-latency, quantitative
+description: Design or review trading systems in a Jane Street style: atomic risk boundaries, replay-first architecture, determinism before headline speed, and OCaml/typed-functional techniques only where they buy real safety or latency. Use when building or debugging market making, pricing, market-data, exchange, or risk infrastructure, especially when users mention OCaml, order books, inventory limits, replay, jitter, queue growth, zero-allocation hot paths, or microsecond latency.
+tags: ocaml, trading, market-making, exchange, latency, determinism, replay, risk, queueing, concurrency
 ---
 
-# Jane Street Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌‌‌‌​‍​​‌‌​‌‌‌‍‌‌‌‌‌‌​​‍‌​‌‌​​‌‌‍​​​​‌​‌​‍‌‌​​‌‌‌​⁠‍⁠
+# Jane Street Functional Trading
 
-## Overview
+This skill is for systems where a few microseconds of slop changes quotes, queue position, or risk exposure.
 
-Jane Street is a quantitative trading firm and market maker that trades ~$17 billion daily across equities, bonds, options, and ETFs. Famous for using OCaml (a functional programming language) for nearly all trading infrastructure, they prioritize correctness, expressiveness, and the ability to reason about code.
+Load order:
+- This skill is intentionally self-contained; do not load extra Jane Street notes for routine design or review work.
+- Before changing a hot path, read the project's current benchmark, trace, or queue-growth evidence first.
+- Before changing risk or matching logic, read the exact code that defines the risk boundary and recovery/replay path.
 
-## Core Philosophy
+## Operating Stance
 
-> "We use OCaml because when you're trading billions of dollars, you want to be able to reason about your code."
+- Optimize for deterministic behavior before absolute peak speed. A system that is 1ns slower but loses a tail mode can be the better trading system.
+- Spend low-level complexity only on the tiny fraction of code that sits on the critical path. Jane Street-style systems keep most code high-level and typed, then quarantine the ugly zero-allocation code where queue math proves it is necessary.
+- Treat performance as a distribution and a queue-growth curve, not a single number. Temporary allocation can move the median by wrecking cache locality even when GC pauses look rare.
+- Favor architectures whose state can be rebuilt quickly from a sequenced log. Once recovery takes longer than about 30-60 seconds, teams start adding state-transfer shortcuts and the system gets brittle.
+- Do not optimize a symbol or service in isolation if the real risk boundary is cross-instrument. ETF and factor overlap often make "parallelize by symbol" the wrong decomposition.
 
-> "The type system is your first line of defense. If it compiles, it's probably correct."
+## Before You Design
 
-> "Make illegal states unrepresentable."
+Before you parallelize matching or risk logic, ask yourself:
+- Is the real atomic boundary a symbol, a venue, a portfolio, or an entire correlated market slice?
+- What risk limit must be enforced in one indivisible step?
+- If I shard this, what exposure becomes temporarily invisible?
 
-Jane Street believes that in high-stakes systems, the cost of bugs is astronomical. Functional programming, strong typing, and immutability dramatically reduce error rates compared to imperative approaches.
+Before you flatten a hot loop, ask yourself:
+- What is the per-message budget during the worst burst, not the average minute?
+- Does backlog stay bounded if processing time drifts from sub-microsecond to several microseconds?
+- Is the problem GC pauses, cache churn from short-lived objects, bad speculation, interrupt noise, or cross-core coordination?
 
-## Design Principles
+Before you add concurrency, ask yourself:
+- What is the read/write ratio?
+- How long is the synchronized section?
+- Do I need linearizability, read-your-own-writes, or merely eventual consistency?
+- Can readers tolerate stale data, and if so for how long?
 
-1. **Correctness by Construction**: Design types so invalid states cannot be represented.
+Before you trust a benchmark, ask yourself:
+- Am I on bare metal or hiding behind VM jitter?
+- Did turbo, interrupts, scheduler ticks, or noisy neighbors dominate the trace?
+- Did I measure only medians when the actual loss comes from tails and queue position?
 
-2. **Immutability by Default**: Mutable state is explicit and contained.
+Before you move OCaml work across threads or processes, ask yourself:
+- Is the value actually portable, or is a closure smuggling mutable capability across the boundary?
+- Am I sharing data, or sharing the ability to mutate data?
 
-3. **Types as Documentation**: The type signature should tell you what a function does.
+## Decision Rules
 
-4. **Explicit Effects**: Side effects are visible in the type system.
+- If atomic risk must span overlapping instruments, prefer a single sequencer or a central risk gate over symbol-level parallelism.
+- If peak-feed queue growth is the failure mode, first remove allocation and coordination from the critical loop before touching fancy algorithms.
+- If reads vastly outnumber writes and stale reads are acceptable, use reader-optimized structures only after proving the writer cost and semantics are acceptable.
+- If writes are frequent, or if readers must see a single coherent truth, prefer a serial owner or a plain mutex over clever reader-heavy primitives.
+- If the OCaml hot path still allocates after flattening data flow, use flatter layouts, stack allocation, or preallocation only if the compiler/runtime supports them cleanly; treat FFI-managed pools as the last resort.
+- If tails remain after code cleanup, work outward: bare metal, CPU isolation, timer-tick removal, frequency policy, speculation hints, then hardware.
 
-5. **Composition Over Inheritance**: Build complex systems from simple, composable parts.
+## Practitioner Heuristics
 
-## When Building Trading Systems
+- In market-data paths, "fast enough" can be shockingly fast. Jane Street engineers have described cases where roughly 750ns per message kept queues tame near the close, while pushing into multi-microsecond handling caused backlog to explode.
+- Market data can arrive on the order of gigabytes per second. Ten microseconds of staleness is already enough to make bad trades in some strategies.
+- Reader-writer locks are often a trap in short hot loops. Each reader still writes shared metadata, so coherence traffic can dominate the work.
+- A single cache-line transfer between cores is on the order of tens of nanoseconds; two transfers to acquire and release a read lock can burn most of a tiny latency budget before useful work starts.
+- False sharing can erase an otherwise elegant design. One missing 64-byte alignment on per-thread counters can create order-of-magnitude slowdowns.
+- Lock-free does not mean contention-free. If ownership of a hot cache line bounces, the CPU still punishes you.
+- In spin loops, bad speculation above roughly 1% is already a red flag. A pause instruction or other speculation barrier can be worth more than another data-structure rewrite.
+- Turbo boost can improve raw throughput while worsening determinism. Disable it when tighter tail control matters more than the highest single-sample speed.
+- VM benchmarks lie for tail-sensitive systems. Bare metal can remove hundreds of nanoseconds of median latency before you touch application code.
 
-### Always
+## Anti-Patterns
 
-- Make illegal states unrepresentable through types
-- Use immutable data structures by default
-- Make side effects explicit (IO, mutable state, time)
-- Write property-based tests for invariants
-- Use sum types (variants) for state machines
-- Handle all error cases explicitly (no exceptions for control flow)
+- NEVER shard matching or pre-trade risk "by symbol" because it parallelizes beautifully on a whiteboard. Correlated products, especially ETFs and shared factors, create exposures that no shard can see atomically. Instead shard only after proving the risk boundary is truly local, or keep one sequencer for that risk domain.
+- NEVER chase median latency alone because the seductive story is "GC only hurts the tail." Short-lived allocation also destroys cache locality and can move the median enough to destabilize queue growth. Instead inspect allocation, cache behavior, and queue buildup together.
+- NEVER put Deferred-heavy, closure-rich abstractions directly on the packet path because the code looks composable and civilized. Closure allocation, scheduler boundaries, and heap churn destroy determinism long before they show up as dramatic pauses. Instead keep the critical loop synchronous, flat, and preallocated, and move async boundaries to the edges.
+- NEVER switch to a reader-writer lock just because the workload is read-heavy on paper. In short sections, readers contend with each other through shared lock metadata and can scale worse than a mutex. Instead choose primitives from read/write ratio, critical-section length, and consistency needs.
+- NEVER call a design "fixed" because it is lock-free. The seductive mistake is ignoring cache-coherence traffic, false sharing, and ownership movement. Instead reason about which cache lines move between cores and align or partition data so readers stay local.
+- NEVER copy zero-allocation style across the whole codebase because it feels principled. That turns ordinary code into hard-to-change code while buying nothing off the hot path. Instead quarantine the ugly low-level style to the loops whose queue budget demands it.
+- NEVER trust aggregate observability alone for pathological latency because percentiles and averages hide when the butterfly actually appears. Instead combine static instrumentation with time-based traces triggered by events that exceed the real trading budget.
+- NEVER share arbitrary closures across threads because the closure itself looks immutable. A closure can smuggle access to mutable thread-local state and break race reasoning. Instead pass only portable data and functions, and keep shared mutation behind typed ownership or lock APIs.
+- NEVER add a fast recovery shortcut before proving replay is too slow. State transfer looks attractive, but it usually creates two recovery semantics to keep consistent. Instead first see whether faster components let you rebuild from the log inside the operational window.
 
-### Never
+## How To Think About Specific Tasks
 
-- Use null/None where you can use Option types
-- Allow implicit type coercion
-- Share mutable state across components
-- Ignore compiler warnings
-- Use inheritance when composition works
-- Leave error cases unhandled
+For pricing and risk code:
+- Do not let live clocks, session calendars, or venue connectivity leak into the pricing kernel; they make replay disagree with production exactly when you need post-trade forensics.
+- Encode the boundaries that actually break desks in practice: session state, marketability, inventory regime, stale-vs-live data, and recovery mode.
+- Use types for structural invariants that should never vary mid-flight, and runtime guards for facts that can change between packets.
+- If a model is numerically delicate, design the debugging path before the model rewrite; silent wrong answers are worse than loud failures in trading code.
 
-### Prefer
+For market-data handlers:
+- Budget for the burst, not the average feed, because the economic loss is usually stale-action error rather than outright downtime.
+- Measure queue depth and time-in-queue, not only handler duration; handlers can look "fast" while the system is already quoting off buffered data.
+- If a loop spins, inspect speculation, interrupts, scheduler ticks, and CPU policy before redesigning the data structure.
+- Prefer dropping optional enrichment over delaying the next market-data decision.
 
-- Pattern matching over if/else chains
-- Result types over exceptions
-- Pipelines over nested function calls
-- Record types over positional arguments
-- Modules for abstraction boundaries
-- Property-based tests over example-based
+For exchange or matching engines:
+- Deterministic single-threaded components are often the right primitive because they simplify fairness, replay, and replication.
+- End-to-end latency is not always the primary metric; sometimes single-digit microsecond components matter because they let the overall replicated architecture stay simple and robust.
+- If an edge connection allows only one unacknowledged transaction with a tiny socket buffer, throughput becomes a direct function of component latency, so design pushback deliberately.
 
-## Code Patterns
+For parallel OCaml work:
+- Treat portability, contention, and aliasing as first-class design questions.
+- Mutable state is not the only hazard; a function that captures mutable state is also a capability leak.
+- Prefer process boundaries or narrowly typed shared-memory APIs when you need guarantees you can explain to a postmortem reviewer.
 
-### Make Illegal States Unrepresentable
+## Failure-Handling Playbook
 
-```ocaml
-(* BAD: Invalid states are possible *)
-type order_bad = {
-  order_id: string;
-  status: string;  (* "pending", "filled", "cancelled"... or typo? *)
-  fill_price: float option;
-  fill_quantity: int option;
-  cancel_reason: string option;
-}
+- If the hot path is slow and allocation is visible, flatten representations, preallocate, and remove scheduler abstractions from the loop.
+- If the hot path is slow and allocation is not visible, inspect cache misses, cross-core traffic, speculation, and interrupts.
+- If profilers say "mostly spinning" and give you nothing actionable, switch to time-based control-flow tracing with an "interesting event" threshold just above the real latency budget.
+- If a concurrent structure benchmarks well but regresses under scale, suspect false sharing before inventing a new theory.
+- If replay is too slow, simplify the event stream or speed up component handlers before adding a second recovery mechanism.
+- If a design is fast but hard to reason about, push complexity outward until the critical path is the only ugly code left.
 
-(* GOOD: Type system enforces valid states *)
-type order_status =
-  | Pending of { submitted_at: Time.t }
-  | PartiallyFilled of { 
-      filled_qty: int; 
-      remaining_qty: int; 
-      avg_price: Price.t 
-    }
-  | Filled of { 
-      filled_qty: int; 
-      avg_price: Price.t; 
-      filled_at: Time.t 
-    }
-  | Cancelled of { 
-      reason: cancel_reason; 
-      cancelled_at: Time.t 
-    }
-  | Rejected of { 
-      reason: reject_reason 
-    }
+## What Good Output Looks Like
 
-type order = {
-  order_id: Order_id.t;
-  symbol: Symbol.t;
-  side: Side.t;
-  quantity: int;
-  price: Price.t;
-  status: order_status;
-}
-
-(* Now it's impossible to have a Cancelled order with a fill_price *)
-```
-
-### Explicit Error Handling with Result Types
-
-```ocaml
-(* Jane Street's approach: errors in the type system, not exceptions *)
-
-type 'a order_result = ('a, order_error) Result.t
-
-and order_error =
-  | Insufficient_buying_power of { required: Money.t; available: Money.t }
-  | Position_limit_exceeded of { limit: int; requested: int }
-  | Market_closed
-  | Invalid_price of { price: Price.t; reason: string }
-  | Risk_check_failed of risk_violation
-
-let submit_order order ~account ~risk_limits : Order_id.t order_result =
-  let open Result.Let_syntax in
-  
-  (* Each check returns Result.t, errors propagate automatically *)
-  let%bind () = check_buying_power account order in
-  let%bind () = check_position_limits account order risk_limits in
-  let%bind () = check_market_hours order.symbol in
-  let%bind () = check_price_reasonableness order in
-  let%bind () = check_risk_limits order risk_limits in
-  
-  (* All checks passed, submit *)
-  let order_id = Exchange.submit order in
-  Ok order_id
-
-(* Caller MUST handle all error cases - compiler enforces it *)
-let handle_submission order =
-  match submit_order order ~account ~risk_limits with
-  | Ok order_id -> 
-      Log.info "Order submitted" order_id
-  | Error (Insufficient_buying_power { required; available }) ->
-      Log.warn "Insufficient funds" required available
-  | Error (Position_limit_exceeded { limit; requested }) ->
-      Log.warn "Position limit" limit requested
-  | Error Market_closed ->
-      Log.info "Market closed, queuing for open"
-  | Error (Invalid_price { price; reason }) ->
-      Log.error "Invalid price" price reason
-  | Error (Risk_check_failed violation) ->
-      Risk_alerts.trigger violation
-```
-
-### Pricing Engine with Pure Functions
-
-```ocaml
-(* Jane Street's pricing: pure functions, easy to test and reason about *)
-
-module Black_scholes : sig
-  type inputs = {
-    spot: Price.t;
-    strike: Price.t;
-    time_to_expiry: float;  (* years *)
-    volatility: float;
-    risk_free_rate: float;
-    dividend_yield: float;
-  }
-
-  type greeks = {
-    delta: float;
-    gamma: float;
-    theta: float;
-    vega: float;
-    rho: float;
-  }
-
-  (* Pure function: same inputs always give same outputs *)
-  val price : inputs -> call_or_put:Side.t -> Price.t
-  val greeks : inputs -> call_or_put:Side.t -> greeks
-  val implied_vol : inputs -> market_price:Price.t -> call_or_put:Side.t -> float option
-end = struct
-  let cdf x = (* Normal CDF *) ...
-  let pdf x = (* Normal PDF *) ...
-
-  let d1 { spot; strike; time_to_expiry = t; volatility = σ; risk_free_rate = r; dividend_yield = q } =
-    let s = Price.to_float spot in
-    let k = Price.to_float strike in
-    (Float.log (s /. k) +. (r -. q +. σ *. σ /. 2.) *. t) /. (σ *. Float.sqrt t)
-
-  let d2 inputs =
-    d1 inputs -. inputs.volatility *. Float.sqrt inputs.time_to_expiry
-
-  let price inputs ~call_or_put =
-    let d1 = d1 inputs in
-    let d2 = d2 inputs in
-    let s = Price.to_float inputs.spot in
-    let k = Price.to_float inputs.strike in
-    let t = inputs.time_to_expiry in
-    let r = inputs.risk_free_rate in
-    let q = inputs.dividend_yield in
-    
-    let price = match call_or_put with
-      | Call -> 
-          s *. Float.exp (-.q *. t) *. cdf d1 
-          -. k *. Float.exp (-.r *. t) *. cdf d2
-      | Put -> 
-          k *. Float.exp (-.r *. t) *. cdf (-.d2) 
-          -. s *. Float.exp (-.q *. t) *. cdf (-.d1)
-    in
-    Price.of_float price
-end
-```
-
-### State Machine with Exhaustive Pattern Matching
-
-```ocaml
-(* Order lifecycle as explicit state machine *)
-
-type order_event =
-  | Ack of { exchange_order_id: string; acked_at: Time.t }
-  | Fill of { qty: int; price: Price.t; filled_at: Time.t }
-  | Partial_fill of { qty: int; price: Price.t; filled_at: Time.t }
-  | Cancel_ack of { cancelled_at: Time.t }
-  | Reject of { reason: string; rejected_at: Time.t }
-
-let apply_event (order : order) (event : order_event) : order =
-  (* Compiler warns if we don't handle all status × event combinations *)
-  match order.status, event with
-  
-  (* Pending state transitions *)
-  | Pending _, Ack { exchange_order_id; acked_at } ->
-      { order with status = Acknowledged { exchange_order_id; acked_at } }
-  | Pending _, Reject { reason; rejected_at } ->
-      { order with status = Rejected { reason; rejected_at } }
-  | Pending _, (Fill _ | Partial_fill _ | Cancel_ack _) ->
-      (* Invalid: can't fill before ack *)
-      Log.error "Invalid event for pending order";
-      order
-  
-  (* Acknowledged state transitions *)
-  | Acknowledged _, Fill { qty; price; filled_at } ->
-      { order with status = Filled { qty; avg_price = price; filled_at } }
-  | Acknowledged _, Partial_fill { qty; price; filled_at } ->
-      { order with status = PartiallyFilled { 
-          filled_qty = qty; 
-          remaining_qty = order.quantity - qty;
-          avg_price = price 
-        } 
-      }
-  | Acknowledged _, Cancel_ack { cancelled_at } ->
-      { order with status = Cancelled { reason = User_requested; cancelled_at } }
-  
-  (* Already terminal - no transitions *)
-  | (Filled _ | Cancelled _ | Rejected _), _ ->
-      Log.warn "Event received for terminal order";
-      order
-```
-
-### Real-Time Pricing Pipeline
-
-```ocaml
-(* Incremental computation for real-time pricing *)
-
-module Incremental = struct
-  (* Jane Street's Incremental library: recompute only what changed *)
-  
-  type 'a t  (* Incrementally computed value *)
-  
-  val map : 'a t -> f:('a -> 'b) -> 'b t
-  val map2 : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
-  val bind : 'a t -> f:('a -> 'b t) -> 'b t
-end
-
-let build_pricing_graph ~market_data ~positions =
-  let open Incremental.Let_syntax in
-  
-  (* When spot price changes, only recompute affected options *)
-  let%bind spot_prices = market_data.spots in
-  let%bind vol_surface = market_data.implied_vols in
-  let%bind positions = positions in
-  
-  (* Compute Greeks for each position *)
-  let position_greeks = 
-    List.map positions ~f:(fun pos ->
-      let%map spot = Map.find_exn spot_prices pos.underlying
-      and vol = Vol_surface.get vol_surface ~strike:pos.strike ~expiry:pos.expiry
-      in
-      let inputs = { spot; strike = pos.strike; volatility = vol; ... } in
-      { position = pos; greeks = Black_scholes.greeks inputs }
-    )
-  in
-  
-  (* Aggregate to portfolio level *)
-  let%map position_greeks = Incremental.all position_greeks in
-  aggregate_greeks position_greeks
-```
-
-### Property-Based Testing
-
-```ocaml
-(* Jane Street uses property-based testing extensively *)
-
-let%test_unit "order matching is fair" =
-  Quickcheck.test
-    (Quickcheck.Generator.tuple2
-      Order.quickcheck_generator
-      Order.quickcheck_generator)
-    ~f:(fun (order1, order2) ->
-      (* Property: if order1 arrived before order2 at same price,
-         order1 should fill first *)
-      if Price.equal order1.price order2.price
-         && Time.( < ) order1.timestamp order2.timestamp
-      then begin
-        let fills = Matching_engine.match_orders [order1; order2] in
-        assert (List.hd fills |> Option.map ~f:(fun f -> f.order_id) 
-                = Some order1.order_id)
-      end
-    )
-
-let%test_unit "Greeks are consistent" =
-  Quickcheck.test Black_scholes.Inputs.quickcheck_generator ~f:(fun inputs ->
-    let call_price = Black_scholes.price inputs ~call_or_put:Call in
-    let put_price = Black_scholes.price inputs ~call_or_put:Put in
-    
-    (* Put-call parity must hold *)
-    let parity_diff = 
-      Float.abs (
-        Price.to_float call_price -. Price.to_float put_price
-        -. (Price.to_float inputs.spot -. Price.to_float inputs.strike 
-            *. Float.exp (-.inputs.risk_free_rate *. inputs.time_to_expiry))
-      )
-    in
-    assert (parity_diff < 0.0001)
-  )
-```
-
-## Mental Model
-
-Jane Street approaches trading systems by asking:
-
-1. **What are the states?** Model them as sum types
-2. **What transitions are valid?** Encode in the type system
-3. **What can go wrong?** Return Result types, not exceptions
-4. **Is it testable?** Pure functions, property-based tests
-5. **Can I reason about it?** If the code is confusing, redesign it
-
-## Signature Jane Street Moves
-
-- OCaml for trading systems
-- Make illegal states unrepresentable
-- Sum types for state machines
-- Result types over exceptions
-- Pure functions for calculations
-- Incremental computation for real-time
-- Property-based testing
-- Module signatures for abstraction
-- Immutable by default
+When you use this skill, produce:
+- The true risk boundary.
+- The replay and recovery story.
+- The hot-path allocation policy.
+- The coordination strategy and why its semantics fit the workload.
+- The measurement plan, including which tail event counts as economically bad.
+- The exact place where you intentionally spend low-level complexity, and why it is quarantined there.

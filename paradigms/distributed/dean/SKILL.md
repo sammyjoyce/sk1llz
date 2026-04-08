@@ -1,392 +1,85 @@
 ---
 name: dean-large-scale-systems
-description: Design distributed systems in the style of Jeff Dean, Google Senior Fellow behind MapReduce, BigTable, Spanner, and TensorFlow. Emphasizes practical large-scale system design, performance optimization, and building infrastructure that serves billions. Use when designing systems that must scale massively.
-tags: mapreduce, bigtable, spanner, distributed, scale, fault-tolerance, infrastructure, google, data-processing, parallel
+description: Jeff Dean style for interactive, warehouse-scale distributed systems where fanout, skew, and shared-cluster interference dominate. Use when designing or debugging multi-tenant services, large fanout RPC graphs, data platforms, storage schemas, sharding strategies, tail-latency mitigation, straggler handling, or load-balancing at Google-like scale. Triggers: p99, hedge requests, tail latency, stragglers, Bigtable, MapReduce, hot shards, selective replication, noisy neighbors.
 ---
 
-# Jeff Dean Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​‌​​​​‍​‌‌‌‌‌​‌‍​​‌‌‌​​‌‍‌‌​‌​‌‌‌‍​​​​‌​‌​‍‌‌​​​‌‌‌⁠‍⁠
+# Dean Large-Scale Systems
 
-## Overview
+This skill is for systems that are already "working" but start failing once fanout, skew, and shared-cluster interference show up. It is not a generic distributed-systems primer.
 
-Jeff Dean is a Google Senior Fellow who has architected some of the most influential distributed systems: MapReduce, BigTable, Spanner, TensorFlow, and more. He approaches problems at a scale most engineers never encounter, yet his solutions are elegant and practical.
+## Operating Stance
 
-## Core Philosophy
+- Treat average latency as a decoy. If one backend has a 1% chance of a 1 second hiccup, a request that touches 100 such backends has about a 63% chance of crossing 1 second.
+- Separate fault tolerance from variability tolerance. Faults happen on seconds-to-hours loops. Latency hiccups happen on millisecond loops thousands of times per second. Reuse redundancy, but not the same controller.
+- Assume the scarce resource is usually not CPU. It is often queueing headroom, metadata locality, network bisection, or human debuggability.
+- Prefer simple user-visible abstractions with aggressive internal specialization. Dean systems hide machinery; they do not export it.
 
-> "Design for 10x growth, but plan to rewrite before 100x."
+## Before You Change The Design, Ask Yourself
 
-> "Latency at the 99th percentile matters more than the average."
+- What is the smallest unit I can move: request, partition, replica, or entire machine? If the answer is "machine," rebalancing will be too coarse.
+- Which percentile actually misses the product SLO, and what leaf budget does that imply after fanout?
+- Which work is safe to duplicate, abandon, delay, or mark partial without corrupting correctness?
+- Is the pain caused by skew, queueing, metadata indirection, or a noisy shared cluster? Dean-style fixes differ by failure shape.
+- If the control plane or metadata path wedges, does the data path keep serving, or does everything stall waiting for coordination?
 
-> "Numbers every programmer should know."
+## Decision Guide
 
-Dean combines deep systems knowledge with practical engineering. He knows the numbers and designs systems that work at planet scale.
+### If the request fans out to many backends
 
-## Design Principles
+- Budget from the tail backward. Service-level latency is dominated by the slowest leaf, not the typical one.
+- Use differentiated service classes. User-facing RPCs should not queue behind compaction, scans, or batch work.
+- Break large requests into smaller queueable units when they create head-of-line blocking. Small requests can slip through; giant ones create convoys.
+- Use canary or probe requests when slowness is replica-specific and data-independent. Do not mistake a key-specific hotspot for a sick replica.
 
-1. **Design for Scale**: Build for 10x, rewrite before 100x.
+### If replicas exist and the tail still dominates
 
-2. **Tail Latency Matters**: Optimize the 99th percentile.
+- Hedge late, not immediately. Bigtable's in-memory lookup example improved the 99.9th percentile from 994 ms to 50 ms by sending a backup after 10 ms, with under 5% extra requests.
+- Do not confuse "less extra load" with "better latency." The same experiment with a 50 ms hedge kept extra load below 1% but left a worse tail than the 10 ms hedge.
+- Prefer tied requests or cross-server cancellation over naive duplication. Dean-style hedging works because the losing replica stops doing work.
+- For disk-backed reads, a 2 ms delayed backup with cross-server cancellation cut the 99.9th percentile from 98 ms to 51 ms on an idle cluster and from 159 ms to 108 ms under Terasort, at about 1% extra disk reads.
 
-3. **Simple Abstractions**: MapReduce, BigTable—simple interfaces, complex implementation.
+### If the cluster is shared and "healthy" machines still go slow
 
-4. **Measure Everything**: You can't optimize what you don't measure.
+- Do not randomize periodic maintenance in a high-fanout fleet. Randomization guarantees that some machine is almost always in a bad state. One synchronized blip is often better than a permanent low-grade tail.
+- Use latency-induced probation. When a machine turns slow, temporarily remove it from the hot path, keep a shadow stream of probes, and only return it after latency stays clean long enough.
+- Balance on latency signals and requests-in-flight, not CPU alone. Queueing, lock contention, or antagonist load can destroy p99 while utilization looks fine.
 
-## Numbers Every Programmer Should Know
+### If hotspots and recovery dominate
 
-```
-L1 cache reference:                    0.5 ns
-Branch mispredict:                     5 ns
-L2 cache reference:                    7 ns
-Mutex lock/unlock:                     25 ns
-Main memory reference:                 100 ns
-Compress 1KB with Zippy:               3,000 ns
-Send 1KB over 1 Gbps network:          10,000 ns
-Read 4KB randomly from SSD:            150,000 ns
-Read 1MB sequentially from memory:     250,000 ns
-Round trip within datacenter:          500,000 ns
-Read 1MB sequentially from SSD:        1,000,000 ns
-Disk seek:                             10,000,000 ns
-Read 1MB sequentially from disk:       20,000,000 ns
-Send packet CA->Netherlands->CA:       150,000,000 ns
-```
+- Use more partitions than machines. Dean's serving/storage pattern is often 10-100 partitions per machine so load can move in few-percent increments.
+- Keep movement units small enough that many machines can absorb a failure in parallel. Bigtable used tablets around 100-200 MB by default; MapReduce commonly used 16-64 MB tasks.
+- Replicate selectively, not uniformly. Hot languages, hot geographies, and hot keys deserve extra replicas before the rest of the fleet does.
+- Encode the read pattern into the key. Bigtable's reverse-hostname row keys are a classic example: they trade lexical convenience for locality that matches real scans.
 
-## When Writing Code
+### If the workload is batch or storage-heavy
 
-### Always
+- Assume the last few workers determine wall-clock completion. MapReduce backup tasks typically cost only a few percent more resources yet made one large sort 44% faster than running without them.
+- Re-execution is the preferred failure primitive only when outputs are atomic and idempotent.
+- Treat network bandwidth as scarce until measured otherwise. Favor locality and shrink intermediate data early with partial aggregation.
+- Be suspicious of "small random reads" from disk-backed LSM storage. Bigtable measured only about 1200 random 1 KB reads/sec because each miss pulled a 64 KB SSTable block and saturated CPU.
 
-- Know the numbers for your target platform
-- Design for partial failure
-- Add instrumentation from day one
-- Plan for 10x growth
-- Optimize for the common case
-- Use tail-tolerant techniques
+## Anti-Patterns
 
-### Never
+- NEVER optimize the mean and declare success, because fanout turns rare backend hiccups into common user-visible failures. Instead set per-leaf p99 or p99.9 budgets and design from the slowest path backward.
+- NEVER send naive duplicate requests everywhere, because the seductive "easy fix" doubles expensive work exactly when the system is already distressed. Instead hedge after a measured delay and cancel the losing copy remotely.
+- NEVER randomize background daemons in a large fanout service, because local smoothing becomes a globally continuous slow set. Instead synchronize the disruption or gate it behind explicit load checks.
+- NEVER size shards, tablets, or tasks at machine granularity, because coarse units make balancing and recovery lumpy. Instead choose units small enough to move load in small increments.
+- NEVER add a general feature before you have workload evidence. Bigtable delayed general distributed transactions because real users mostly needed single-row atomicity plus specialized index maintenance, not a universal transaction layer.
+- NEVER build a protocol on obscure coordination-service behavior, because the clever path creates corner cases no other workload exercises. Instead depend on the most widely used primitives in the control plane.
+- NEVER monitor only the storage or serving tier, because many real bottlenecks live in clients, metadata lookups, RPC stacks, or lock paths. Instead sample end-to-end traces that include control-plane hops.
+- NEVER assume failures are clean fail-stop events, because real fleets produce hung machines, clock skew, asymmetric partitions, memory corruption, quota exhaustion, and dependency bugs. Instead make protocols tolerate ugly failure surfaces and unexpected error codes.
 
-- Ignore tail latency
-- Design without measuring
-- Assume networks are reliable
-- Build without considering failure modes
-- Optimize prematurely, but don't ignore performance
+## Edge Cases And Fallbacks
 
-### Prefer
+- If hedging makes overload worse, first lower backup priority, then lengthen the hedge delay, then restrict hedges to idempotent reads. Do not disable the mechanism globally until you know whether the problem is threshold, cancellation, or request class.
+- If metadata lookups become part of the latency budget, cache aggressively on the client and prefetch adjacent metadata. Bigtable notes that stale location caches can expand a lookup to as many as six round-trips.
+- If a coordination service becomes a hidden availability tax, treat it as production traffic, not admin plumbing. Bigtable measured average unavailability from Chubby issues at 0.0047% of server-hours, with the worst cluster at 0.0326%; tiny control-plane outages still show up at scale.
+- If partial answers are acceptable, dynamically cut off slow subtrees and mark the result as tainted in caches. Never let incomplete data be cached as authoritative.
+- If multiple teams share the same table or cluster, add quotas early. Bigtable learned that shared per-user tables accumulate column families and neighbor effects faster than governance catches them.
+- If you are choosing between a smart generic mechanism and a boring specialized one, pick the specialized one unless you can name the production workload that needs the extra generality.
 
-- Batching over individual requests
-- Parallel fanout with hedged requests
-- Simple APIs over complex ones
-- Idempotent operations
-- Graceful degradation
+## What This Skill Is For
 
-## Code Patterns
-
-### MapReduce Pattern
-
-```python
-# MapReduce: simple abstraction for parallel processing
-
-from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
-
-def map_reduce(data, mapper, reducer, num_workers=4):
-    """
-    MapReduce framework:
-    1. Map: transform each input to (key, value) pairs
-    2. Shuffle: group by key
-    3. Reduce: aggregate values for each key
-    """
-    
-    # Map phase: parallel
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        map_results = list(executor.map(mapper, data))
-    
-    # Shuffle phase: group by key
-    shuffled = defaultdict(list)
-    for result in map_results:
-        for key, value in result:
-            shuffled[key].append(value)
-    
-    # Reduce phase: parallel
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        reduce_input = [(key, values) for key, values in shuffled.items()]
-        final_results = list(executor.map(
-            lambda kv: (kv[0], reducer(kv[0], kv[1])), 
-            reduce_input
-        ))
-    
-    return dict(final_results)
-
-
-# Example: word count
-def word_count_mapper(line):
-    return [(word.lower(), 1) for word in line.split()]
-
-def word_count_reducer(word, counts):
-    return sum(counts)
-
-# Usage
-lines = ["Hello World", "Hello MapReduce", "World of Distributed Systems"]
-result = map_reduce(lines, word_count_mapper, word_count_reducer)
-# {'hello': 2, 'world': 2, 'mapreduce': 1, 'of': 1, 'distributed': 1, 'systems': 1}
-```
-
-### Tail-Tolerant Techniques
-
-```python
-import asyncio
-import random
-
-async def hedged_request(replicas, timeout_ms=10):
-    """
-    Hedged requests: send to multiple replicas, use first response.
-    Dramatically reduces tail latency.
-    """
-    async def make_request(replica):
-        latency = random.uniform(1, 100)  # Simulated
-        await asyncio.sleep(latency / 1000)
-        return f"Response from {replica}"
-    
-    # Start with one request
-    tasks = [asyncio.create_task(make_request(replicas[0]))]
-    
-    try:
-        # Wait briefly for first response
-        done, pending = await asyncio.wait(
-            tasks, 
-            timeout=timeout_ms/1000,
-            return_when=asyncio.FIRST_COMPLETED
-        )
-        
-        if done:
-            return done.pop().result()
-        
-        # Hedge: send to backup replicas
-        for replica in replicas[1:]:
-            tasks.append(asyncio.create_task(make_request(replica)))
-        
-        done, pending = await asyncio.wait(
-            tasks,
-            return_when=asyncio.FIRST_COMPLETED
-        )
-        
-        # Cancel pending requests
-        for task in pending:
-            task.cancel()
-        
-        return done.pop().result()
-        
-    except Exception as e:
-        return None
-
-
-async def request_with_backup(primary, backup, timeout_ms=50):
-    """
-    Backup requests: if primary is slow, try backup.
-    """
-    try:
-        return await asyncio.wait_for(
-            fetch(primary), 
-            timeout=timeout_ms/1000
-        )
-    except asyncio.TimeoutError:
-        return await fetch(backup)
-```
-
-### BigTable-Style Design
-
-```python
-# BigTable: sorted string table with column families
-
-class SSTable:
-    """Immutable sorted string table"""
-    
-    def __init__(self, data):
-        # Data is sorted by key
-        self.data = sorted(data.items())
-        self.index = self._build_index()
-    
-    def _build_index(self):
-        """Sparse index: every Nth key"""
-        return {k: i for i, (k, _) in enumerate(self.data) if i % 100 == 0}
-    
-    def get(self, key):
-        """Binary search for key"""
-        lo, hi = 0, len(self.data)
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if self.data[mid][0] < key:
-                lo = mid + 1
-            else:
-                hi = mid
-        
-        if lo < len(self.data) and self.data[lo][0] == key:
-            return self.data[lo][1]
-        return None
-
-
-class LSMTree:
-    """Log-Structured Merge Tree: write-optimized storage"""
-    
-    def __init__(self):
-        self.memtable = {}          # In-memory writes
-        self.sstables = []          # Immutable on-disk tables
-        self.memtable_limit = 1000
-    
-    def put(self, key, value):
-        """Write to memtable (fast!)"""
-        self.memtable[key] = value
-        
-        if len(self.memtable) >= self.memtable_limit:
-            self._flush()
-    
-    def _flush(self):
-        """Flush memtable to disk as SSTable"""
-        sstable = SSTable(self.memtable)
-        self.sstables.append(sstable)
-        self.memtable = {}
-        
-        if len(self.sstables) > 4:
-            self._compact()
-    
-    def _compact(self):
-        """Merge SSTables to reduce read amplification"""
-        merged = {}
-        for sstable in self.sstables:
-            for key, value in sstable.data:
-                merged[key] = value
-        
-        self.sstables = [SSTable(merged)]
-    
-    def get(self, key):
-        """Read: check memtable, then SSTables (newest first)"""
-        if key in self.memtable:
-            return self.memtable[key]
-        
-        for sstable in reversed(self.sstables):
-            value = sstable.get(key)
-            if value is not None:
-                return value
-        
-        return None
-```
-
-### Sharding and Consistent Hashing
-
-```python
-import hashlib
-from bisect import bisect_left
-
-class ConsistentHash:
-    """
-    Consistent hashing: minimal key movement when nodes change.
-    Used in distributed caches, databases, load balancers.
-    """
-    
-    def __init__(self, nodes, virtual_nodes=100):
-        self.virtual_nodes = virtual_nodes
-        self.ring = []
-        self.node_map = {}
-        
-        for node in nodes:
-            self.add_node(node)
-    
-    def _hash(self, key):
-        return int(hashlib.md5(key.encode()).hexdigest(), 16)
-    
-    def add_node(self, node):
-        """Add node with virtual nodes for better distribution"""
-        for i in range(self.virtual_nodes):
-            virtual_key = f"{node}:{i}"
-            hash_val = self._hash(virtual_key)
-            self.ring.append(hash_val)
-            self.node_map[hash_val] = node
-        
-        self.ring.sort()
-    
-    def remove_node(self, node):
-        """Remove node and its virtual nodes"""
-        for i in range(self.virtual_nodes):
-            virtual_key = f"{node}:{i}"
-            hash_val = self._hash(virtual_key)
-            self.ring.remove(hash_val)
-            del self.node_map[hash_val]
-    
-    def get_node(self, key):
-        """Get the node responsible for this key"""
-        if not self.ring:
-            return None
-        
-        hash_val = self._hash(key)
-        idx = bisect_left(self.ring, hash_val)
-        
-        if idx == len(self.ring):
-            idx = 0
-        
-        return self.node_map[self.ring[idx]]
-```
-
-### Instrumentation and Monitoring
-
-```python
-import time
-from collections import defaultdict
-import statistics
-
-class LatencyTracker:
-    """Track latency percentiles - essential for tail latency"""
-    
-    def __init__(self, window_size=1000):
-        self.window_size = window_size
-        self.samples = []
-    
-    def record(self, latency_ms):
-        self.samples.append(latency_ms)
-        if len(self.samples) > self.window_size:
-            self.samples.pop(0)
-    
-    def percentile(self, p):
-        if not self.samples:
-            return 0
-        sorted_samples = sorted(self.samples)
-        idx = int(len(sorted_samples) * p / 100)
-        return sorted_samples[min(idx, len(sorted_samples) - 1)]
-    
-    def stats(self):
-        return {
-            'p50': self.percentile(50),
-            'p90': self.percentile(90),
-            'p99': self.percentile(99),
-            'p999': self.percentile(99.9),
-            'mean': statistics.mean(self.samples) if self.samples else 0,
-        }
-
-
-# Usage: wrap all external calls
-tracker = LatencyTracker()
-
-def tracked_operation():
-    start = time.time()
-    try:
-        result = do_actual_work()
-        return result
-    finally:
-        latency_ms = (time.time() - start) * 1000
-        tracker.record(latency_ms)
-```
-
-## Mental Model
-
-Dean approaches system design by asking:
-
-1. **What are the numbers?** Latency, throughput, storage at each layer
-2. **What's the common case?** Optimize for it
-3. **What's the 99th percentile?** Tail latency kills user experience
-4. **How does this scale?** Design for 10x
-5. **How does this fail?** Plan for partial failure
-
-## Signature Dean Moves
-
-- Know the numbers (memory, disk, network latencies)
-- MapReduce for parallel processing
-- Hedged/backup requests for tail latency
-- LSM trees for write-heavy workloads
-- Consistent hashing for sharding
-- Extensive instrumentation from day one
+- Use it when the bug or design problem appears only after fanout, shared-cluster interference, hot partitions, metadata bottlenecks, or stragglers show up.
+- Do not use it for ordinary CRUD services, single-node tuning, or textbook consensus explanations.
+- Keep this skill at the architecture and control-loop level. Once the design choice is clear, switch to the relevant language or storage skill for implementation details.

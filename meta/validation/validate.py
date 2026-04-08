@@ -11,6 +11,32 @@ SKILLS_JSON_PATH = ROOT_DIR / "skills.json"
 SKILL_ROOTS = ["languages", "domains", "paradigms", "organizations"]
 REQUIRED_FIELDS = ["name", "description"]
 
+def parse_frontmatter(content):
+    if not content.startswith("---"):
+        raise ValueError("Missing YAML frontmatter start (---)")
+
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        raise ValueError("Invalid frontmatter format")
+
+    raw_frontmatter = parts[1]
+
+    try:
+        frontmatter = yaml.safe_load(raw_frontmatter) or {}
+    except yaml.YAMLError:
+        frontmatter = None
+
+    if isinstance(frontmatter, dict):
+        return frontmatter
+
+    frontmatter = {}
+    for line in raw_frontmatter.strip().splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        frontmatter[key.strip()] = value.strip()
+    return frontmatter
+
 def load_skills_json():
     with open(SKILLS_JSON_PATH, "r") as f:
         return json.load(f)
@@ -20,19 +46,12 @@ def validate_skill_file(file_path):
     try:
         with open(file_path, "r") as f:
             content = f.read()
-            
-        if not content.startswith("---"):
-            return ["Missing YAML frontmatter start (---)"]
-            
-        parts = content.split("---", 2)
-        if len(parts) < 3:
-            return ["Invalid frontmatter format"]
-            
+
         try:
-            frontmatter = yaml.safe_load(parts[1])
-        except yaml.YAMLError as e:
-            return [f"YAML parsing error: {e}"]
-            
+            frontmatter = parse_frontmatter(content)
+        except ValueError as e:
+            return [str(e)]
+
         for field in REQUIRED_FIELDS:
             if field not in frontmatter:
                 issues.append(f"Missing required field: {field}")

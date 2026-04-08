@@ -1,195 +1,181 @@
 ---
 name: hashimoto-cli-ux
 description: >-
-  Design CLI tools using Mitchell Hashimoto's patterns from Vagrant, Terraform,
-  Consul, Vault, Nomad, and Ghostty. Covers exit code semantics, stderr/stdout
-  discipline, the plan-then-apply pattern, config precedence layering,
-  TTY-aware output, and the doctor/path-help introspection commands. Use when
-  designing CLI argument structure, help text, error messages, output formatting,
-  subcommand hierarchies, machine-readable output, or interactive confirmation
-  flows. Trigger keywords: CLI design, command-line UX, terminal tool, flags,
-  subcommands, --help, --json, exit codes, error messages, progressive disclosure.
+  Design operator-grade CLIs in the Hashimoto style: human text is disposable,
+  machine output is a versioned contract, mutation workflows separate review
+  from execution, and automation never depends on terminal heuristics. Use when
+  designing or refactoring subcommands, help/version behavior, --json or event
+  streams, plan/apply or dry-run flows, flag-env-config precedence, config
+  introspection, CI-safe prompts, or full-screen terminal UX. Trigger keywords:
+  CLI design, command-line UX, exit codes, automation, machine-readable output,
+  plan apply, dry-run, stderr stdout, config precedence, help text, subcommands,
+  TTY, terminal flicker.
 ---
 
 # Hashimoto CLI UX
 
-Mitchell Hashimoto's CLIs (Terraform, Vault, Consul, Nomad, Ghostty) encode
-hard-won decisions most CLI designers learn only through years of user pain.
-This skill captures those decisions — not the basics Claude already knows.
+Hashimoto-style CLIs optimize for operators who alternate between three modes:
+interactive use, automation, and recovery under stress. The design target is
+not "pleasant flags." It is a command surface that stays trustworthy after
+users pipe it through wrappers, code review, CI, and incident response.
 
-## Thinking Framework
+## Load The Right Depth
 
-Before designing any CLI surface, ask yourself:
+- MANDATORY: Before implementing a Go CLI on `github.com/mitchellh/cli` or `github.com/hashicorp/cli`, read [`references/mitchellh-cli-go.md`](references/mitchellh-cli-go.md).
+- MANDATORY: Before designing CI behavior, wrappers, or exit-code semantics, read [`references/ci-automation-traps.md`](references/ci-automation-traps.md).
+- Do NOT load either reference for ordinary naming, help-copy, or subcommand grouping work. This file is enough for general CLI surface design.
 
-1. **Who calls this — a human or a script?** If both, you need dual output
-   modes from day one. Retrofitting `--json` after users parse your text
-   output with `awk` means you can never change the text format again.
-2. **What breaks if this command is wrong?** Read-only commands get simple
-   UX. State-mutating commands need the plan→confirm→apply pattern.
-3. **What will the user try first?** Design for the obvious attempt.
-   If someone types `vault` with no args, show a help summary — never
-   a raw error or empty output.
-4. **Can the user recover without Googling?** Every error must contain
-   the fix. "Permission denied" is useless. "Permission denied. Run
-   `vault login` or set VAULT_TOKEN" is Hashimoto-style.
+## Core Contract
 
-## Expert-Only Design Decisions
+1. Human text is not an integration surface. If a command will be consumed by
+   automation, give it a versioned machine contract from day one. Terraform's
+   machine-readable UI always starts with a `version` message and requires
+   consumers to ignore unknown fields in minor versions but reject unknown major
+   versions. Copy that rule, not just the `--json` flag.
+2. Pick the machine shape by execution shape. For bounded queries, emit one
+   JSON object with a `format_version`. For long-running or concurrent work,
+   emit NDJSON events, one object per line, with timestamps, stable message
+   types, and resource identities. If consumers need to correlate interleaved
+   work, plain text logs are already a broken design.
+3. `--json` means "non-interactive contract," not "same command plus prettier
+   output." Terraform makes `-json` imply `-input=false`. If machine mode can
+   still prompt, wrappers deadlock and the contract is false advertising.
+4. Exit codes are for control flow, not taxonomy. Default to `0=success,
+   1=failure`. Add a third code only for "successful but actionable difference"
+   such as Terraform's `-detailed-exitcode` plan result. Do not burn extra exit
+   codes on every error class unless shells genuinely branch on them.
+5. Separate speculative review from executable intent. Terraform's unsaved plan
+   is for review; the saved plan file is an opaque execution artifact and can
+   contain cleartext sensitive data. If approval matters, the review text and
+   the apply artifact cannot be the same thing.
+6. Make precedence boring: explicit flags > env-injected defaults > config file
+   > compiled default. If you support env-injected flags, insert them after the
+   subcommand so explicit CLI flags still win, as `TF_CLI_ARGS[_name]` does.
+7. Treat workflow state as first-class. Any env var that changes workspace,
+   target host, or data directory must remain stable from init through apply or
+   later commands will fail in ways that look unrelated. Terraform documents
+   this explicitly for `TF_DATA_DIR`, and warns that `TF_WORKSPACE` is safest in
+   non-interactive automation because humans forget it is set.
+8. Shells are lossy. When values are structured, typed, or secret, support
+   `@file` and stdin `-` input, not just `key=value` flags. Vault also exposes
+   `-field` output for a single value without the usual table wrapper or
+   trailing newline, which avoids forcing scripts to parse a table or trim
+   output before command substitution.
+9. Self-document the live system. `vault path-help`, `ghostty +show-config
+   --default --docs`, and `-output-curl-string` all reduce support load because
+   the running binary can explain its own routes, effective config, or wire
+   request without sending the user to a website first.
+10. Diagnostics need calibrated severity, not vibes. Vault's `operator
+    diagnose` uses `[success]`, `[warning]`, `[failure]`, bubbles child
+    severity upward, and publishes actual thresholds such as warn over 100ms and
+    fail over 30s for storage access. "This might be slow" is not operator UX.
+11. Full-screen CLIs do not get to ignore terminal performance anymore.
+    Ghostty's docs call out screen tearing and recommend Synchronized Output
+    plus partial redraws instead of clearing whole rows or the entire screen.
 
-### Exit Code Semantics (the Vault pattern)
-Most CLIs use 0/1. Vault splits errors into two exit codes:
-- **0** — success
-- **1** — local/client error (bad flags, validation, wrong arg count)
-- **2** — remote/server error (API failure, bad TLS, network timeout)
+## Before You Choose A Surface, Ask Yourself
 
-This distinction lets shell scripts differentiate "user typo" from
-"infrastructure down" — critical for CI/CD pipelines. Apply this whenever
-your CLI talks to a remote service.
+- Is this output a human convenience or a stable API? If the answer is "both,"
+  design the machine contract first and let the prose ride on top of it.
+- Is the user approving a proposal or invoking an artifact? Proposals can be
+  re-run; executable artifacts must be replayable, opaque, and treated as
+  sensitive.
+- Which hidden state must remain constant between commands? Directory, data
+  dir, workspace, auth context, plugin/provider versions, and included config
+  files are workflow state, not trivia.
+- Where will fidelity be lost first: shell quoting, wrapper scripts, logs,
+  environment propagation, or terminal redraw loops? That failure point should
+  shape the interface.
+- If this fails in CI at 2 a.m., does the error text name the exact flag, env
+  var, or introspection command that fixes the class of failure?
 
-### Stdout vs Stderr Discipline
-HashiCorp CLIs enforce strict stream separation:
-- **stdout** — only machine-parseable output (JSON, table data, tokens)
-- **stderr** — progress, spinners, warnings, prompts, log messages
+## Freedom Calibration
 
-This lets `vault kv get -format=json secret/app | jq .data` work even
-when the CLI prints warnings. NEVER mix human-readable decoration into
-stdout. When you see interleaved output in CI logs, this rule was broken.
+- High freedom: command naming, noun/verb grouping, synopsis wording, examples,
+  and how much next-step coaching you show to humans.
+- Low freedom: stdout vs stderr contract, prompt behavior in machine mode,
+  exit-code semantics, schema versioning, and secret-handling paths.
+- Medium freedom: confirmation flows, config layering, and introspection
+  commands. These vary by product, but the invariants above do not.
 
-### The Plan→Apply Pattern
-Terraform's most imitated design: separate "show what will happen" from
-"do the thing." Apply this to any destructive or complex mutation:
-```
-mytool changes plan          # preview, exit 0 if no changes, exit 2 if changes
-mytool changes apply         # execute, require --auto-approve or interactive confirm
-mytool changes plan -out=f   # serialize the plan for deterministic apply
-```
-The key insight: `plan` returns exit code 2 when changes exist, 0 when
-no-op. This lets CI conditionally run apply without parsing text output.
+## Decision Tree
 
-### Config Precedence Layering
-HashiCorp tools use a strict 4-layer precedence (highest wins):
-1. **CLI flags** (`-address=...`)
-2. **Environment variables** (`VAULT_ADDR`)
-3. **Config file** (`~/.vault`, project `.terraform.rc`)
-4. **Compiled defaults**
+- Need machine consumption?
+  - One-shot result: single JSON object with `format_version`.
+  - Long-running or concurrent work: NDJSON events; emit schema version first.
+- Need mutation?
+  - Low-blast-radius change: one command plus `--dry-run` and `-y`.
+  - Review-required or irreversible change: separate preview from executable
+    artifact; document how drift invalidates earlier previews.
+- Need user-supplied structured data or secrets?
+  - Small scalar safe to echo: flag.
+  - Complex, typed, or secret: `@file`, stdin `-`, or config input.
+- Need persistent configuration?
+  - One-off override: flag.
+  - Automation default: env var or injected args.
+  - Durable operator preference: config file.
+  - Startup-only behavior: CLI-only option, even if most settings live in
+    config. Ghostty explicitly does this for `config-default-files`.
+- Need nested subcommands?
+  - If success depends on autogenerated parents or longest-prefix matching,
+    flatten the tree or register the parent explicitly so unknown subcommands do
+    not get misread as positional args.
 
-Never invent a different order. Users internalize this once across all tools.
-Always document which layer wins. Name env vars `TOOLNAME_FLAGNAME` —
-Vault uses `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_FORMAT` consistently.
+## Anti-Patterns You Only Learn The Hard Way
 
-### TTY Detection Rules
-Behavior MUST change based on whether stdin/stdout is a TTY:
+- NEVER promise `--json` and still allow prompts because it feels flexible. In
+  automation it deadlocks wrappers and violates parse contracts. Instead make
+  machine mode imply non-interactive execution and fail fast on missing inputs.
+- NEVER treat human-readable preview text as the executable approval artifact
+  because transparency is seductive. The real system can drift, and saved plans
+  or debug bundles may carry cleartext secrets. Instead separate speculative
+  review from an opaque apply artifact and treat that artifact like a credential.
+- NEVER let wrappers normalize or hide exit codes because captured stdout/stderr
+  seems helpful. CI loses the only cheap branch signal it had. Instead preserve
+  raw process status end to end and document shell pitfalls when users pipe
+  through `tee`, pagers, or action wrappers.
+- NEVER force structured or secret values through shell-quoted flags because it
+  looks simple. You lose typing, quoting, and confidentiality in one move.
+  Instead accept `@file`, stdin `-`, or full JSON on stdin.
+- NEVER rely on TTY detection alone to distinguish humans from automation
+  because many CI systems allocate PTYs and some local users pipe explicit help
+  into pagers. Instead use an explicit automation knob and treat TTY only as a
+  rendering hint.
+- NEVER let autogenerated parent commands define your information architecture
+  because nesting looks free. Users get sparse help, and unknown subcommands can
+  be swallowed as positional args. Instead register parents deliberately and
+  keep synopsis lines under about 50 characters so listings stay scannable.
+- NEVER pretend config inclusion order is obvious because "it follows file
+  order" is almost always wrong once nesting exists. Ghostty loads included
+  files after the containing file and warns on cycles. Document your rule
+  precisely, support optional includes if useful, and make CLI-only settings
+  explicit rather than silently half-working in config files.
+- NEVER redraw the whole screen every frame because it seemed fine on a slower
+  terminal. Fast renderers expose tearing immediately. Instead implement
+  Synchronized Output and update only the cells that changed.
 
-| Condition | Behavior |
-|---|---|
-| stdout is TTY | Colors, tables, spinners, progress bars |
-| stdout is pipe | No colors, no spinners, stable parseable format |
-| stdin is TTY | Allow interactive prompts |
-| stdin is pipe | Skip all prompts, require flags instead |
-| `NO_COLOR` set | Disable all color regardless of TTY |
-| `TERM=dumb` | Disable all color and cursor movement |
+## Fallbacks When The Ideal Design Is Not Ready Yet
 
-NEVER check only `--no-color`. You must also check `NO_COLOR` env var
-(the cross-tool standard) and the TTY state. Forgetting TTY detection
-is the #1 cause of garbled CI logs and broken pipe workflows.
+- Cannot ship a full review/apply split yet: provide `--dry-run` plus a saved
+  request artifact, but never pretend the human preview is replayable.
+- Cannot ship a rich event stream yet: emit one versioned JSON result at the
+  end and keep progress or spinners on stderr.
+- Wrappers or CI glue keep swallowing exit codes: disable the wrapper, or add a
+  log/artifact file so users do not need to pipe through `tee` just to persist
+  output.
+- Terminal UI still flickers: reduce redraw scope first, then add a plain mode
+  for `TERM=dumb` or similar degraded terminals before shipping more animation.
 
-### Subcommand Hierarchy Depth
-HashiCorp CLIs use at most 2 levels: `vault secrets list`, `consul kv put`.
-Pattern: `tool noun verb [args]`.
+## Practical Defaults
 
-NEVER go deeper than 2 subcommand levels. `tool a b c d` is undiscoverable.
-If you need more depth, your domain model is wrong — flatten it. Terraform
-proved that even infrastructure management fits in 1 level (`terraform plan`,
-not `terraform infrastructure plan create`).
-
-## Anti-Patterns (with consequences)
-
-**NEVER use `-v` for `--version`** in tools with a `--verbose` flag.
-This collision is the most common flag naming mistake. Terraform uses
-`-version` (no short form) and `-v` is undefined. Pick one meaning per
-short flag and never reuse it.
-
-**NEVER require interactive input without a non-interactive escape hatch.**
-Every prompt must have a `--yes`/`-y` or `--auto-approve` flag. If stdin
-is not a TTY and no flag was passed, print an error with the flag name —
-never hang waiting for input that will never come. This breaks every CI
-pipeline that runs your tool.
-
-**NEVER print help to stdout.** Help text goes to stderr so that
-`mytool --help | head` works but `mytool list > output.txt` doesn't
-pollute the file with help text when the user forgets args. (Note: some
-tools like `cobra`-based CLIs default to stdout — override this.)
-
-**NEVER break backward compatibility in text output.** Once users parse your
-output with grep/awk/sed, changing column order or formatting is a breaking
-change. This is why `--json` must exist from v1 — it gives you a stable
-contract while keeping text output free to evolve.
-
-**NEVER silently succeed on destructive operations.** `terraform destroy`
-requires typing "yes" interactively, or `--auto-approve` in scripts.
-A bare `--force` flag with no confirmation has caused real production
-outages. Make the dangerous path require deliberate effort.
-
-## Hashimoto-Specific Patterns
-
-### The `doctor` Command
-Every tool should have a self-diagnostic command:
-```
-$ mytool doctor
-  Checking config file...     OK
-  Checking connectivity...    OK
-  Checking auth token...      EXPIRED (3 days ago)
-    Fix: Run 'mytool login' to refresh your token
-  Checking version...         OUTDATED (v1.2, latest v1.5)
-    Fix: Run 'brew upgrade mytool'
-```
-Rules: check everything that can go wrong, show OK/WARN/ERROR per check,
-and always include a `Fix:` line for every failure. This eliminates 80%
-of support tickets.
-
-### The `path-help` / Introspection Pattern
-Vault's `vault path-help sys/mounts` prints API documentation for any
-endpoint directly from the CLI. If your tool wraps an API, expose this.
-It turns the CLI into its own reference documentation.
-
-### The `-output-curl-string` Debug Pattern
-Vault's `-output-curl-string` flag shows the exact curl command that would
-be equivalent to the CLI operation. Include this in any CLI that wraps
-HTTP APIs — it makes debugging trust issues trivial because users can
-reproduce the exact call outside your tool.
-
-### Synopsis Under 50 Characters
-`mitchellh/cli` enforces `Synopsis() string` on every command — a one-line
-description under 50 characters shown in the help listing. This constraint
-forces clarity. If you can't describe a command in 50 chars, the command
-does too much.
-
-## Decision Tree: Choosing Command Surface
-
-```
-Is the action read-only?
-├─ Yes → Simple command, no confirmation needed
-│        Use exit code 0 (success) or 1 (not found / error)
-└─ No (mutates state)
-   ├─ Is it reversible?
-   │  ├─ Yes → Single command with -y/--yes flag
-   │  └─ No (destructive)
-   │     └─ Use plan→apply pattern
-   │        Require explicit confirmation or --auto-approve
-   └─ Does it talk to a remote service?
-      ├─ Yes → Use exit code 1 (local) vs 2 (remote) split
-      │        Add --output-curl-string for debugging
-      └─ No → Standard 0/1 exit codes suffice
-```
-
-## Fallback Strategies
-
-- **If your framework defaults help to stdout**: Override the help writer
-  to stderr. In Go's `mitchellh/cli`, set `HelpWriter` to `os.Stdout` and
-  `ErrorWriter` to `os.Stderr` (counterintuitive but documented).
-- **If you can't implement plan→apply**: At minimum, add `--dry-run` that
-  prints what would happen without doing it.
-- **If autocomplete is too complex**: Ship a `completions` subcommand that
-  generates shell scripts: `mytool completions bash > /etc/bash_completion.d/mytool`
-- **If an error has no known fix**: Still include context: "Error: TLS
-  handshake failed with api.example.com:443. Verify the server certificate
-  or set VAULT_SKIP_VERIFY=1 (not recommended for production)."
+- `tool --help` and `tool --version` are explicit user-requested output; send
+  them to stdout. Usage or parse failures go to stderr. If you use
+  `mitchellh/cli`, override the legacy default so `HelpWriter` is stdout.
+- If you expose a "helpful human" automation knob like `TF_IN_AUTOMATION`,
+  keep it cosmetic. The exact prose can change between minor versions; the
+  machine contract cannot.
+- Publish at least one introspection path for API-backed tools: route help,
+  effective config, raw request preview, or a focused diagnostic bundle.
+- If you expose diagnostics, say when they are meaningful and when they are only
+  advisory. Vault diagnose is safe to run when the server is down, but some
+  checks become meaningless if the server is already running.

@@ -1,119 +1,89 @@
 ---
 name: bolton-rapid-software-testing
-description: Apply Michael Bolton and James Bach's Rapid Software Testing (RST) methodology — the testing/checking distinction, FEW HICCUPPS oracles, SFDIPOT product modeling, session-based test management, and three-part test reports. Use when designing a test strategy, writing or reviewing test charters, evaluating test automation proposals, framing bug reports, defending exploratory testing to managers or auditors, replacing scripted test cases, deciding what to automate, or when someone says "all our tests pass" and you need to know whether that means anything.
+description: Diagnose and improve software testing using Michael Bolton and James Bach's Rapid Software Testing heuristics. Use when evaluating a test strategy, reviewing automation or regression plans, creating or coaching exploratory sessions, writing charters or debriefs, framing release risk, surfacing testability issues, or defending exploratory work to managers, auditors, or developers. Triggers: exploratory testing, session-based test management, testing vs checking, FEW HICCUPPS, SFDIPOT, charter, debrief, coverage, testability, bug advocacy, "all tests pass".
 ---
 
-# Bolton & Bach Rapid Software Testing
+# Bolton Rapid Software Testing
 
-## The one idea that reframes everything
+RST is for moments when a team is about to fool itself: green bars are being mistaken for product knowledge, scripts are being mistaken for coverage, or bug counts are being mistaken for tester productivity.
 
-In RST, **testing ≠ checking**. A *check* is an observation linked to a decision rule, both applicable non-sapiently. *Testing* is the human cognitive activity of evaluating a product by learning about it through experiencing, exploring, and experimenting. Machines and instructed humans can do checks. Only humans can test.
+The testing/checking distinction exists to prevent category errors, not to win status games. Great checking lowers the cost of testing. It also creates the easiest failure mode in software quality: the team starts treating "nothing noticed by the checks" as "nothing important is wrong."
 
-This is not pedantry. The RST Namespace exists because the word "test" was historically drained of meaning in programming (Turing called it "checking a large routine"; the distinction was clear in 1972's *Program Test Methods* and dissipated after). When someone says "the tests pass," ask: *which tests, and what does pass mean here?* In RST, a passing check means "we (or the automation) didn't notice anything that might be a problem" — not "the product is good."
+RST also prefers activity-based management over artifact-based management. Large piles of cases, scripts, and status sheets are easy to count and easy to worship; they are not the same thing as learning.
 
-## Mental model (load this into working memory)
+## Before you act, ask yourself
 
-```
-TESTING                              CHECKING
-─────────────────────────────────    ────────────────────────────────
-Investigation, learning, judgment    Confirmation of expected output
-Generative (produces test ideas)     Confirmatory (verifies a claim)
-Cannot be automated                  Can be automated
-Finds bugs we couldn't predict       Detects regression of known behavior
-A performance, like dance            An artifact, like sheet music
-Output: a story about the product    Output: a green/red signal
-```
+- **Who needs the next decision?** Testing serves a person who matters. Name that person before writing a plan or report.
+- **Am I under-tested or under-instrumented?** If you cannot control important states, vary environmental variables, or observe meaningful signals, the next task is testability advocacy, not heroic exploration.
+- **What would make us look productive while shrinking coverage?** Test-case counts, bug quotas, and pass-rate dashboards often reward the wrong work.
+- **What new information will this next activity produce that the previous one could not?** If the answer is "none", you are rehearsing, not learning.
+- **Is subjective testability low?** If the product area demands domain knowledge or technical skill you do not yet have, say so and get help. Bluffing is slower than pairing.
+- **What is the risk gap right now?** State what the team knows, what it still needs to know, and what is only being assumed.
 
-Checking is *part of* testing, not opposed to it. The error is conflation: pretending the green CI bar tells you the product is good. It tells you only that a finite set of decision rules did not fire.
+## Choose the mode
 
-## Before you do anything, ask yourself
+- **Asked to "write tests for X"**: Treat it as checking unless the user explicitly wants investigation. Build the smallest worthwhile set of checks, then state the risks those checks do not cover.
+- **Asked to "test X" or "find bugs"**: Treat it as exploratory work. Use a charter and time box. The deliverable is a session report, not pass/fail.
+- **Asked "can we ship?"**: Do not answer yes/no first. Deliver three stories: product status, coverage achieved, and what reduced the value of the testing.
+- **Blocked by unstable builds, poor logs, missing environments, or missing expertise**: Raise issues immediately. In RST, issues are threats to the project and test effort, not miscellaneous notes.
 
-1. **Am I being asked to test, or to check?** "Write a test for X" almost always means "write a check." That's fine — say so out loud.
-2. **Who is the person who matters?** Quality is value to *some person(s) who matter(s)*. Different stakeholders disagree on what counts as a bug. Name them before reporting anything.
-3. **What is my coverage with respect to *which model*?** Coverage is not a percentage. It is *how thoroughly I have examined the product with respect to some model*. Code coverage, risk coverage, function coverage, claims coverage are different models. 100% of one is 0% of another.
-4. **What's my charter?** If you can't state your mission in one or two sentences, you're not testing — you're wandering. Use Hendrickson's template: *Explore (target) with (resources) to discover (information).*
-5. **What oracle am I applying?** Every bug report rests on an oracle (a principle by which you recognize a problem). If you can't name it, you can't defend the bug. See `references/oracles-few-hiccupps.md`.
+## Operate like an RST practitioner
 
-## Decision tree
+- Start broad, then focus, then defocus. Survey testing finds seams; focused attack exploits them; defocusing before you stop catches blind spots created by tunnel vision.
+- Treat emotion as telemetry. Surprise, confusion, impatience, frustration, or boredom are not noise; they often point to reliability, usability, performance, charisma, or testability threats.
+- Charter with a mission, not a script. A good charter says what to learn and what to worry about. Specific charters buy focus but cost design effort, so general charters are acceptable early when the map is still poor.
+- Variation beats repetition. Each test should do work the previous one did not. Once a bug is fixed, the original script rapidly loses power. Verify the fix, then vary data, order, platform, timing, or state; otherwise you are mostly testing the script.
+- Testability is broader than logs. RST treats observability, controllability, smallness, and simplicity as part of testability. If setup is huge, state is inaccessible, or every path has too many interacting conditions, coverage will collapse no matter how hard the tester works.
+- Do not wait for runnable code to begin testing. Ideas, designs, docs, diagrams, APIs, prototypes, infrastructure plans, and release assumptions are all testable products.
+- Maintain close social distance and critical distance. Work closely with the team, but keep the job of challenging assumptions, exposing risk, and questioning "done."
 
-```
-Task includes the word "test"?
-├─ Is it "write a test for X"?              → It's a CHECK. Build the check, don't pretend it's testing.
-├─ Is it "find bugs in X"?                  → It's TESTING. Charter a session. Load references/sbtm-and-charters.md.
-├─ Is it "improve our test strategy"?       → Load references/test-framing-and-reports.md and the FEW HICCUPPS reference.
-├─ Is it "automate our regression suite"?   → It's CHECKING work. Load references/breaking-test-case-addiction.md FIRST.
-└─ Is it "explain why a passing test isn't enough"? → Load references/test-framing-and-reports.md.
+## Session mechanics that matter
 
-Stuck on what to test?
-├─ Use SFDIPOT to model the product:        → references/oracles-few-hiccupps.md (Product Elements section)
-└─ Use FEW HICCUPPS to recognize problems:  → references/oracles-few-hiccupps.md
-```
+- Use time boxes that are loose enough for human work and tight enough for correction. Standard RST ranges are short `60 +/- 15` minutes, normal `90 +/- 15`, and long `120 +/- 15`. Beware fake precision.
+- Debrief quickly. The debrief is for calibration, coaching, and adjusting charters while the session is still fresh, not for policing.
+- Record TBS as rough estimates, not stopwatch theater. Use nearest `5%` or `10%`.
+- When classifying simultaneous work, use precedence `T > B > S`: test design and execution, then bug investigation and reporting, then setup.
+- Exclude opportunity testing from TBS. The point of TBS is to track interruptions to charter work.
+- Read high `B` time as a coverage warning, not a productivity badge. Heavy bug investigation can mean you hit a rich seam, but it also means the rest of the space stayed dark.
+- Never compare testers using raw TBS, bug counts, or test counts. Those numbers are confounded by module complexity, luck, product dirtiness, and the quality of the questions being asked.
 
-## Procedures for the common tasks
+## When the environment is hostile
 
-### When asked to "test X" or "write tests for X"
+- If management insists on scripted cases, note every unrun idea together with the trigger for it: risk, oracle, coverage hole, or testability concern. Report those ideas every `1-2` hours. Ask, "Are you okay with us not running these?"
+- If bureaucracy demands exhaustive documents, show the opportunity cost. Over-documentation suppresses the kinds of scenario variation and exploratory moves that actually find surprising problems; one day of sharp exploratory work often reveals what a week of detailed procedure execution will miss.
+- If builds keep breaking, environments differ from production, or tools slow you down, log issues before anyone asks why coverage is thin. Issues amplify existing risk because they give bugs more time and more places to hide.
+- If you do not know enough to test an area well, say that subjective testability is low and seek pairing, a briefing, or a narrower charter. Lack of knowledge is a project fact, not a personal failure.
 
-1. **Disambiguate first.** Ask (or state): "Do you want me to *check* X (encode known expected behaviors as automated assertions) or *test* X (investigate it for problems we don't yet know about)?" These are different deliverables. Don't silently pick one.
-2. **If checking**: write the smallest set of checks that would catch a real regression. State explicitly what risks the checks do and do not cover. Don't write checks that duplicate type-system guarantees.
-3. **If testing**: write a charter using the Hendrickson template, then run a session (or simulate one in a report). Apply FEW HICCUPPS *retrospectively* to anything you observe. Output is not pass/fail — it is a session report with bugs, issues, and a coverage statement.
+## Reporting stance
 
-### When reviewing someone else's test plan or test strategy
+- Report product problems in terms of value loss to a person who matters.
+- Report coverage as "coverage with respect to a model", never as a naked percentage.
+- Report issues separately from bugs, but do not obsess over taxonomy. If a problem threatens both the product and the project, treat it as both. The goal is awareness, not classification purity.
+- Use better questions than "How many passed?" Ask what was examined, what was not, what assumptions were made, and what slowed learning down.
 
-Run it against this checklist (in order):
+## Anti-patterns
 
-1. **Does the plan distinguish testing from checking?** If "automated tests" and "manual tests" are the only categories, the author has not internalized the distinction. Most "automated test" failures are actually checking failures.
-2. **Does the plan name *which model* coverage is measured against?** "80% coverage" without naming a model is meaningless. Push back until a model is named.
-3. **Does the plan name the stakeholders?** "Quality" without a person is theater.
-4. **Are the charters descriptive or prescriptive?** If charters contain numbered steps, the plan is a script with charter cosplay. Rewrite as missions.
-5. **Does the plan account for testability?** If S-time is not budgeted (setup, environment, debugging the test infrastructure), the schedule is wrong.
-6. **Does the plan allow for follow-up sessions?** Bugs found in session 1 generate test ideas for session 2. A linear plan that doesn't reserve capacity for "we don't know yet" is brittle.
+- **NEVER** grade testers by bug count because the number is seductively simple while hiding module dirtiness, luck, and lost coverage. A tester who finds many bugs may have explored narrowly and a tester who finds few may have covered far more risk. Instead evaluate debrief quality, coverage notes, issue awareness, and the relevance of discoveries.
+- **NEVER** turn every fixed bug into a permanent scripted regression check because it feels prudent while quietly consuming future coverage budget. Specific fixed bugs often stay fixed; the repeated path mainly proves script stability. Instead add checks only where regression risk is credible or the invariant is cheap and valuable, then vary around the fix during exploration.
+- **NEVER** use TBS or session metrics to rank people because numbers look objective while destroying the real purpose of the metrics. Session metrics were designed to reveal interruptions, guide coaching, and reshape charters. Instead use them to ask why learning slowed down and what the project should change.
+- **NEVER** accept low observability or controllability as "we'll test harder" because reduced testability gives bugs more time and more opportunities to hide. Instead raise a testability issue and ask for logs, hooks, state control, data access, or simpler setup.
+- **NEVER** let issue reporting disappear into tracker bureaucracy because "it's logged" is seductive and often means "it's invisible." Out-of-sight issues normalize deviance and silently reduce coverage. Instead keep issues visible in debriefs, risk lists, or other channels that force acknowledgment.
+- **NEVER** let a charter turn into numbered steps because structure feels safe but suppresses the tester's best ideas at the moment they appear. Instead define the mission, note the worry, and preserve room for adaptation.
+- **NEVER** treat a green bar as release evidence because green is psychologically narcotic and confirms only the beliefs already encoded in the checks. Instead say what the checks did not notice, what humans explored, and what remains unexamined.
 
-### When someone says "all tests pass" and wants to ship
+## Mandatory reference loading
 
-Do not say "you can't ship." Say:
+- Before designing, reviewing, or coaching exploratory sessions, **READ** `references/sbtm-and-charters.md`.
+  Do **NOT** load `references/test-framing-and-reports.md` unless you are also preparing an output for others.
+- Before framing bugs, issues, release risk, or debrief narratives, **READ** `references/test-framing-and-reports.md`.
+  Do **NOT** load `references/breaking-test-case-addiction.md` unless documentation pressure is part of the problem.
+- Before expanding product models or choosing recognition heuristics, **READ** `references/oracles-few-hiccupps.md`.
+  Do **NOT** load it just because someone said "quality"; load it when you need better oracles or broader coverage ideas.
+- Before replacing script-heavy processes, defending exploratory work to auditors, or deciding what to automate, **READ** `references/breaking-test-case-addiction.md`.
+  Do **NOT** load every reference at once; pull only the file that matches the decision you are making.
 
-1. **"Which tests, and what model do they cover?"** Get the actual coverage relationship. Often it's code coverage of a small subset of the codebase. That's a narrow claim, not a quality claim.
-2. **"What was tested *outside* those checks?"** If the answer is "nothing" — the tests are *all* the testing — name the FEW HICCUPPS principles that have not been examined and the SFDIPOT areas that have not been explored.
-3. **"What is the worst plausible bug a passing check wouldn't detect?"** Make the failure mode concrete. "Could these checks pass while a logged-in user sees another user's data?" gets attention faster than "tests are not testing."
-4. **Frame the gap, not the verdict.** Lighthouse, not captain. Tell the team what the unexamined risks are and let them decide.
+## Minimal fallback
 
-### Fallback: if there's truly no time for any of this
-
-When the request is "I need this in 20 minutes":
-- Run a single time-boxed survey session (15 min) with charter "Survey (target) using SFDIPOT to discover the most likely failure modes."
-- Apply FEW HICCUPPS retrospectively to anything surprising.
-- Report: top 3 risks, what was not examined, what 1 hour of further testing would cover. That report is more honest and more useful than running 200 unrelated checks in the same time.
-
-## Anti-patterns (NEVER list)
-
-- **NEVER report "tests passed" as if that means the product is good.** Seductive because the green bar feels like proof. Consequence: stakeholders ship products on the strength of checks that confirm only what was anticipated, missing whole classes of unanticipated failure. Instead, report "these checks did not detect a problem" *and* describe what testing was performed beyond them and what was deliberately left unexamined.
-
-- **NEVER write a charter that tells the tester *what to do*.** Seductive because it feels like leadership. Consequence: charters become scripts, testers stop thinking, the session produces what the charter-writer already knew. A charter is *descriptive of a mission*, not prescriptive of steps. Two sentences is plenty. If you're tempted to add a third, you're micromanaging.
-
-- **NEVER let "100% coverage" be a goal.** Seductive because it sounds rigorous. Consequence: the team optimizes for the easiest-to-cover model (usually code lines) while leaving claims, risk, configuration, data, and time-based coverage at zero. Instead, ask "100% with respect to *which* model?" and pick the model that matches the risk.
-
-- **NEVER frame a bug report in terms of the bug alone.** Seductive because it feels objective. Consequence: developers triage on technical severity and miss business risk; the bug gets "won't fix" and surfaces in production. Instead, frame the bug as a *story about risk to a person who matters* — name the stakeholder and the harm. Bolton calls this *bug advocacy*.
-
-- **NEVER conflate a "bug" with an "issue".** Seductive because both are "problems." Consequence: testability problems (slow builds, no logs, no test environment) get logged as bugs and ignored, while real product bugs get diluted in the same backlog. RST distinction: a **bug** threatens the value of the *product*; an **issue** threatens the value of the *testing, project, or business*. Track them separately. Issues belong in the testing report's "obstacles" section, not the bug tracker.
-
-- **NEVER accept "FDA / ISO / SOX requires detailed test case scripts" without reading the regulation.** Seductive because nobody wants to fight an auditor. Consequence: months wasted writing 100+ pages of "click here, observe this" that find fewer bugs than two paragraphs of test ideas would. James Bach replaced 50 pages of medical-device test scripts with two paragraphs (a general protocol + concise test ideas) and the auditors accepted it — and it found bugs the scripts had missed for years. See `references/breaking-test-case-addiction.md`.
-
-- **NEVER claim "we didn't have enough time" without saying what *coverage gap* that produced.** Seductive because it sounds like an excuse the manager will reject. Consequence: managers hear "tester is making excuses" and discount the report. Instead: name the model, name the unexamined area, and let the person who matters decide whether to ship with that gap. The lighthouse reports the rocks; it does not steer the ship.
-
-- **NEVER let your test report be just bugs.** A real RST report has *three stories*: (1) the status of the product, (2) how you tested it, (3) how good that testing was — including testability obstacles, things you couldn't cover, and what you'd recommend.
-
-## Specifics that take years to learn
-
-- **Session length: 60–90 minutes uninterrupted.** Below 45m there's not enough flow to find deep bugs; above 90m human focus collapses and notes become useless. A "normal" RST tester completes **4–5 sessions per workday**, not 8 — debrief, admin, and bug investigation eat the rest. If your manager is planning 8 sessions/day, your manager has not understood SBTM.
-- **TBS metrics** in a session report = percentage of session time spent on **T**est design/execution, **B**ug investigation/reporting, **S**etup/admin. These are *rough* percentages, not stopwatch precision. Their purpose is to reveal *patterns*: high B-time means buggy code (deeper testing needed there); high S-time means a testability problem worth reporting as an issue.
-- **Testopsy**: a post-session close inspection of *how you tested*, not what you found. Bolton and Bach use it to surface tacit knowledge — the heuristics you applied without knowing it. Run one on yourself after a session that went unusually well or unusually badly.
-- **Oracles are heuristic and fallible.** Every oracle is a guess at "what would be problematic," not a proof. The oracle can be wrong. The product can be inconsistent with its history *because we fixed a bug*. Always be ready to defend not just the bug, but the oracle that detected it.
-- **The Productivity Paradox**: faster tooling (now AI) raises the apparent throughput of checking and lowers the *visible* cost of testing skill. The result is more code, more checks, fewer testers, and the illusion of higher quality — until a deep bug lands in production. RST's response: invest in skill and critical thinking, not just throughput.
-
-## When to load the references
-
-- **Designing a test strategy or charter** → READ `references/sbtm-and-charters.md` and `references/oracles-few-hiccupps.md`.
-- **Writing a test report or defending your testing** → READ `references/test-framing-and-reports.md`.
-- **Replacing scripted test cases or fighting bureaucracy** → READ `references/breaking-test-case-addiction.md`.
-- **Trying to recognize a problem and you have no spec** → READ `references/oracles-few-hiccupps.md` (FEW HICCUPPS section).
-- Do **NOT** load every reference for every task. Each reference is ~100–200 lines; loading all of them at once defeats progressive disclosure.
+- If you have less than an hour, run one short survey session.
+- Report the top three risks noticed, the biggest unexamined area, and the main testability issue.
+- End with the next charter you would run if given another session.

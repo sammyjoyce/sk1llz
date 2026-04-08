@@ -1,79 +1,96 @@
 ---
 name: vanrossum-pythonic-style
-description: Write idiomatic Python the way Guido van Rossum designed it, applying BDFL-era reasoning about trade-offs most guides get wrong. Use when writing, reviewing, or refactoring Python code that must be genuinely Pythonic (not just "works" — reads the way a core developer would write it), when deciding between dataclass/NamedTuple/TypedDict/pydantic, when evaluating whether __slots__ is still worth it on modern CPython, when debating walrus operator style, when a reviewer claims something "isn't Pythonic," or when you need the actual reasoning behind rejected proposals like tail-call elimination and multi-line lambdas. Triggers — "Pythonic", "idiomatic Python", "Zen of Python", "PEP 8", "PEP 20", "van Rossum", "Guido", "BDFL", "refactor Python", "Python style", "dataclass vs NamedTuple", "mutable default argument", "walrus operator", "PEP 572", "tail recursion Python", "should I use slots", "EAFP vs LBYL", "lru_cache", "open encoding", "dict ordering".
-tags: python, pythonic, van-rossum, bdfl, zen, pep8, pep20, style, idioms, dataclass, slots, walrus, eafp
+description: Design and review Python the way Guido-style library maintainers do: preserve debuggability, keep APIs evolvable, and avoid CPython-only traps. Use when deciding public signatures, dataclass layout, slots, caching, encoding defaults, inheritance boundaries, immutable subclasses, or disputed "Pythonic" trade-offs. Triggers: pythonic, Guido, van Rossum, positional-only, keyword-only, dataclass, slots, weakref_slot, __match_args__, cached_property, lru_cache, unsafe_hash, EncodingWarning, __new__, walrus, tail recursion.
+tags: python, pythonic, van-rossum, api-design, dataclass, slots, caching, encoding, inheritance
 ---
 
-# Guido van Rossum — Pythonic Style
+# Guido van Rossum Style: Semantics First
 
-Guido's design rules were NOT the Zen of Python (that was Tim Peters codifying retroactively). The actual rules from Guido's own history notes were about **pragmatism under time pressure**:
+Guido-style Python is not "shorter code" or "more magic". It is code that keeps tracebacks useful, leaves room for API evolution, and refuses optimizations that quietly change semantics.
 
-> "Don't fret about performance — optimize later. Don't try for perfection; 'good enough' is often just that. It's okay to cut corners sometimes, especially if you can do it right later. Don't fight the environment and go with the flow."
+## Use this skill for these disputes
 
-> "A bug in the user's Python code should not cause undefined interpreter behavior; a core dump is never the user's fault."
+- Public API and signature design.
+- Dataclass vs handwritten class vs immutable value object.
+- `slots`, `cached_property`, `lru_cache`, weakrefs, and hashability.
+- Immutable builtins and value normalization in `__new__`.
+- Encoding defaults, cross-platform text I/O, and library portability.
+- Inheritance boundaries, subclass APIs, and "is this actually Pythonic?"
 
-Every controversial Python decision (explicit `self`, no TCO, no multi-line lambda, significant whitespace, GIL) flows from one or both of these: **pragmatism over purity**, and **user safety over user cleverness**. Read the second quote again — it is the reason Python rejects features that would let user code crash the interpreter. When purity and pragmatism conflict, pragmatism wins.
+## Load only what matches
 
-## The Core Heuristic — four questions before writing any Python line
+- Before changing signature shape, read PEP 570 sections on subclass consistency and PEP 399 parity.
+- Before changing dataclass layout, read the stdlib `dataclasses` docs for `kw_only`, `__match_args__`, `slots`, `weakref_slot`, and `unsafe_hash`.
+- Before adding caching, read the stdlib `functools` docs and the FAQ entry "How do I cache method calls?"
+- Before changing file I/O defaults, read PEP 597.
+- Before proposing recursion-as-loop tricks, read Guido's "Tail Recursion Elimination" note.
+- Do NOT load those sources for format-only edits, import sorting, trivial renames, or pure annotation cleanup.
 
-1. **"Can this line be mistaken for something else?"** If yes, be explicit. `if value is None` not `if not value` whenever `0`, `""`, `[]` are valid values. `raise ValueError("bad port: %r" % port) from exc` not bare `raise`. Implicitness is a bug multiplier.
-2. **"What does the traceback look like when this fails?"** Guido rejected tail-call elimination specifically because it destroys tracebacks. Your job is to write code that crashes at the frame containing the bug, not three frames away. If a helper hides the real call site, inline it or use `raise ... from`.
-3. **"Is this the ONE obvious way, or am I inventing a second way?"** Python explicitly rejects Perl's TMTOWTDI. If a reviewer can write a different-looking version with the same semantics, at least one of you is wrong.
-4. **"Am I fighting the language?"** Metaclasses to auto-register, decorators to bolt on tail calls, AST rewrites to hide `self` — if you're reaching for these, you are writing a dialect of Python that every future maintainer will hate. The Pythonic answer is usually to accept what the language gives you.
+## Before doing X, ask yourself
 
-## Expert Trade-offs (the things textbooks get wrong)
+1. Before renaming or exposing a parameter name, ask: is the name part of the public contract, or merely today's implementation detail?
+2. Before making a constructor "clearer" with `kw_only=True`, ask: am I also changing pattern-matching surface by shrinking `__match_args__`?
+3. Before adding `slots=True`, ask: how many live instances exist, and do I need dynamic attributes, weakrefs, `cached_property`, or base-class `__init_subclass__` parameters?
+4. Before adding a cache, ask: what lifetime gets pinned, what invalidates the result, and what happens if concurrent callers compute it twice?
+5. Before hiding work behind attribute syntax, ask: will callers still be right to assume the access is cheap and side-effect-light?
+6. Before using clever recursion or walrus compression, ask: am I improving scanability, or only compressing syntax?
 
-**`__slots__` barely matters on Python 3.11+.** The memory savings collapsed from ~80–216 bytes/instance to ~40–64 bytes, and the attribute-lookup speedup dropped from 62% to 3–13% (essentially 0% on optimized builds). Most `__slots__` advice is from 3.9-era benchmarks. Add it only when creating >100k instances in a hot loop, or when you want to *forbid* attribute creation as a correctness constraint. See `references/expert-traps.md` §1 for the version table.
+## High-signal procedures
 
-**`@dataclass(frozen=True, slots=True)` is the modern default container** (Python 3.10+). It's smaller AND faster than `NamedTuple` at attribute access (48 B vs 56 B, ~23 ns vs ~29 ns on 2-field structs). Use `NamedTuple` only when you need tuple unpacking at call sites, positional compatibility with tuple-expecting APIs (TensorFlow `tf.function`), or Python <3.10 support. Use `pydantic` only for validated data at system boundaries — it pays ~10x creation cost for that validation, so don't use it for internal state.
+### Signature procedure
 
-**`NamedTuple` equality is a nominal-vs-structural footgun.** `Point(1,2) == Color(1,2)` is `True` because both are tuples. If your type means "a Point," not "a pair of ints," use a frozen dataclass.
+- Use positional-only parameters (`/`) when the parameter name should not become public API, when subclasses may need a different name, or when a pure-Python surface must match a C/builtin surface. PEP 570 treats `dict.update`-style ambiguity and PEP 399 parity as first-class reasons, not edge cases.
+- Use keyword-only parameters when the name is semantically meaningful and you want call sites to stay self-documenting.
+- For public signature changes, check four things in order: existing keyword call sites, subclass overrides with renamed parameters, pure-Python/C parity, and dataclass pattern matches.
 
-**`s += x` in a loop is O(n) on CPython and O(n²) everywhere else.** CPython since 2.4 has an in-place optimization when the string's refcount is 1. Your code works, your CI passes, you deploy on PyPy, and prod melts. **Always use `"".join(parts)`**. The optimization is a CPython implementation detail, not a language guarantee.
+### Data-model procedure
 
-**Dict insertion order became a guarantee by accident.** 3.6 implementation detail (side effect of a Raymond Hettinger memory optimization), 3.7 language feature. If you maintain pre-3.7 code that relied on order, it was technically undefined. For new code, the guarantee is real — but still reach for `collections.OrderedDict` when order is *semantically* meaningful (it has `move_to_end()` and order-sensitive equality; plain dicts do not).
+- Treat `kw_only=True` as more than a constructor nicety. Dataclass keyword-only fields are excluded from `__match_args__`, so `case MyType(...)` can break even when regular construction looks better.
+- Treat `slots=True` as a semantic change, not a style tweak. Dataclasses return a new class object when `slots=True`; code that records class identity early can observe that.
+- If `eq=True` and `frozen=False`, dataclasses intentionally make the class unhashable. That is the runtime telling you mutation and hashed containers do not mix.
+- Use `field(hash=False, compare=True)` only when equality needs a field but hashing it is too expensive. That is the narrow escape hatch. `unsafe_hash=True` is not the normal answer.
+- If subclassing an immutable builtin such as `str`, `int`, `tuple`, or `date`, enforce invariants in `__new__`, not `__init__`.
 
-**`open()` without `encoding=` is a cross-platform bug.** Default is platform locale: UTF-8 on macOS/Linux, cp1252/cp936 on Windows. PEP 597 exists for this reason. **Always** pass `encoding="utf-8"` explicitly, and enable `PYTHONWARNDEFAULTENCODING=1` in CI.
+### Cache procedure
 
-**`functools.lru_cache(maxsize=None)` is a memory leak by design.** Use `functools.cache` (3.9+) when you *mean* unbounded — the name documents intent. `lru_cache` on an instance method holds a reference to every `self` it's ever seen; use `@cached_property` or make the method a module-level function instead.
+- Use `cached_property` only for instance-local, idempotent values on objects that are effectively immutable. In Python 3.12+, the undocumented once-only lock was removed, so concurrent access may run the getter more than once.
+- Use `lru_cache` only when the result is reusable, arguments are hashable, and recent calls predict future calls. Remember the non-obvious parts: keyword order may create distinct cache entries, `typed=True` only distinguishes immediate arguments, and cached methods keep `self` alive until eviction.
+- If you cannot describe the invalidation rule in one sentence, do not cache yet.
 
-**`sys.setrecursionlimit(10000)` risks a segfault.** The Python-level limit defaults to 1000, but the real constraint is the C stack (~8 KB frames on CPython). Raising it past ~10k means "a core dump is now your fault" — exactly the rule Guido refused to break when he rejected TCO. If you need deep recursion, you need iteration.
+### Text-I/O procedure
 
-**EAFP beats LBYL for correctness, not just style.** `if os.path.exists(p): open(p)` has a TOCTOU race: any other process can delete the file between check and open. `try: open(p) except FileNotFoundError:` is atomic. LBYL is acceptable only when the check is O(1) and atomic with the use (e.g., `if key in local_dict`), and even then it breaks under free-threading.
+- For new APIs, prefer `encoding="utf-8"` unless locale coupling is the contract.
+- If locale behavior is intentional, say `encoding="locale"` explicitly instead of relying on omission.
+- In CI, turn on `-X warn_default_encoding` or `PYTHONWARNDEFAULTENCODING=1` so implicit-locale bugs show up before users on other platforms hit them.
 
-## NEVER (with non-obvious consequences)
+### Inheritance procedure
 
-- **NEVER use mutable default arguments** (`def f(x=[])`). The default is evaluated at `def` time and stored on `function.__defaults__` — every call that omits `x` mutates the same list. This is not a bug; it's consistent with how class bodies and decorators also evaluate at `def` time. Seductive because it reads like C++ default parameters; the consequence is silent state leakage between unrelated callers. Fix: `def f(x=None): if x is None: x = []`.
+- Decide explicitly whether an attribute is public API, subclass API, or internal. PEP 8's rule matters here: if in doubt, start non-public, because Python makes it easy to expose later and painful to retract later.
+- Use double-leading-underscore names only to avoid subclass name collisions in extensible bases. It is collision control, not real privacy.
+- Expose simple public data as a plain attribute first. `property` is the compatibility escape hatch when behavior must grow later, not an excuse to hide expensive work behind dot syntax.
 
-- **NEVER use bare `except:`**. It catches `KeyboardInterrupt` and `SystemExit`, making Ctrl-C impossible and `sys.exit()` silent. `except Exception:` is what you meant. Consequence of bare `except:`: unkillable processes and silent test-runner failures.
+## Numbers and thresholds that actually matter
 
-- **NEVER nest list comprehensions more than two levels deep.** This is a **correctness** rule, not style. The variable-binding order in `[x for row in matrix for x in row if x > t]` is left-to-right, opposite of the "prose reading" intuition. A three-level comprehension is ambiguous to every reader including future-you. Fix: extract the inner loops to a generator function with a descriptive name.
+- Guido's tail-recursion note assumes a typical recursion limit around `1000`: enough for ordinary tree traversal, not enough for "recursion as loop over a large list".
+- `lru_cache` defaults to `maxsize=128`; that is a convenience default, not evidence that `128` fits your workload. `maxsize=None` is explicitly unbounded.
+- The official descriptor HOWTO's sample measurement shows why `__slots__` is a scale tool, not a style badge: a two-attribute instance used `48` bytes with `__slots__` and `152` without, with attribute reads about `35%` faster in that measurement. If you do not expect large live populations, the complexity usually does not earn its keep.
 
-- **NEVER use the walrus operator outside PEP 572's two canonical patterns** — (1) `while chunk := stream.read(8192):` and (2) expensive-predicate filters `[y for x in data if (y := f(x)) is not None]`. Anything else is the style that cost Guido his BDFL title. If `:=` "saves a line," you are saving the wrong resource.
+## NEVER do these
 
-- **NEVER use `typing.cast` to silence a type error.** Unlike TypeScript `as`, `cast` does nothing at runtime — it lies to the type checker AND to humans. If you have to cast, your types are wrong. Fix: `isinstance` check (the checker narrows automatically), or redesign.
+- NEVER add `/` just because builtin-style signatures look advanced, because the seductive part is the tiny syntax change. The concrete consequence is that you erase useful keyword readability without gaining evolution headroom. Instead use `/` only when the name must stay non-contractual or subclass/C-parity pressure is real.
+- NEVER flip `kw_only=True` on a dataclass because constructor calls "read nicer". The seductive part is cleaner call sites; the concrete consequence is that keyword-only fields disappear from `__match_args__`, so positional class-pattern matches can stop working. Instead search both constructor call sites and `case TypeName(...)` matches first.
+- NEVER treat `slots=True` as a free memory win, because the seductive part is benchmark folklore. The concrete consequence is broken weakrefs, no instance `__dict__`, `cached_property` failures, `__init_subclass__` surprises, and a new class object in dataclasses. Instead require an instance-count argument and a compatibility checklist before slotting.
+- NEVER use `unsafe_hash=True` to quiet "unhashable type" errors, because the seductive part is that sets and dict keys start working immediately. The concrete consequence is mutated keys that drift out of hashed collections or violate equality assumptions. Instead freeze the real identity or hash only stable fields.
+- NEVER put `lru_cache` on an instance method whose result depends on mutable instance state, because the seductive part is a one-line speedup. The concrete consequence is stale answers plus object retention through cached `self` references; keyword reordering can also duplicate entries. Instead externalize the pure function or use `cached_property` with an invalidation story.
+- NEVER assume `cached_property` is a harmless drop-in, because the seductive part is attribute syntax with memoization. The concrete consequence is extra per-instance dict space, failure on slotted classes without `__dict__`, and multi-threaded double computation on 3.12+. Instead choose it only for effectively immutable instances or use `property()` over an explicit cache function.
+- NEVER omit `encoding` in library code because your machine uses UTF-8. The seductive part is that omission works locally. The concrete consequence is Windows and locale-specific breakage plus `EncodingWarning` once projects enable it. Instead spell `utf-8` or `locale` deliberately.
+- NEVER hide I/O, network calls, or O(n) work behind a plain `property`, because the seductive part is a tidy attribute API. The concrete consequence is callers accidentally multiplying expensive work because attribute syntax advertises cheap access. Instead use a method or a cached attribute with explicit invalidation semantics.
+- NEVER use walrus in call arguments, defaults, or dense comprehensions just because it shortens the line. The seductive part is fewer temporary names; the concrete consequence is readers missing the binding site or stumbling over scope and precedence. Instead reserve `:=` for the two strong patterns: filtered binding (`if match := ...`) and loop-and-read (`while chunk := f.read(...)`).
+- NEVER pitch tail-recursion elimination or recursion-as-loop decorators as a Pythonic optimization, because the seductive part is functional elegance. The concrete consequence is worse tracebacks, portability problems across implementations, and code that fails once depth grows past the typical recursion limit. Instead write the loop or iterator directly.
 
-- **NEVER subclass `str`, `int`, `tuple`, or `bytes` casually.** Methods that return new instances (`upper()`, `__add__`) return the *base* class, not your subclass, silently. `StrEnum` members compare `==` to raw strings — almost always a footgun in API boundaries.
+## Fallback strategies
 
-- **NEVER use `is` for anything except `None`, `True`, `False`.** Small-int caching (CPython caches -5..256) and string interning make `x is 100` work sometimes, fail sometimes. These are CPython implementation details. Modern Python raises `SyntaxWarning` on literal `is`; treat it as an error.
-
-- **NEVER catch exceptions with `except: pass` without a logged reason.** "Errors should never pass silently" is one of Guido's explicit original rules, not stylistic advice. Minimum acceptable: `except SpecificError as e: log.debug("ignoring: %s", e)`.
-
-- **NEVER write multi-line lambdas via tuple-of-statements, `exec`, or `and`/`or` chains.** Guido rejected multi-line lambdas because any syntax introduces a "where does the colon go" paradox. If you need multiple statements, you need a name; if you have a name, you can also have a docstring. Fix: `def`.
-
-## Procedure — "Is this Pythonic?" review
-
-Walk this list in order, stopping at the first failure:
-
-1. **Would a stack trace from the failing line blame the actual bug?** If a helper wraps the real failure, inline it or add `raise ... from`.
-2. **Does reading this require knowing `def`-time vs call-time evaluation, descriptor protocol, MRO, or GIL semantics?** If yes, add a comment pointing at the relevant mental model, or refactor until it doesn't.
-3. **Is there a stdlib tool that would replace this?** `collections.Counter`, `itertools.groupby`/`pairwise`/`batched`, `functools.cache`/`reduce`, `pathlib.Path`, `dataclasses`, `contextlib.contextmanager`/`suppress`, `enum`, `typing.Protocol` for structural subtyping.
-4. **Can the happy path be read without reading the error handling?** `try:` blocks should wrap ONE operation that can fail, followed by `else:` for the continuation. Narrow `try:`, never wide. See `references/expert-traps.md` §13.
-5. **Is "the one obvious way" actually obvious?** If there are two equally plausible implementations, the less clever one wins.
-
-## Loading rules for references
-
-- **Before recommending a container type (dataclass / NamedTuple / TypedDict / pydantic), READ `references/expert-traps.md` §2** for the empirical size/speed numbers on 3.12.
-- **Before justifying (or rejecting) `__slots__`, READ `references/expert-traps.md` §1** for the version-specific memory savings table.
-- **Before arguing about tail recursion, multi-line lambdas, or "why doesn't Python have X", READ `references/expert-traps.md` §3 and §14** for Guido's own reasoning.
-- **Do NOT load `references/expert-traps.md`** for simple tasks: renaming a variable to `snake_case`, adding type hints to an obvious signature, converting `%` formatting to f-strings, replacing `range(len(x))` with `enumerate(x)`. Claude already knows these; loading the reference wastes context.
+- If you need slot-like memory savings but also need cached attributes, add `__dict__` intentionally or replace the design with explicit cached functions; do not discover the incompatibility in production.
+- If you need constructor clarity but cannot afford pattern-matching breakage, keep only truly optional fields keyword-only and leave structural fields positional.
+- If you need hashing but one field is mutable or expensive, keep equality on that field and exclude it from hashing rather than pretending the whole object is safely immutable.
+- If recursion expresses the algorithm best but depth is unbounded, keep the recursive helper for the small case and expose an iterative driver for real workloads.
