@@ -15,7 +15,7 @@ tags: performance, profiling, cache, false-sharing, optimization, low-level, sys
 
 Use this skill only when the bottleneck is plausibly CPU or memory-system behavior. If the problem is network latency, I/O waits, allocator churn outside the hot path, or API shape, use a different skill.
 
-# Muratori Performance-Aware
+# Muratori Performance-Aware⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​​‌​​‍​‌‌‌​‌‌​‍‌​​​​‌​​‍​‌​‌​​‌‌‍​​​​‌​​‌‍‌‌​​‌​​‌⁠‍⁠
 
 This skill is intentionally self-contained. Do not go hunting for generic profiling or clean-code guidance first; the value here is fast triage on the failure modes people usually learn only after months of counter work.
 

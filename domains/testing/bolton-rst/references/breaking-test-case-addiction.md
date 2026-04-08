@@ -1,4 +1,4 @@
-# Breaking the Test Case Addiction
+# Breaking the Test Case Addiction⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​‌​‌‌‌‍​​​​​​‌‌‍​​‌‌‌​‌‌‍‌​‌‌​​‌‌‍​​​​‌​​‌‍‌​‌​​​​​⁠‍⁠
 
 > **Load this when**: someone insists on detailed scripted test cases "because regulation," when a team is being crushed by 100+ page test plans, when arguing about whether to automate the regression suite, or when proposing to replace scripts with charters.
 

@@ -3,7 +3,7 @@ name: hughes-property-based-testing
 description: "Design high-signal property-based tests in the style of John Hughes: choose between model-based, metamorphic, invariant, inductive, and state-machine properties; shape generator distributions; validate shrinkers; and diagnose discard and coverage pathologies. Use when testing algorithms, parsers, serializers, reducers, abstract data types, protocol/stateful APIs, or when requests mention QuickCheck, Hypothesis, generators, shrinking, metamorphic, model-based, stateful, or property tests."
 ---
 
-# John Hughes Property-Based Testing
+# John Hughes Property-Based Testing⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌‌‌‌‍​‌​​​‌‌‌‍‌‌‌‌​​‌‌‍​‌‌​‌​​‌‍​​​​‌​‌​‍​​‌‌‌​‌​⁠‍⁠
 
 Property-based testing is a search-budget problem, not a "write more random tests" problem. Spend randomness on bug-rich regions, prove that your generator and shrinker are trustworthy, and choose the cheapest oracle that can fail quickly.
 

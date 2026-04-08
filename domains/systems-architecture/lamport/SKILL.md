@@ -4,7 +4,7 @@ description: "Design, review, and debug Lamport-style consensus, leases, quorum 
 tags: paxos, raft, quorum, leases, reconfiguration, logical-time, tla-plus
 ---
 
-# Lamport Distributed Consensus
+# Lamport Distributed Consensus⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌‌​​‌‌‍‌​‌‌​​​‌‍‌‌‌​‌‌‌​‍​​‌​​​​​‍​​​​‌​‌​‍​​​​‌​‌​⁠‍⁠
 
 ## Required Context Loads
 - MANDATORY: before changing quorum math, leases, or membership rules, read `references.md`.

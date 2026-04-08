@@ -4,7 +4,7 @@ description: "Design and review Python the way Guido-style library maintainers d
 tags: python, pythonic, van-rossum, api-design, dataclass, slots, caching, encoding, inheritance
 ---
 
-# Guido van Rossum Style: Semantics First
+# Guido van Rossum Style: Semantics First⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​​‌‌‌‍‌​​‌​​​‌‍​‌​‌​‌​‌‍​​​‌‌‌‌​‍​​​​‌​​‌‍‌‌‌​​​‌‌⁠‍⁠
 
 Guido-style Python is not "shorter code" or "more magic". It is code that keeps tracebacks useful, leaves room for API evolution, and refuses optimizations that quietly change semantics.
 

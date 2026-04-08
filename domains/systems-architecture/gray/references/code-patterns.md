@@ -1,4 +1,4 @@
-# Code patterns: WAL, transaction manager, idempotent executor
+# Code patterns: WAL, transaction manager, idempotent executor⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌​‌‌‌‍​​​‌​​​‌‍‌‌‌‌‌​​​‍‌​‌​​​‌​‍​​​​‌​​‌‍‌‌​‌‌​‌​⁠‍⁠
 
 Reference implementations for the patterns described in the main skill. These are skeletons to illustrate shape and invariants, not production code. Production code must add checksums, error handling, concurrency safety, and failure injection tests.
 

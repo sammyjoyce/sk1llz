@@ -3,7 +3,7 @@ name: pike-simplicity-first
 description: "Apply Rob Pike's simplicity-first Go heuristics for exported API shape, concurrency structure, package boundaries, and dependency restraint. Use when designing or refactoring Go libraries, public types, channel or goroutine pipelines, naming or package layouts, config or option patterns, or compatibility-sensitive changes. Triggers: rob pike, pike, simplicity, goroutines, channels, interfaces, context, package names, options, exported api, go library design."
 ---
 
-# Pike Simplicity First
+# Pike Simplicity First⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​‌‌​​‍‌‌​​‌​​​‍‌‌​‌​‌​​‍​​​‌‌‌​​‍​​​​‌​‌​‍​​​‌‌‌​​⁠‍⁠
 
 Use this skill when the hard part is not writing Go syntax but keeping the package easy to extend, easy to call, and easy to stop. The goal is not "idiomatic-looking Go." The goal is deleting irreversible complexity before it escapes into the API.
 

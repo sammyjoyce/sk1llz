@@ -4,7 +4,7 @@ description: "Think like a UUNET/Verizon backbone operator or DBIR analyst when 
 tags: bgp, routing, peering, rpki, srlg, backbone, tier1, rtbh, veris, dbir, incident-response
 ---
 
-# UUNET
+# UUNET⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​​‌‌​‍​​‌‌​​‌‌‍​‌‌​‌​​​‍‌​​​‌​​‌‍​​​​‌​​‌‍‌‌​​​​‌​⁠‍⁠
 
 UUNET thinking is about economic routing under unsafe failure modes. Assume every control-plane mistake can become a global event, every "diverse" circuit hides shared facility risk, and every breach statistic will be challenged by someone with money or lawyers.
 

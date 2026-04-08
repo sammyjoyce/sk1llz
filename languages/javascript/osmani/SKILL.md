@@ -4,7 +4,7 @@ description: |
   High-signal heuristics for JavaScript performance work in browser-delivered web apps. Use when choosing how to improve LCP, INP, CLS, startup cost, route transitions, speculative loading, or rendering containment without harming other metrics. Trigger keywords: Addy Osmani, web performance, cost of JavaScript, preload scanner, fetchpriority, prefetch, prerender, quicklink, long tasks, INP, LCP, CLS, bfcache, content-visibility, scheduler.yield, third-party facade.
 ---
 
-# Osmani Patterns + Performance
+# Osmani Patterns + Performance⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​​‌‌​‍‌‌​‌​‌‌‌‍​​​‌‌‌‌​‍​​‌‌‌‌​‌‍​​​​‌​‌​‍​​‌‌​​​​⁠‍⁠
 
 Use this when "make it faster" is really a sequencing problem: the browser discovers the wrong bytes too late, executes too much JavaScript before input, or speculates on work the user never needs.
 

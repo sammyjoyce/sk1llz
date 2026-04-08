@@ -1,4 +1,4 @@
-# Undefined Behavior & Strict Aliasing — the deep file
+# Undefined Behavior & Strict Aliasing — the deep file⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌​‌​​‌‍​‌‌​‌‌​‌‍‌​‌‌‌‌​​‍​​‌‌‌‌​‌‍​​​​‌​​‌‍‌​‌​​‌‌‌⁠‍⁠
 
 Read this when: you're debugging a "works at -O0, breaks at -O2" bug, reviewing code for portability, or designing a parser/deserialiser that touches raw bytes.
 

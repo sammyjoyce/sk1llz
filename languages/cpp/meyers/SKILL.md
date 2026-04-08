@@ -3,7 +3,7 @@ name: meyers-effective-cpp
 description: "Apply Scott Meyers-style itemized review heuristics to C++ code where overload resolution, initialization syntax, special-member generation, perfect forwarding, smart-pointer ownership, lambda capture, and container behavior hide non-obvious failure modes. Use when designing or reviewing constructors, sinks, factories, pImpl types, move/copy operations, forwarding helpers, smart-pointer APIs, or performance-sensitive STL code. Triggers: meyers, effective-cpp, forwarding-reference, universal-reference, brace-init, initializer_list, noexcept-move, pimpl, make_shared, shared_ptr, unique_ptr, lambda-capture, std-async."
 ---
 
-# Meyers Effective C++
+# Meyers Effective C++⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​‌​​​​‍​​​​‌‌​​‍​‌‌​‌‌‌​‍​​​​​​‌‌‍​​​​‌​​‌‍​‌‌​​‌​‌⁠‍⁠
 
 Use this skill as a semantic trap detector, not a style checklist. Meyers' method is to find the place where C++ silently generates behavior, prefers the overload you did not expect, or turns a performance claim into folklore.
 

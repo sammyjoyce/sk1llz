@@ -1,4 +1,4 @@
-# CI / automation traps in Hashimoto-style CLIs
+# CI / automation traps in Hashimoto-style CLIs⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌‌‌​‍‌‌‌​‌‌​‌‍​​‌‌​‌‌‌‍‌‌​‌‌​​‌‍​​​​‌​‌​‍‌​​‌​​‌‌⁠‍⁠
 
 Load this file ONLY when diagnosing or designing CI integration for a
 Hashimoto-style CLI, or when a user reports "the exit codes are wrong in

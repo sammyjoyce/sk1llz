@@ -1,4 +1,4 @@
-# V8 Performance Reference
+# V8 Performance Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌​​‌‌​‍​‌‌​​‌​‌‍‌​‌‌​‌​​‍‌​​‌​​​​‍​​​​‌​​‌‍‌‌‌​​‌‌‌⁠‍⁠
 
 Load only when optimizing a hot path or diagnosing deopt/IC trace output.
 

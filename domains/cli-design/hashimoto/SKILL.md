@@ -12,7 +12,7 @@ description: >-
   TTY, terminal flicker.
 ---
 
-# Hashimoto CLI UX
+# Hashimoto CLI UX⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​‌‌​​‍‌​​​​​‌‌‍‌​​‌​‌​​‍‌​‌​​‌‌​‍​​​​‌​‌​‍​‌​​​​​‌⁠‍⁠
 
 Hashimoto-style CLIs optimize for operators who alternate between three modes:
 interactive use, automation, and recovery under stress. The design target is

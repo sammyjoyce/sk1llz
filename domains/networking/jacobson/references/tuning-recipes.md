@@ -1,4 +1,4 @@
-# Tuning Recipes
+# Tuning Recipes⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌​‌‍‌​​​‌​​​‍​‌‌​​‌‌​‍‌‌‌‌‌​​​‍​​​​‌​‌​‍‌​‌‌‌​‌‌⁠‍⁠
 
 Exact-value recipes for the environments practitioners actually deploy. **Apply one at a time and measure RTT-under-load after each change.** Values are starting points, not gospel — but they encode hard-won defaults, not arbitrary suggestions.
 

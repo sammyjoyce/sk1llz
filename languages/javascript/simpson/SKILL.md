@@ -3,7 +3,7 @@ name: simpson-you-dont-know-js
 description: "Deep JavaScript semantics in the style of Kyle Simpson. Use when debugging or refactoring bugs involving `this`, scope, closures, prototypes, `class`/`super`, coercion, promises, microtasks, sparse arrays, or host-vs-language confusion. Triggers: \"why does JS do this\", \"lost this\", \"closure bug\", \"prototype chain\", \"safe ==\", \"async ordering\", \"microtask\", \"class field\", \"super\", \"holey array\"."
 ---
 
-# Kyle Simpson: Mechanics First
+# Kyle Simpson: Mechanics First⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌‌‌‌​‍​​​​​​​‌‍‌‌​​​​‌‌‍‌‌​‌​‌​‌‍​​​​‌​​‌‍‌‌​​‌‌‌‌⁠‍⁠
 
 JavaScript is rarely "weird" at random. Most failures reduce to one of six systems: lexical scope, call-site binding, prototype lookup, coercion, job-queue scheduling, or host-environment behavior. Do not patch symptoms until you can name the system.
 

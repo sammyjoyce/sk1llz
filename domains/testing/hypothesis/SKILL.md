@@ -3,7 +3,7 @@ name: hypothesis-testing-execution-guide
 description: Expert Hypothesis playbook for turning property-based tests into reproducible, high-yield bug hunts. Use when writing or debugging Hypothesis tests with `@given`, `RuleBasedStateMachine`, `target()`, health checks, seeds, deadlines, `max_examples`, `stateful_step_count`, example databases, or flaky CI failures.
 ---
 
-# Hypothesis Execution Guide
+# Hypothesis Execution Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​‌​​‌‍​​‌‌​​​‌‍‌‌‌‌‌​‌​‍‌‌‌​‌‌‌​‍​​​​‌​‌​‍‌‌‌‌‌​‌​⁠‍⁠
 
 Use this skill when the hard part is not Hypothesis syntax, but deciding where search budget, shrinkability, and reproducibility are leaking away.
 

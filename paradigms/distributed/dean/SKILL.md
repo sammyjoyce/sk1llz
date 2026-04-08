@@ -3,7 +3,7 @@ name: dean-large-scale-systems
 description: "Jeff Dean style for interactive, warehouse-scale distributed systems where fanout, skew, and shared-cluster interference dominate. Use when designing or debugging multi-tenant services, large fanout RPC graphs, data platforms, storage schemas, sharding strategies, tail-latency mitigation, straggler handling, or load-balancing at Google-like scale. Triggers: p99, hedge requests, tail latency, stragglers, Bigtable, MapReduce, hot shards, selective replication, noisy neighbors."
 ---
 
-# Dean Large-Scale Systems
+# Dean Large-Scale Systems⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​‌​​​​‍​‌‌‌‌‌​‌‍​​‌‌‌​​‌‍‌‌​‌​‌‌‌‍​​​​‌​‌​‍​‌‌‌​‌​‌⁠‍⁠
 
 This skill is for systems that are already "working" but start failing once fanout, skew, and shared-cluster interference show up. It is not a generic distributed-systems primer.
 

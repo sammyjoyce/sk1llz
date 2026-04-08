@@ -1,4 +1,4 @@
-# AsyncAPI v2 → v3 Migration Guide
+# AsyncAPI v2 → v3 Migration Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​‌​​‌‍​​​‌​​​​‍​‌​‌‌​​​‍‌‌​‌‌​‌‌‍​​​​‌​​‌‍‌‌‌​​‌​​⁠‍⁠
 
 Only migrate if you need something v3 adds. v2 is supported indefinitely; don't migrate for aesthetics.
 

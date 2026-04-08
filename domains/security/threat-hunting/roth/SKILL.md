@@ -3,7 +3,7 @@ name: roth-detection-engineering
 description: "Expert playbook for Florian Roth style detection engineering across Sigma, YARA, YARA-X, LOKI, THOR, and signature-base. Use when writing or tuning portable SIEM detections, scoring YARA hits, reducing false positives, debugging unsupported backend conversions, or fixing slow rules. Triggers: sigma, pysigma, sigma-cli, yara, yara-x, THOR, LOKI, signature-base, rule tuning, false positives, backend mapping, threat hunting."
 ---
 
-# Roth Detection Engineering
+# Roth Detection Engineering⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​‌‌‌​​‍​‌​‌​​‌​‍‌‌‌‌​‌​​‍​​‌​​‌‌​‍​​​​‌​‌​‍​‌‌​​​​​⁠‍⁠
 
 Roth's style is not "write more rules." It is "ship rules that survive backend translation, analyst review, false-positive pressure, and community reuse." A rule that looks elegant in YAML or YARA but dies in conversion, gets suppressed by analysts, or times out under load is not finished.
 

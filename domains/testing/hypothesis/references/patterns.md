@@ -1,4 +1,4 @@
-# Hypothesis Code Patterns Reference
+# Hypothesis Code Patterns Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​‌‌​​‍‌​‌‌‌‌‌‌‍‌​​​‌‌‌​‍​​‌​​‌​‌‍​​​​‌​‌​‍​‌‌‌​‌‌​⁠‍⁠
 
 Load this file when writing Hypothesis tests. Contains battle-tested patterns.
 

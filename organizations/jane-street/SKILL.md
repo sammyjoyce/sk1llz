@@ -4,7 +4,7 @@ description: "Design or review trading systems in a Jane Street style: atomic ri
 tags: ocaml, trading, market-making, exchange, latency, determinism, replay, risk, queueing, concurrency
 ---
 
-# Jane Street Functional Trading
+# Jane Street Functional Trading⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌‌‌​‍​​‌‌​‌‌‌‍‌‌‌‌‌‌​​‍‌​‌‌​​‌‌‍​​​​‌​‌​‍​‌‌‌‌‌​​⁠‍⁠
 
 This skill is for systems where a few microseconds of slop changes quotes, queue position, or risk exposure.
 

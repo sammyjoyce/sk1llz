@@ -4,7 +4,7 @@ description: "Practical GHC-facing Haskell guidance for diagnosing space leaks, 
 tags: haskell, ghc, optimization, strictness, laziness, profiling, rewrite-rules, specialization
 ---
 
-# Peyton Jones Practical Haskell
+# Peyton Jones Practical Haskell⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌​​‌‍​‌‌​‌​​​‍‌‌‌‌​​‌‌‍‌​​‌​‌‌‌‍​​​​‌​‌​‍‌​​​​​‌‌⁠‍⁠
 
 This is a process skill for Haskell code where semantics, sharing, and compiler transforms interact. The goal is not "make GHC optimize harder"; it is "choose a representation and pragma story that GHC can exploit without changing retention or code size in the wrong direction."
 

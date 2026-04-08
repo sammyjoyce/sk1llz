@@ -1,4 +1,4 @@
-# The 12 Test Desiderata — Operational Detail
+# The 12 Test Desiderata — Operational Detail⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌​​‌​‍‌​‌​​‌‌‌‍‌‌​​​‌​​‍‌​​‌​​​‌‍​​​​‌​‌​‍​​‌​​‌‌​⁠‍⁠
 
 Beck published these in 2019 because he realised the qualities of good tests he assumed everyone knew were not in *TDD By Example*. They are **not a checklist** — they are 12 axes you trade against each other. Every test gives up some properties to maximise others. The skill is choosing the trade deliberately.
 

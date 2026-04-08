@@ -3,7 +3,7 @@ name: wadler-monadic-elegance
 description: "Decide how far to escalate from parametric polymorphism to Applicative, Selective, Monad, transformers, or effect handlers in Haskell and similar typed FP systems, with emphasis on rollback, concurrency, and performance traps. Use when designing or refactoring effectful code, choosing between ReaderT/StateT/WriterT/ExceptT, diagnosing transformer-order bugs, recovering lost Applicative structure, or evaluating free/freer/effect-system trade-offs. Trigger keywords: monad, applicative, selective, applicativedo, ReaderT, StateT, WriterT, ExceptT, MonadFail, free monad, Codensity, effect handler, polysemy, fused-effects, effectful."
 ---
 
-# Wadler: Spend Algebraic Power Carefully
+# Wadler: Spend Algebraic Power Carefully⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌​​​‍‌​​​‌​‌‌‍‌​​​​‌‌‌‍​​​​‌‌‌‌‍​​​​‌​​‌‍‌​‌‌​​​‌⁠‍⁠
 
 The central habit is not "use monads elegantly." It is "spend as little semantic power as possible."
 

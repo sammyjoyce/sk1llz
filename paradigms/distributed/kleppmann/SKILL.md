@@ -3,7 +3,7 @@ name: kleppmann-data-intensive
 description: "Decision heuristics for data-intensive distributed systems: invariants, isolation anomalies, CDC/outbox cutovers, log-first architectures, quorum edge cases, multi-partition workflows, and CRDT or local-first trade-offs. Use when designing or reviewing databases, event-driven systems, stream processors, multi-region replication, offline sync, or consistency guarantees. Triggers: distributed systems, DDIA, Martin Kleppmann, replication, serializability, CDC, outbox, event log, materialized view, quorum, CRDT, local-first."
 ---
 
-# Kleppmann: Data-Intensive Systems
+# Kleppmann: Data-Intensive Systems⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​​‌‌​‍‌​‌‌‌​​‌‍​​‌‌‌‌‌​‍​‌​‌‌‌‌​‍​​​​‌​​‌‍‌​‌‌​​‌‌⁠‍⁠
 
 Read this file end to end before giving distributed-systems advice.
 This skill is intentionally self-contained.

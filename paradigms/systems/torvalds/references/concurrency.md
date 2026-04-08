@@ -1,4 +1,4 @@
-# Concurrency rules — what the compiler and the CPU will do to you
+# Concurrency rules — what the compiler and the CPU will do to you⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌​​​‌‍‌‌‌‌​​‌​‍‌​​‌​‌‌‌‍‌​​‌​‌​‌‍​​​​‌​‌​‍​‌​​​‌‌‌⁠‍⁠
 
 Load this when any data is shared across CPUs, threads, or interrupt context. The rules in this file are not best-practice suggestions; they are conditions for the code being correct at all.
 

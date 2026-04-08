@@ -4,7 +4,7 @@ description: "Apply Bill Kennedy's Go engineering style when correctness, latenc
 tags: go, runtime, scheduler, gc, profiling, tracing, escape-analysis, channels, goroutines, semantics
 ---
 
-# Kennedy Mechanical Sympathy
+# Kennedy Mechanical Sympathy⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌​​​​‍​​‌‌​‌​​‍​‌‌​​‌‌‌‍‌​​‌​‌‌‌‍​​​​‌​​‌‍‌​‌‌‌​‌​⁠‍⁠
 
 Bill Kennedy style is not "micro-optimize Go." It is "preserve integrity, then make the runtime bill explicit." If you cannot name the copy, allocation, queueing rule, or scheduler consequence you are buying, you are still guessing.
 

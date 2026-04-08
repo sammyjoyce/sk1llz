@@ -4,7 +4,7 @@ description: "Formalize, model-check, and de-risk distributed protocols the Lamp
 tags: paxos, tla+, pluscal, tlc, tlaps, consensus, quorum-systems, refinement-mapping, logical-clocks, leases, reconfiguration, byzantine
 ---
 
-# Lamport Formal Distributed
+# Lamport Formal Distributed⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌‌​‌‌‌‍​‌‌‌‌‌‌​‍‌‌‌​‌​‌​‍‌‌‌‌‌‌​‌‍​​​​‌​‌‌‍​‌‌‌​‌​​⁠‍⁠
 
 This skill is for tasks where informal reasoning is the bug. Use it when the work hinges on invariants, quorum math, reconfiguration, lease safety, or proving that an optimization still implements the original protocol.
 

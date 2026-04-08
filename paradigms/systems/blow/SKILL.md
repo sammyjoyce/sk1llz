@@ -4,7 +4,7 @@ description: "Build languages, compilers, asset pipelines, and game-engine subsy
 tags: compiler, language-design, game-dev, game-engine, data-oriented, metaprogramming, jai, performance, tooling
 ---
 
-# Jonathan Blow
+# Jonathan Blow⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​​​‌‌‍​​​​‌​‌​‍‌​‌​​‌‌‌‍‌​​‌‌‌​​‍​​​​‌​​‌‍‌‌‌​‌​​​⁠‍⁠
 
 Use this skill as a compact philosophy/mindset guide. It is self-contained.
 Do NOT load generic compiler or renderer background material unless the user

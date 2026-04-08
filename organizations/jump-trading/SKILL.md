@@ -4,7 +4,7 @@ description: "Expert playbook for FPGA-first electronic trading systems where wi
 tags: fpga, hft, low-latency, trading, hardware, networking, market-data, timestamping
 ---
 
-# Jump Trading FPGA HFT
+# Jump Trading FPGA HFT⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​‌‌‌‌‍​​‌​​‌​‌‍‌‌‌‌​‌​‌‍​​‌‌‌‌‌​‍​​​​‌​​‌‍‌‌​‌‌‌‌‌⁠‍⁠
 
 ## Read Only What Matters
 

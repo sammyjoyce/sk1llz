@@ -4,7 +4,7 @@ description: "Separate productive mutants from noise so mutation testing improve
 tags: mutation-testing, test-quality, fault-injection, coverage-analysis, CI-gates
 ---
 
-# Richard Lipton Mutation Testing
+# Richard Lipton Mutation Testing⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​‌​​​‍‌‌​‌​​​​‍‌​​‌‌​‌‌‍‌​‌​‌‌​​‍​​​​‌​‌‌‍​​​‌​‌‌‌⁠‍⁠
 
 ## Start Here
 - Before changing any knob, read the repo's active mutation config (`pom.xml`, `build.gradle`, `stryker.config.*`, CI job) and compare it to the failing run. Mutation failures are often selection/config failures, not assertion failures.

@@ -3,7 +3,7 @@ name: google-material-design
 description: Apply modern Material Design 3 and Material 3 Expressive using current spec behavior, not M2 or early-M3 folklore. Use when designing or reviewing Android, Compose, Flutter, or web UIs that rely on Material tokens, dynamic color, adaptive navigation, window size classes, or M3 Expressive motion; when upgrading compose-material3 and visuals change unexpectedly; or when requests mention material design, material 3, material you, m3 expressive, dynamic color, surface container, primaryFixed, navigation suite, wide navigation rail, list-detail scaffold, supporting pane, shared element, tonal elevation, or HCT.
 ---
 
-# Google Material Design
+# Google Material Design⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌​​‌​‍‌​​‌​​​​‍​​​​​​‌​‍​​‌‌‌​​‌‍​​​​‌​​‌‍‌​​‌​‌​‌⁠‍⁠
 
 Most Material failures are not "bad taste." They are contract mistakes:
 

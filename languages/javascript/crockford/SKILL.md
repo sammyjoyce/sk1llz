@@ -10,7 +10,7 @@ description: >-
   factories, or class-free JavaScript.
 ---
 
-# Crockford After The Book
+# Crockford After The Book⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​​‌​‍​​‌‌‌‌‌​‍​​​‌‌‌‌‌‍​​‌​‌​​​‍​​​​‌​​​‍‌‌‌​‌‌‌‌⁠‍⁠
 
 Treat Crockford as a risk-control doctrine, not a nostalgia act. The point is not to look old-fashioned; the point is to stay out of the parts of JavaScript where parser ambiguity, capability leakage, prototype tricks, and silent coercion hide bugs for years.
 

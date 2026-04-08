@@ -4,7 +4,7 @@ description: "Design Python objects that cooperate with the interpreter through 
 tags: protocols, dataclasses, descriptors, slots, weakref, memoryview, typing, data-model
 ---
 
-# Ramalho: Cooperate With the Interpreter
+# Ramalho: Cooperate With the Interpreter⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​‌​‌‍‌​​​‌​​‌‍‌​‌​‌‌‌​‍​​‌​​‌​‌‍​​​​‌​​‌‍‌‌​​‌​​‌⁠‍⁠
 
 Ramalho-style Python starts from this question: what protocol is this object promising to the interpreter, not what methods can I bolt onto a class. The win is getting built-ins, operators, pattern matching, and type checkers to do the work once the object advertises the right hooks.
 

@@ -1,4 +1,4 @@
-# Data Dominates: Tables over Control Flow
+# Data Dominates: Tables over Control Flow⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​​‌​‍‌‌​‌‌‌‌‌‍​​​‌‌​‌​‍‌‌​‌​‌​‌‍​​​​‌​‌​‍​​‌‌‌​​​⁠‍⁠
 
 Load this only when you are about to write (or refactor) a `switch`/`if` chain with **more than ~5 branches**, a parser, a state machine, or anything that looks like "interpret this input." Otherwise skip it.
 

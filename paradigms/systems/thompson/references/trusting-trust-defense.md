@@ -1,4 +1,4 @@
-# Trusting Trust: The Actual Defenses
+# Trusting Trust: The Actual Defenses⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌​​​‌‌‍​​​​​​‌‌‍​‌‌‌​‌​​‍‌​‌‌​‌​‌‍​​​​‌​​‌‍‌‌‌​​‌‌‌⁠‍⁠
 
 Load this file when: auditing a toolchain, signing a release, evaluating a supply-chain attack claim, designing a bootstrap process, or discussing "but we reviewed the source."
 

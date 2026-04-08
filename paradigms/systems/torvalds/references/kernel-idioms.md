@@ -1,4 +1,4 @@
-# Kernel C idioms — what every line of kernel code assumes you know
+# Kernel C idioms — what every line of kernel code assumes you know⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​‌‌​‌‍‌‌‌‌​‌‌‌‍​‌​‌​​​‌‍‌‌‌‌​​‌​‍​​​​‌​‌​‍‌‌​‌‌‌‌‌⁠‍⁠
 
 Load this when you are about to write or review code that does multiple allocations, returns errors from a function that also returns a pointer, embeds itself into a generic data structure, or chooses an allocation flag.
 

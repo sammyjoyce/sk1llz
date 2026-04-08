@@ -4,7 +4,7 @@ description: "Turn vague distributed-systems plans into Vogels-style availabilit
 tags: vogels, aws, distributed-systems, reliability, eventual-consistency, static-stability, shuffle-sharding, control-plane, data-plane, cells
 ---
 
-# Vogels Cloud Architecture
+# Vogels Cloud Architecture⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌​‌​‍​‌​‌​​​‌‍​‌‌‌‌‌‌‌‍​‌‌​‌‌‌‌‍​​​​‌​​‌‍‌‌​‌​​​‌⁠‍⁠
 
 Use this skill when availability, blast radius, and customer-visible behavior matter more than elegance on a diagram.
 

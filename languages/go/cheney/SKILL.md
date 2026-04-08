@@ -4,7 +4,7 @@ description: "Pragmatic Go API and code design in Dave Cheney's style: shrink pu
 tags: go, api-design, errors, interfaces, logging, concurrency, testing, performance
 ---
 
-# Cheney Practical Go
+# Cheney Practical Go⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌‌​‌​‍​​​‌‌​​​‍​​‌‌​‌‌‌‍‌​​​‌​‌‌‍​​​​‌​​‌‍​‌​​‌‌​​⁠‍⁠
 
 This is a philosophy/process skill, not a Go tutorial. Apply it at package and API boundaries, where small mistakes turn into permanent maintenance cost.
 

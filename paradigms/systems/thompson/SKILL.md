@@ -4,7 +4,7 @@ description: "Apply Ken Thompson's systems style to choices where simplicity is 
 tags: unix, regex, utf-8, plan9, go, systems, trust, concurrency
 ---
 
-# Thompson: Elegant Systems
+# Thompson: Elegant Systems⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​​‌​‌‌‍‌​‌​​​‌‌‍​​‌​​​​​‍‌‌​‌​​‌​‍​​​​‌​​‌‍‌​‌‌‌​​​⁠‍⁠
 
 Thompson simplicity is not "use fewer features." It is removing hidden states until you can predict behavior before running the program.
 

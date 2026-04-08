@@ -1,4 +1,4 @@
-# Regex: NFA vs. Backtracking — Expert Decision Guide
+# Regex: NFA vs. Backtracking — Expert Decision Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​​​​‌‍​​‌​‌​‌​‍​‌​​​‌‌‌‍​‌​‌‌​‌‌‍​​​​‌​​‌‍‌‌​​​‌​‌⁠‍⁠
 
 Load this file when: writing regex that will see untrusted input, debugging a regex that "hangs", or choosing between stdlib regex and a DFA engine.
 

@@ -3,7 +3,7 @@ name: bellard-minimalist-wizardry
 description: "Design single-author, size-constrained systems in the style of Fabrice Bellard: one-pass compilers, dynamic translators, embeddable runtimes, and hand-tuned codec kernels. Use when translation is cheaper than representation, when self-hosting or booting a proof matters more than portability, or when you need Bellard-specific tradeoffs such as no AST/SSA, value-stack codegen, fixed register mapping, translation blocks, direct block chaining, physically indexed code caches, refcount-plus-cycle GC, qjsc-style bytecode embedding, or scalar-oracle-plus-asm verification. Triggers: TinyCC, TCC, OTCC, QuickJS, QEMU, TCG, dyngen, translation block, direct block chaining, self-modifying code, no yacc, no SSA, no IR, x86inc, checkasm, NaN boxing, JS_SetMemoryLimit, js_std_eval_binary."
 ---
 
-# Bellard Minimalist Wizardry
+# Bellard Minimalist Wizardry⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​‌‌‌​‍​​​‌​​​‌‍​‌‌‌​‌‌​‍​​‌​​‌​‌‍​​​​‌​​‌‍​​​‌​​‌​⁠‍⁠
 
 Bellard style is for problems where regeneration is cheaper than architecture. If you need a long-lived multi-author platform, stable serialized IR, or formal guarantees, stop and use a heavier design on purpose.
 

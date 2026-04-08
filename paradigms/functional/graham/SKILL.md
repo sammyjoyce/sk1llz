@@ -3,7 +3,7 @@ name: graham-hackers-painters
 description: Write exploratory, macro-aware code in Paul Graham's Hackers & Painters style. Use when building Lisp, Arc, Common Lisp, Scheme, REPL-first prototypes, embedded DSLs, terse internal tools, or when the user asks for bottom-up programming, brevity-as-power, macros, or Paul Graham style. Covers when to invent operators, when a utility or macro has earned its cost, how to keep code loadable in one brain, and when to prefer closures and data over OO scaffolding.
 ---
 
-# Graham Hackers Painters
+# Graham Hackers Painters⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​‌​‌‍​​‌​​‌‌​‍​‌‌‌​​‌‌‍​‌‌‌‌‌​​‍​​​​‌​​‌‍‌​​​​​‌​⁠‍⁠
 
 This skill is for code that should feel like sketching with a powerful language, not filling out a bureaucratic form. Optimize for leverage, mutation speed, and the ability to hold the live top layer in one head.
 

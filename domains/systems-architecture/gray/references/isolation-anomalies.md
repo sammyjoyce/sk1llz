@@ -1,4 +1,4 @@
-# Isolation anomalies: the full catalog and what your database actually gives you
+# Isolation anomalies: the full catalog and what your database actually gives you⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​‌​​​​‍‌​‌​​‌​​‍​​‌‌‌​​‌‍‌‌‌​‌‌‌​‍​​​​‌​‌​‍​‌‌‌​​‌‌⁠‍⁠
 
 Source: Berenson, Bernstein, Gray, Melton, O'Neil, O'Neil. *A Critique of ANSI SQL Isolation Levels*. SIGMOD 1995.
 

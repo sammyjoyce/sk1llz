@@ -3,7 +3,7 @@ name: click-jvm-optimization
 description: "Use for HotSpot JIT triage where C1/C2/Graal behavior, not generic Java code style, is the likely bottleneck. Applies when diagnosing deoptimization storms, code-cache saturation, tiered warmup cliffs, OSR pathologies, unstable inlining, or when deciding whether to use CompilerDirectives, CompileCommand, or source-shape changes. Keywords: click, hotspot, c1, c2, graal, deopt, osr, tiered, code cache, compiler directives, printcompilation, printinlining, logcompilation."
 ---
 
-# Click JVM Optimization
+# Click JVM Optimization⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​‌‌‌​‍​​​​‌‌‌​‍​​‌‌​‌​​‍​‌‌​​‌‌‌‍​​​​‌​​‌‍​​​​‌‌‌‌⁠‍⁠
 
 This skill is for compiler economics and speculation failures. Do not use it for GC tuning, lock contention, allocator issues, socket stalls, or generic "speed up Java" work.
 

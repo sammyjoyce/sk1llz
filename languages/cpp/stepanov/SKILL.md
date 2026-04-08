@@ -4,7 +4,7 @@ description: "Derive STL-style C++ algorithms from proofs instead of from contai
 tags: generic-programming, algorithms, iterators, concepts, stl, value-semantics, regular-types, ranges
 ---
 
-# Stepanov Generic Programming
+# Stepanov Generic Programming⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌​‌​‌‌‍‌​‌​​​‌​‍‌​​​​‌‌​‍‌‌‌‌‌​​​‍​​​​‌​‌​‍‌‌‌​​​‌‌⁠‍⁠
 
 This skill is for algorithm design, not for template cleverness. Treat templates, ranges, and concepts as the final encoding step, not the source of the idea.
 

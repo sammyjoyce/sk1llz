@@ -4,7 +4,7 @@ description: "Write JavaScript with expert-level control over prototypes, dynami
 tags: javascript, v8, prototypes, coercion, security, performance
 ---
 
-# Eich - JavaScript Language Fundamentals
+# Eich - JavaScript Language Fundamentals⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​‌‌‌​​‍‌‌‌‌​‌​​‍‌‌​‌‌​​‌‍​​​​​​‌‌‍​​​​‌​‌​‍‌​​​​‌​​⁠‍⁠
 
 Use this skill when the bug is about JavaScript *semantics* or when V8/Node performance and object layout actually matter. Do **not** cargo-cult engine rules into ordinary feature work; first classify whether you are solving a semantics bug, a security boundary, or a measured hot path.
 

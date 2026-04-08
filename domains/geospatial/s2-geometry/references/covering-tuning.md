@@ -1,4 +1,4 @@
-# S2 RegionCoverer Tuning — The Expert Reference
+# S2 RegionCoverer Tuning — The Expert Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌‌‌​‌​‍‌​‌‌​​‌​‍​‌‌​​​​‌‍‌​‌​‌‌‌‌‍​​​​‌​‌​‍​​​‌​‌​​⁠‍⁠
 
 This is the calibration reference for `S2RegionCoverer`. Read this **before**
 picking `max_cells`, `min_level`, `max_level`, or `level_mod` for any production

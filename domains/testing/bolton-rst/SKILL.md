@@ -3,7 +3,7 @@ name: bolton-rapid-software-testing
 description: "Diagnose and improve software testing using Michael Bolton and James Bach's Rapid Software Testing heuristics. Use when evaluating a test strategy, reviewing automation or regression plans, creating or coaching exploratory sessions, writing charters or debriefs, framing release risk, surfacing testability issues, or defending exploratory work to managers, auditors, or developers. Triggers: exploratory testing, session-based test management, testing vs checking, FEW HICCUPPS, SFDIPOT, charter, debrief, coverage, testability, bug advocacy, \"all tests pass\"."
 ---
 
-# Bolton Rapid Software Testing
+# Bolton Rapid Software Testing⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​​‌‌‌‍​​‌‌​​​​‍‌​‌​​‌​‌‍‌‌‌‌​‌​​‍​​​​‌​‌​‍‌‌​​‌​​​⁠‍⁠
 
 RST is for moments when a team is about to fool itself: green bars are being mistaken for product knowledge, scripts are being mistaken for coverage, or bug counts are being mistaken for tester productivity.
 

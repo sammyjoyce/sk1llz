@@ -3,7 +3,7 @@ name: lampson-system-design
 description: "Design long-lived computer systems in Butler Lampson's style: write abstract state and actions first, keep lower layers replaceable, put correctness end-to-end, and optimize for repair, tail latency, and evolvability. Use when choosing interfaces, retry/replication/transaction strategies, control-plane vs data-plane splits, storage hardening, or security boundaries. Trigger keywords: abstraction, spec, end-to-end, idempotence, retry, OCC, snapshot isolation, commit record, failover, repair, capability, least common mechanism, control plane."
 ---
 
-# Lampson System Design
+# Lampson System Design⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌​​‌​‌‍‌‌​​​‌‌​‍​​‌‌​​​‌‍​‌​​​‌‌‌‍​​​​‌​​‌‍​‌‌‌‌​‌‌⁠‍⁠
 
 Use this skill for boundary decisions and failure-model choices. It is not for naming, formatting, or code-style cleanup inside an already-stable design.
 

@@ -3,7 +3,7 @@ name: cox-tooling-excellence
 description: "Apply Russ Cox style to exported Go APIs, module graphs, and toolchain policy. Use when designing public packages, changing go.mod or toolchain settings, publishing releases, or debugging compatibility, MVS, retract, replace, GODEBUG, go mod tidy, go fix, or semantic import versioning issues. Triggers: backward compatibility, minimal version selection, /v2, private proxy, checksum, gorelease, toolchain, go line."
 ---
 
-# Cox Tooling Excellence
+# Cox Tooling Excellence⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌‌​​​​‍‌​‌​​​​​‍​​​​​​‌​‍‌​‌​‌‌​‌‍​​​​‌​‌​‍​‌​‌​‌‌‌⁠‍⁠
 
 Optimize for boring releases. In this style, "works for my build" is not success; success is that users get a predictable build graph, a stable API surface, and an obvious migration path when change is unavoidable.
 

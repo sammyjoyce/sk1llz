@@ -15,7 +15,7 @@ description: >-
   BenchBase, OtterTune.
 ---
 
-# Pavlo-Style Database Performance
+# Pavlo-Style Database Performance⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​‌‌‌​​‍‌​‌‌​​‌​‍‌​​​‌‌​‌‍​‌‌‌​​​​‍​​​​‌​‌​‍​‌‌​​​‌‌⁠‍⁠
 
 This skill is self-contained. Do not waste context on generic SQL primers, "database basics", or blanket index checklists.
 

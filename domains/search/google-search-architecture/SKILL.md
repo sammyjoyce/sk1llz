@@ -3,7 +3,7 @@ name: google-search-architecture
 description: Design and debug multi-stage search ranking systems using leak-confirmed Google patterns for stage placement, twiddlers, click signals, sitechunk quality, and ranking failure isolation. Use when building or tuning retrieval/ranking stacks, placing a new signal, debugging ranking regressions, designing click-based rerankers, implementing diversity constraints, or separating retrieval failures from trust or packing failures. Triggers include ranking pipeline, retrieval vs ranking, twiddler, NavBoost, click signals, sliceTag, sitechunk, NSR, siteAuthority, freshness, hostAge, official page, quality demotion, packing, search regression.
 ---
 
-# Google Search Architecture
+# Google Search Architecture⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​‌‌​‍‌​​​​‌​​‍​‌​‌​​​​‍​‌​​‌​‌‌‍​​​​‌​​‌‍‌​​​‌‌​‌⁠‍⁠
 
 This skill is for one question: **where does this signal belong, and what failure mode will it create if you place it wrong?**
 

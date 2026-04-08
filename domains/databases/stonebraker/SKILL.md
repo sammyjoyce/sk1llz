@@ -11,7 +11,7 @@ description: >-
   "Vertica", "Postgres extensibility", "anti-caching", "storage engine".
 ---
 
-# Stonebraker Database Architecture
+# Stonebraker Database Architecture⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​​‌​​‍​​​‌‌​‌‌‍​​‌​‌​​​‍​‌‌‌​‌‌‌‍​​​​‌​​‌‍​​​‌​‌‌​⁠‍⁠
 
 Stonebraker's move is not "tune harder." It is "identify the overhead the incumbent system treats as normal, then delete the subsystem that exists only to pay that overhead." The right first question is never "which database is best?" It is "what is the dominant tax here: coordination, scans, memory misses, write amplification, or lack of extensibility?"
 

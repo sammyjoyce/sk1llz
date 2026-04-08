@@ -1,4 +1,4 @@
-# Worked example: Pólya's inscribed square (the canonical relaxation)
+# Worked example: Pólya's inscribed square (the canonical relaxation)⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​​​‌‌‍​​‌​‌‌‌‌‍​​​​​‌​‌‍​‌​‌‌‌​​‍​​​​‌​​‌‍​​​​‌​‌‌⁠‍⁠
 
 This is the problem Pólya used to demonstrate his method, and the one Schoenfeld used for decades to teach metacognition. It compresses almost every idea in the skill into one example. **Load this file only when you need to see the method end-to-end on a single problem** — e.g., you have explained the skill to a colleague and they want to see it work.
 

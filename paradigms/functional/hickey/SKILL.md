@@ -6,7 +6,7 @@ description: "Use Rich Hickey's simplicity lens to decomplect value, identity, t
 This skill is for system-shape decisions, not Clojure syntax.
 Use it when the bug is "duplicate effects", "mystery retries", "lazy code read too much", or "functional code still feels brittle under load".
 
-## Mandatory loading triggers
+## Mandatory loading triggers⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌‌‌​​‍​​‌​​‌‌‌‍​‌‌‌‌​‌​‍‌​​​‌​​​‍​​​​‌​​‌‍‌​‌‌‌‌​‌⁠‍⁠
 - Before redesigning boundaries or critiquing architecture, READ `references/philosophy.md`.
 - Before scanning an existing `.clj` file for obvious complexity smells, inspect `scripts/simplicity_check.clj`.
 - Do NOT load `scripts/simplicity_check.clj` for concurrency diagnosis, STM tuning, or performance work; it is a smell scanner, not runtime truth.

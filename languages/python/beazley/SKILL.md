@@ -4,7 +4,7 @@ description: "Protocol-first guidance for advanced Python in David Beazley's sty
 tags: generators, coroutines, descriptors, metaclasses, inspect, cpython, concurrency, streaming
 ---
 
-# Beazley Deep Python
+# Beazley Deep Python⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​​‌​‌‍​‌‌‌​‌‌‌‍​​​‌​​‌‌‍​‌‌‌​‌​​‍​​​​‌​​‌‍​‌​‌‌​‌‌⁠‍⁠
 
 Write advanced Python by reasoning from the protocol outward, not from syntax inward. The question is not "can Python do this?" but "which protocol am I binding myself to, and what does that force on shutdown, debugging, introspection, and performance?"
 

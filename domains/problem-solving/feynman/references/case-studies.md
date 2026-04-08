@@ -1,4 +1,4 @@
-# Case Studies: Feynman's Actual Methods in Practice
+# Case Studies: Feynman's Actual Methods in Practice⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​​​​​​‍​‌‌‌‌‌​​‍​‌‌​​‌‌‌‍‌​​​​​‌​‍​​​​‌​​‌‍​‌‌‌‌‌​‌⁠‍⁠
 
 Concrete historical material. Use these as calibration for the patterns in
 `SKILL.md` — they show what the techniques look like in their original

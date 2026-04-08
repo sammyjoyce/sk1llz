@@ -1,4 +1,4 @@
-# Go Concurrency: Expert Gotchas
+# Go Concurrency: Expert Gotchas⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌​‌​‌​‍​‌‌​‌‌‌‌‍​‌‌‌‌‌​‌‍​‌‌‌​‌​​‍​​​​‌​‌​‍​​‌​​​‌​⁠‍⁠
 
 Load this file when: reviewing Go code with goroutines and channels, debugging hangs/leaks/data races, or architecting a concurrent Go service.
 

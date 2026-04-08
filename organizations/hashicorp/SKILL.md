@@ -3,7 +3,7 @@ name: hashicorp
 description: "Design workflow-first platform engineering, Terraform/Vault/Consul/Nomad operating models, and self-service infrastructure boundaries in a HashiCorp style. Use when defining golden paths, workspace and state topology, secrets or service-discovery architecture, scheduler trade-offs, or migration plans that must survive technology swaps. Trigger keywords: workflow-first, immutability, Terraform workspace, remote state, Vault token, Consul stale read, Nomad binpack, platform team, self-service, golden path."
 ---
 
-# HashiCorp
+# HashiCorp⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌‌​​​‍​​​​‌​​‌‍‌‌‌‌​​​‌‍‌‌‌‌‌‌‌‌‍​​​​‌​‌​‍​‌‌​‌​​‌⁠‍⁠
 
 If your golden path leaks cloud IDs, auth backends, cluster names, or scheduler
 classes, you standardized an implementation, not a workflow, and you just

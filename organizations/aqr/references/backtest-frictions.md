@@ -1,4 +1,4 @@
-# Backtest Frictions — Reference
+# Backtest Frictions — Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​​​​​‌‍‌‌‌‌‌​‌​‍​​​​​​‌‌‍‌​​‌‌‌​​‍​​​​‌​​‌‍‌​‌‌​​‌​⁠‍⁠
 
 **Read this before running any long-short factor backtest.** The gap
 between paper Sharpe and live Sharpe is dominated by the items in this

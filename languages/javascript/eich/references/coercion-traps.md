@@ -1,4 +1,4 @@
-# Coercion & Equality Reference
+# Coercion & Equality Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​‌​​​​‍​‌‌​​​​‌‍‌​​‌​​​‌‍​​​​​​​​‍​​​​‌​​‌‍‌​​‌‌​‌​⁠‍⁠
 
 Load only when writing `==`, relying on a coercion, or implementing `Symbol.toPrimitive` / `valueOf` / `toString`.
 

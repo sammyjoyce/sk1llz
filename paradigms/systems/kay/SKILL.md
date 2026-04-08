@@ -4,7 +4,7 @@ description: "Design languages, runtimes, UI platforms, and programmable environ
 tags: alan-kay, smalltalk, dynabook, message-passing, late-binding, live-systems, reflective-systems, ui, language-design
 ---
 
-# Alan Kay
+# Alan Kay⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​​​‌‌‍​‌​​‌​‌​‍‌‌​‌​‌‌​‍‌​​‌‌​​​‍​​​​‌​‌​‍​​‌‌​​‌‌⁠‍⁠
 
 This is a philosophy skill for tasks where the real problem is not "how do I ship the next feature?" but "how do I create a system people can keep reshaping?"
 

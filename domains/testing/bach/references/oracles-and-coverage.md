@@ -1,4 +1,4 @@
-# Oracles and Coverage — Deep Reference
+# Oracles and Coverage — Deep Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​‌​​‌‍‌​‌​‌​​​‍‌​​‌​​​‌‍‌‌‌​‌​​​‍​​​​‌​‌​‍‌​​​​​‌​⁠‍⁠
 
 Load this when you need to frame a bug report precisely, build an oracle checklist for a risky area, or construct a test strategy from scratch.
 

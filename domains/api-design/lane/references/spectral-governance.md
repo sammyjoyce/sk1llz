@@ -1,4 +1,4 @@
-# Spectral Governance Strategy — Lane Style
+# Spectral Governance Strategy — Lane Style⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌‌‌‍‌‌‌‌‌​‌​‍‌‌​‌‌‌‌‌‍​​​​​​​​‍​​​​‌​‌​‍‌​‌‌​​​​⁠‍⁠
 
 This reference covers the expert-level Spectral governance approach Lane developed
 across Bloomberg, Postman, and enterprise clients. Load when **setting up or

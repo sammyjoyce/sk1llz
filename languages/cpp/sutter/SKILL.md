@@ -4,7 +4,7 @@ description: "Write and review modern C++ in Herb Sutter's style: explicit failu
 tags: exceptions, noexcept, const, concurrency, move-semantics, pimpl, polymorphism, smart-pointers
 ---
 
-# Sutter Exceptional C++
+# Sutter Exceptional C++⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​​‌​‌‍​​‌​‌‌​​‍‌‌​‌‌‌​‌‍​‌‌‌​‌​‌‍​​​​‌​‌​‍​‌​‌‌​‌‌⁠‍⁠
 
 This skill is for code that must stay correct when construction, allocation, callbacks, or concurrency go wrong. It is not a generic C++ style guide.
 

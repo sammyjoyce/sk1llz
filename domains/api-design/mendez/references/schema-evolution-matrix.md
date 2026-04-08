@@ -1,4 +1,4 @@
-# Schema Evolution — The Real Compatibility Matrix
+# Schema Evolution — The Real Compatibility Matrix⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​‌​​‌‍‌​​​‌​​‌‍​​​‌‌‌​​‍‌‌‌‌​​​‌‍​​​​‌​‌​‍​​​‌​‌‌‌⁠‍⁠
 
 Load this before proposing any schema change. The matrix below is what actually happens in production, not the simplified "always add optional fields" advice.
 

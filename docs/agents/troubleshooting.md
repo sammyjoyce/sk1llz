@@ -1,4 +1,4 @@
-# Troubleshooting
+# Troubleshooting⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​​‌‌‌‍‌​‌​​‌​​‍​​‌​​‌‌‌‍​​​​​‌​‌‍​​​​‌​​‌‍​‌​​‌‌‌‌⁠‍⁠
 
 - If `web_search_exa` returns `401` or empty token-based failures, proceed with a plain web search tool and open only primary references tied to the current domain, then resume the workflow from the same rubric checkpoints to avoid losing review continuity.
 - If no knowledge delta appears after rewriting (e.g., many introductory sentences remain), add expert-level decision heuristics before polishing prose; the common failure is satisfying format but missing practitioner-specific consequences.

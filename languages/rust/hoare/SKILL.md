@@ -3,7 +3,7 @@ name: hoare-rust-origins
 description: "Design Rust APIs and low-level code around Hoare's original trade-offs: explicit ownership, explicit allocation, move-over-share, and safety without GC. Use when writing unsafe Rust, FFI, async or address-sensitive code, intrusive or graph-shaped data structures, or when borrow-checker friction suggests the ownership model is wrong. Triggers: unsafe, FFI, Pin, Rc, Arc, RefCell, lifetimes, aliasing, self-referential, graph, Send, Sync, arena."
 ---
 
-# Hoare Rust Origins
+# Hoare Rust Origins⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌​​‌​‌‍‌‌​​​​‌‌‍​​​​‌‌​‌‍‌​​‌‌​‌​‍​​​​‌​‌​‍​​‌​​‌‌‌⁠‍⁠
 
 Use this skill when the problem is about aliasing, address stability, or API shape. Do not use it for beginner syntax, trait boilerplate, or ordinary application code that already fits Rust's defaults.
 

@@ -1,4 +1,4 @@
-# QEMU TCG: dynamic binary translation that survived 20+ years
+# QEMU TCG: dynamic binary translation that survived 20+ years⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​​‌​‌‍​‌​‌​​‌‌‍‌​​‌​‌‌​‍‌‌‌​‌​‌​‍​​​​‌​‌​‍​​‌‌​​​​⁠‍⁠
 
 Read this **only** if you are building a dynamic binary translator, an emulator, a sandbox-via-translation, or any system that consumes one instruction set and emits another at runtime. The techniques here are how QEMU achieves "good enough" performance to be practical (~10–25% of native for system emulation) while remaining portable across host architectures.
 

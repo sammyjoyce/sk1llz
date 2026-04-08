@@ -1,4 +1,4 @@
-# AsyncAPI Binding Cookbook
+# AsyncAPI Binding Cookbook⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌​​​​‌‍​​‌​‌​‌​‍​‌​‌‌​‌​‍​‌‌‌‌​‌​‍​​​​‌​​‌‍​​‌‌​‌‌‌⁠‍⁠
 
 Exact field names, binding versions (as of 2025), and the traps each binding hides. Pin `bindingVersion` explicitly — parsers silently accept any value and apply defaults.
 

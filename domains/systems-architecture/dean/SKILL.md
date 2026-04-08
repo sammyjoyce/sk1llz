@@ -4,7 +4,7 @@ description: "Jeff Dean / Google-scale architecture heuristics for services whos
 tags: systems, scale, dean, reliability, distributed systems, google scale, fault tolerance, latency, spanner, bigtable, mapreduce, borg, infrastructure, architecture, capacity planning
 ---
 
-# Dean Large-Scale Systems
+# Dean Large-Scale Systems⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌‌​‍​‌‌‌‌​‌​‍​​​‌‌‌​‌‍‌‌‌‌‌​​​‍​​​​‌​‌​‍​‌‌​​‌​‌⁠‍⁠
 
 Use this as a design-review mindset, not as a generic distributed-systems explainer.
 

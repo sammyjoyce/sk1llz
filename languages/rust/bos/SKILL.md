@@ -4,7 +4,7 @@ description: "Design and review Rust concurrency in the style of Mara Bos: atomi
 tags: rust, concurrency, atomics, memory-ordering, locks, spinlocks, condvar, arc, weak, once-lock, loom, false-sharing, performance
 ---
 
-# Mara Bos: Prove the Handoff, Not the Intuition
+# Mara Bos: Prove the Handoff, Not the Intuition⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​​‌​‌‍​‌‌‌‌​‌‌‍​‌​‌‌‌‌​‍​‌​‌‌​‌‌‍​​​​‌​‌​‍​​‌‌​​​‌⁠‍⁠
 
 Concurrent Rust is about proving who may touch which memory after which event. The bug is usually not "the value arrived late"; it is "a thread derived permission from an atomic that never established happens-before."
 

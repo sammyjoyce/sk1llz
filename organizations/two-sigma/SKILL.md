@@ -10,7 +10,7 @@ description: >-
   backtesting.
 ---
 
-# Two Sigma ML at Scale
+# Two Sigma ML at Scale⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​‌​​‌‍​​​​‌‌‌​‍​​‌‌​‌‌‌‍‌​‌​‌‌​​‍​​​​‌​​‌‍‌‌​‌​​‌​⁠‍⁠
 
 This skill is for research-factory work, not generic "train a model" work. The edge is usually not the learner. It is the protocol that makes leakage, false discovery, and implementation drag harder than finding signal.
 This file is intentionally self-contained. Do not load extra material unless the user explicitly asks for formulas, citations, or implementation code.

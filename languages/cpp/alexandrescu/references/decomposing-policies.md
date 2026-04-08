@@ -1,4 +1,4 @@
-# Decomposing an Inheritance Hierarchy into Orthogonal Policies
+# Decomposing an Inheritance Hierarchy into Orthogonal Policies⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​​‌​‍‌‌‌‌​​‌‌‍​‌‌‌​‌‌‌‍‌‌‌​​​‌‌‍​​​​‌​‌​‍‌​‌‌​‌‌‌⁠‍⁠
 
 Load this file only when you are **actually refactoring an existing class** into policies, or **designing one from scratch** and have already answered "yes" to the five questions in `SKILL.md`. For deciding whether to use policies at all, the decision tree in `SKILL.md` is sufficient — don't load this.
 

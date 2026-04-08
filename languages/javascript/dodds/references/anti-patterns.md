@@ -1,4 +1,4 @@
-# React Testing Library Anti-Patterns (with severity)
+# React Testing Library Anti-Patterns (with severity)⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌‌​‌‌‌‍​​​‌​​​‌‍‌​‌​‌​‌​‍‌‌‌‌‌‌​‌‍​​​​‌​‌​‍​​​​​‌‌‌⁠‍⁠
 
 The 14 patterns below are the ones Kent Dodds repeatedly calls out. Each lists
 the *seductive reason* people write it, the *concrete consequence*, and the

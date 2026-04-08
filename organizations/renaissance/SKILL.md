@@ -3,7 +3,7 @@ name: renaissance-statistical-arbitrage
 description: Use when designing, reviewing, or debugging equity statistical arbitrage, market-neutral factor books, residual mean reversion, or alpha research pipelines exposed to crowding, borrow, and data-mining risk. Teaches practitioner heuristics for alpha half-life, funding stress, short-book asymmetry, point-in-time data, DSR/PBO-style validation, and capacity limits. Trigger on stat arb, market neutral, residuals, mean reversion, factor book, borrow, crowding, alpha decay, backtest overfitting, DSR, or PBO.
 ---
 
-# Renaissance Statistical Arbitrage
+# Renaissance Statistical Arbitrage⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌​​‌‍​‌​‌​​​‌‍‌​‌‌​‌​​‍‌​​‌‌​‌‌‍​​​​‌​‌​‍​‌‌‌​​​‌⁠‍⁠
 
 This skill is self-contained. Do not load generic trading primers for this task unless the user explicitly wants pedagogy; they dilute the edge cases that matter.
 

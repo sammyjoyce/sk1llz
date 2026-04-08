@@ -12,7 +12,7 @@ description: >-
   composable product, agentic factory, outsourced R&D, mainline vs forks.
 ---
 
-# Hashimoto Building Block Economy
+# Hashimoto Building Block Economy⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌​​‌​‍‌​‌‌‌‌‌​‍‌​‌​‌​‌​‍‌‌​‌‌​‌​‍​​​​‌​‌‌‍​​​​‌‌​​⁠‍⁠
 
 Mitchell Hashimoto's April 2026 observation is not abstract: Ghostty reached
 roughly one million daily macOS update checks in 18 months, while libghostty

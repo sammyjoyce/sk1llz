@@ -1,4 +1,4 @@
-# UTF-8: The Non-Obvious Invariants
+# UTF-8: The Non-Obvious Invariants⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌​​‌‌‍​​​​‌​‌‌‍​‌‌​​​​‌‍​‌‌‌‌​​‌‍​​​​‌​​‌‍‌​‌‌​​​​⁠‍⁠
 
 Load this file when: decoding/validating UTF-8 at a trust boundary, writing a parser or tokenizer, auditing input handling, or debugging encoding-related security reports.
 

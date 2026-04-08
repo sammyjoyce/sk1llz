@@ -3,7 +3,7 @@ name: gray-transaction-systems
 description: "Design and review transaction-processing systems the Jim Gray way: recovery-first logging, anomaly-aware isolation, replica/2PC tradeoffs, long-lived workflow compensation, and durability contracts that survive real failures. Use when building or auditing WAL and crash recovery, ledgers or payments, idempotent retries, prepared transactions, checkpointing, replica topologies, or any code that claims a write is \"durable\". Triggers: transaction, WAL, fsync, checkpoint, group commit, isolation level, snapshot isolation, SSI, write skew, 2PC, prepared transaction, idempotency key, compensation, replica, failover, crash recovery, durability."
 ---
 
-# gray-transaction-systems
+# gray-transaction-systems⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​‌‌‌‌‌‍‌​​​‌​‌‌‍​​​​‌‌‌​‍‌​​‌​​​​‍​​​​‌​‌​‍​​‌​​​​​⁠‍⁠
 
 Gray's useful lesson is not "remember ACID." It is "treat failures, retries, and recovery as the normal execution path, then make the happy path a fast special case."
 

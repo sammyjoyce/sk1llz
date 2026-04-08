@@ -1,4 +1,4 @@
-# HotSpot C2 — Field Notes & Failure Modes
+# HotSpot C2 — Field Notes & Failure Modes⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​‌‌​​‍‌‌‌‌​‌​​‍‌‌​​​​​​‍‌‌‌‌‌​​‌‍​​​​‌​‌‌‍‌​‌‌​​​‌⁠‍⁠
 
 Load this file ONLY when diagnosing a specific C2 performance problem, tuning
 inlining/EA, or writing code that must stay on the C2 fast path. Do NOT load

@@ -3,7 +3,7 @@ name: reitz-api-design
 description: "Design Python libraries and developer-facing APIs in Kenneth Reitz's \"for humans\" style: README-first interface design, porcelain-over-mechanics layering, brutally small public surfaces, and humane naming and error semantics. Use when shaping a package's public API, simplifying an HTTP or client SDK, choosing top-level imports, designing Session or Response style objects, or reviewing a library that feels correct but hostile. Triggers: requests-style, developer experience, wrapper library, client SDK, public API, Session, Response, timeout, auth, retries, adapters, ergonomics."
 ---
 
-# Reitz API Design
+# Reitz API Design⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​​​​‌‍‌‌‌​​‌‌​‍​​​‌​​​​‍​‌‌​​​‌‌‍​​​​‌​​‌‍‌​‌‌​​‌​⁠‍⁠
 
 Use this skill for public APIs. Do not use it to justify private cleverness, protocol-purity arguments, or gratuitous abstraction inside implementation code.
 

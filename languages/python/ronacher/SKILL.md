@@ -4,7 +4,7 @@ description: "Design Python libraries, Flask/Werkzeug/Jinja/Click code, and exte
 tags: python, flask, werkzeug, jinja, click, wsgi, app-factory, extension-design, api-design, library-design
 ---
 
-# Ronacher Pragmatic Design
+# Ronacher Pragmatic Design⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌‌​​​‍​‌​‌‌​‌‌‍​‌​‌​​‌​‍‌‌​​​‌​‌‍​​​​‌​​‌‍‌​‌​​​‌​⁠‍⁠
 
 ## Start Here
 

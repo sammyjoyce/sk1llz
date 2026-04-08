@@ -4,7 +4,7 @@ description: "Make research, portfolio, and execution decisions in a D.E. Shaw s
 tags: trading, computational-finance, quantitative, stat-arb, market-microstructure, risk, portfolio-construction
 ---
 
-# D.E. Shaw Computational Finance
+# D.E. Shaw Computational Finance⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​‌​‌‌‍‌‌​​​‌‌​‍​‌​​‌‌​‌‍​‌‌‌​‌‌​‍​​​​‌​‌​‍​‌‌​‌‌​​⁠‍⁠
 
 This skill is for turning vague quant ideas into evidence that survives hostile implementation. The stance is simple: a result is not real until it survives multiple-testing controls, point-in-time data checks, borrow and impact frictions, and crowding stress.
 

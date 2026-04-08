@@ -1,4 +1,4 @@
-# Replication scaling: the N³ deadlock law
+# Replication scaling: the N³ deadlock law⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​​​‌​‍​​​‌​​​‌‍​‌​‌‌​‌​‍‌‌‌‌‌​‌‌‍​​​​‌​‌​‍​‌​​​​​​⁠‍⁠
 
 Source: Gray, Helland, O'Neil, Shasha. *The Dangers of Replication and a Solution*. SIGMOD 1996.
 

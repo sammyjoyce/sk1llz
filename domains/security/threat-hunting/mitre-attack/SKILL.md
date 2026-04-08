@@ -4,7 +4,7 @@ description: "Turn ATT&CK into defender-grade mappings, hunt hypotheses, and cov
 tags: mitre, attack, ttp, detection, threat-hunting, cti, coverage, navigator, dettect, sub-technique
 ---
 
-# MITRE ATT&CK for Threat Hunting and Detection Engineering
+# MITRE ATT&CK for Threat Hunting and Detection Engineering⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌‌​‌​‌‍​​​​‌‌‌​‍‌‌‌‌‌‌​​‍‌​‌​‌​​‌‍​​​​‌​‌​‍​‌​​​​​​⁠‍⁠
 
 ATT&CK is useful only when it changes defender decisions. The failure mode is not "wrong ID"; it is building detections, metrics, and priorities on a neat but false mapping.
 

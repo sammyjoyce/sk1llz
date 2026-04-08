@@ -4,7 +4,7 @@ description: "Design and review Go code in the Robert Griesemer style: spec-firs
 tags: go, generics, constraints, comparable, interfaces, method-sets, api-design, compatibility
 ---
 
-# Griesemer Precise Go
+# Griesemer Precise Go⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​​‌​‌‍​​​‌‌‌‌​‍‌‌​‌‌​​‌‍​​‌​​‌​‌‍​​​​‌​​‌‍‌​‌‌‌​​‌⁠‍⁠
 
 This skill is for Go work where the hard part is semantic precision, not style polish.
 

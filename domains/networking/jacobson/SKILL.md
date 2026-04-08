@@ -4,7 +4,7 @@ description: "Diagnose queueing, RTT, and TCP control-loop pathologies with Jaco
 tags: networking, tcp, congestion-control, bufferbloat, aqm, latency, performance, bbr, fq_codel
 ---
 
-# Jacobson Network Performance
+# Jacobson Network Performance⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​​‌‌‌‍‌​‌​‌‌‌‌‍​​‌​​​​‌‍​‌​‌​​‌‌‍​​​​‌​​‌‍‌‌​​​​‌​⁠‍⁠
 
 This is a control-loop skill, not a "tune every TCP knob" skill. If you cannot name the queue absorbing the extra packets, you are not tuning the network; you are moving blame between layers.
 

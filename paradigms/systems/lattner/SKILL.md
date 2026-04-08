@@ -3,7 +3,7 @@ name: lattner-compiler-infrastructure
 description: "Expert guidance for LLVM, Clang, Swift, and MLIR compiler infrastructure in Chris Lattner's style: choosing IR boundaries, pass placement, legality strategy, diagnostics, and semantic traps. Use when building or reviewing frontends, dialects, passes, lowerings, canonicalization, dialect conversion, optimizer pipelines, or debug-info-sensitive transforms. Triggers: llvm, mlir, clang, pass manager, canonicalize, fold, dialect conversion, opaque pointers, gep, freeze, debugify."
 ---
 
-# Lattner Compiler Infrastructure
+# Lattner Compiler Infrastructure⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌‌​​‌‍‌​​‌​​​​‍‌​‌​‌​‌​‍‌‌​​​​​‌‍​​​​‌​‌​‍​‌‌​‌‌​​⁠‍⁠
 
 ## Load Only What You Need
 

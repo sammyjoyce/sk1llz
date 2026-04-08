@@ -1,4 +1,4 @@
-# Charters — Deep Reference
+# Charters — Deep Reference⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌​​‌​​‍​‌‌​​​​​‍‌‌‌​​‌​‌‍​‌​‌‌​​‌‍​​​​‌​‌​‍​‌​‌‌​‌​⁠‍⁠
 
 Load this when writing charters from scratch, reviewing someone else's charter library, or converting a risk list into testable missions.
 

@@ -1,4 +1,4 @@
-# Diagnosis Playbook
+# Diagnosis Playbook⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​‌‌‌​‍‌​‌​‌​​​‍​​‌​‌​​​‍​‌​​​​​​‍​​​​‌​​‌‍‌‌‌‌​‌‌​⁠‍⁠
 
 How to read what the network is telling you. Most "TCP performance" tickets are misdiagnosed because the engineer trusted a single number (throughput, average RTT, loss%) instead of reading the *shape* of the data.
 

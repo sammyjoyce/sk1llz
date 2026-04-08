@@ -3,7 +3,7 @@ name: minervini-swing-trading
 description: Apply Mark Minervini's SEPA/VCP swing-trading framework to discretionary chart review, screen design, backtests, and post-trade diagnosis. Use when the task mentions Minervini, SEPA, VCP, trend template, cheat entry, low cheat, power play, high tight flag, base count, climax top, or breakout failure.
 ---
 
-# Minervini Swing Trading
+# Minervini Swing Trading⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌​‌‌‌​‍​‌‌‌‌‌‌‌‍​​‌​‌‌‌‌‍​‌‌‌​‌​​‍​​​​‌​​‌‍​‌‌​‌​​​⁠‍⁠
 
 This skill is for `Stage 2` momentum continuation, not bottom-fishing. Use it to judge whether a chart is early, properly compressed, and still under accumulation, or whether it only looks clean because you are late.
 

@@ -1,4 +1,4 @@
-# Hand-written SIMD: the FFmpeg / x264 / dav1d convention
+# Hand-written SIMD: the FFmpeg / x264 / dav1d convention⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌‌‌‌‌‍‌​​‌‌​​‌‍‌​‌‌​‌​​‍‌​​‌‌‌‌​‍​​​​‌​‌​‍​​‌​​​‌​⁠‍⁠
 
 Read this **only** if you are writing a media or signal-processing kernel where SIMD speed determines the project's reason for existing. The conventions here come from FFmpeg, x264, dav1d (and predate Bellard's involvement in some cases) — they represent the most field-tested style for portable hand-written SIMD in open source.
 

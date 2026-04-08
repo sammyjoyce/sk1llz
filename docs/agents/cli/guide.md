@@ -1,4 +1,4 @@
-# CLI Area Guide
+# CLI Area Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​​​​‌‍​​‌​​‌​‌‍​‌​‌‌​‌‌‍​​‌​​​​‌‍​​​​‌​​‌‍​‌‌‌‌​‌​⁠‍⁠
 
 - Treat `cli/` as both a human CLI and an agent surface: every command redesign should keep stdout machine-clean, move diagnostics to stderr, and add structured output, dry-run paths, and discoverable help before polishing text formatting.
 - Keep the command tree narrow and noun-verb shaped: `catalog`, `install`, `remove`, `recommend`, `env`, `describe`, and `completions` are the stable top-level surfaces; mutations go through explicit `plan` and `apply` subcommands instead of one-shot write commands.

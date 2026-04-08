@@ -1,4 +1,4 @@
-# ATT&CK Mapping Pitfalls — Expert Catalogue
+# ATT&CK Mapping Pitfalls — Expert Catalogue⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌​‌‍‌‌​​​​​‌‍‌​‌‌‌‌​​‍​‌‌‌​‌‌​‍​​​​‌​‌​‍‌‌​​‌​​​⁠‍⁠
 
 Load this file only when mapping a CTI report, an incident narrative, or raw telemetry that will be **published, shared with another team, or used to drive detection engineering**. Do not load it for ad-hoc hunt-query drafting.
 

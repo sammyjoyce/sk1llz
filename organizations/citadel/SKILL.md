@@ -4,7 +4,7 @@ description: Engineer trading and market-data paths for tail-latency rather than
 tags: trading, low-latency, market-making, hft, dpdk, onload, af-xdp, numa, networking, real-time
 ---
 
-# Citadel Low Latency Systems
+# Citadel Low Latency Systems⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​​​​‌​‍‌​​‌‌‌‌‌‍‌‌​​​‌‌‌‍​‌​‌​​‌‌‍​​​​‌​​‌‍‌‌​‌​​‌‌⁠‍⁠
 
 This skill is for systems where `p99.99` matters more than average throughput. Default stance: assume the first regression is topology or coherency, not algorithmic complexity.
 

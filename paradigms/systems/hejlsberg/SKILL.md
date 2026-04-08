@@ -7,7 +7,7 @@ Use this for language and public-surface decisions, not syntax cleanup.
 
 This skill is intentionally self-contained. Do not load compiler-internals material unless the task has turned into checker/runtime implementation debugging.
 
-## Operating Stance
+## Operating Stance⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​‌​​​‍​‌​‌​‌‌‌‍‌​​‌‌‌‌​‍​​‌‌​​​‌‍​​​​‌​‌​‍​​​​​‌‌​⁠‍⁠
 
 Hejlsberg-style design is not "maximize purity". It is "maximize successful upgrades".
 

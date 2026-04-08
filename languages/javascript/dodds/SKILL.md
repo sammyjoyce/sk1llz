@@ -4,7 +4,7 @@ description: "Pressure-test JavaScript and TypeScript test suites the Kent C. Do
 tags: testing, react, javascript, typescript, testing-library, msw, integration-testing, accessibility, jest, vitest
 ---
 
-# Kent C. Dodds Testing Practices
+# Kent C. Dodds Testing Practices⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌​‌‌‌‍‌​‌‌​‌‌​‍​​​‌‌​​‌‍​‌​​‌​​​‍​​​​‌​​‌‍​‌​​​‌‌​⁠‍⁠
 
 This skill is for tests that should fail only when the product meaningfully regresses. If a behavior-preserving refactor breaks the test, assume the test is wrong until proven otherwise.
 

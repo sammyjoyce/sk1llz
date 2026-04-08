@@ -1,4 +1,4 @@
-# Session-Based Test Management & Charters
+# Session-Based Test Management & Charters⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​‌‌​​‌‍​‌‌‌​​‌‌‍‌​‌‌​‌​​‍‌‌‌​‌‌​​‍​​​​‌​‌‌‍​​​​​‌​​⁠‍⁠
 
 > **Load this when**: writing a test charter, planning testing for a sprint or release, debriefing a session, or trying to make exploratory testing accountable to a manager.
 

@@ -1,4 +1,4 @@
-# MSW (Mock Service Worker) Patterns
+# MSW (Mock Service Worker) Patterns⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​‌‌‌‌‌‍​‌‌​​‌‌‌‍​​‌​​​​‌‍‌‌​​​​‌‌‍​​​​‌​​‌‍‌​​​​​‌​⁠‍⁠
 
 Kent's "Stop Mocking Fetch" thesis: mocking `window.fetch` (or your API
 client) hardcodes implementation details (URLs, headers, response shape) into

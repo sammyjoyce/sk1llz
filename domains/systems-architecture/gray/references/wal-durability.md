@@ -1,4 +1,4 @@
-# WAL and durability: what goes wrong when you weren't looking
+# WAL and durability: what goes wrong when you weren't looking⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​​​​‍‌​​​‌‌​‌‍​‌‌​‌‌​‌‍‌‌​​​‌​‌‍​​​​‌​‌​‍​​‌​​‌‌‌⁠‍⁠
 
 Sources: Gray & Reuter, *Transaction Processing: Concepts and Techniques* (1993); fsync-gate discussions (2018); PostgreSQL and RocksDB design docs.
 

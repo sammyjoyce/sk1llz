@@ -3,7 +3,7 @@ name: tigerbeetle-deterministic-simulation
 description: Build or review deterministic simulation harnesses for distributed systems in the TigerBeetle and FoundationDB style. Use when the task mentions DST, VOPR, replayable fault injection, seed-based reproduction, liveness or safety regressions, quorum-core healing, storage or network or clock fault models, targeted subsystem fuzzers, or time-compressed cluster testing.
 ---
 
-# TigerBeetle Deterministic Simulation
+# TigerBeetle Deterministic Simulation⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​‌‌​‌‌‍‌‌‌​​‌​​‍‌​‌​​‌​​‍‌‌​‌‌‌​​‍​​​​‌​‌‌‍​‌​‌​‌‌‌⁠‍⁠
 
 Use this skill when the real problem is "rare interleaving, partial failure, or long-uptime behavior that ordinary tests will never hold still." The job is not to approximate production politely. The job is to force the system through histories production almost never reaches, then replay the exact history until the bug is gone.
 

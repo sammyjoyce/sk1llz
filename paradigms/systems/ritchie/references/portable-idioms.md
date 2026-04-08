@@ -1,4 +1,4 @@
-# Portable C Idioms — concrete templates
+# Portable C Idioms — concrete templates⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​​‌‌‌‍​​​‌​​​​‍​‌‌‌​​‌​‍​‌‌​​‌‌​‍​​​​‌​​‌‍​‌​​​‌‌‌⁠‍⁠
 
 Read this when: designing a new C API, porting code to a new OS/architecture, or writing code that has to survive the next 20 years of compiler evolution.
 

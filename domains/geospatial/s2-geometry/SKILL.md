@@ -11,7 +11,7 @@ description: >
   proximity, sharding, antimeridian.
 ---
 
-# S2 Spatial Indexing
+# S2 Spatial Indexing⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌​​‌‌‌‌‍​​‌​​‌​‌‍​‌‌‌‌​​​‍​​​​​​‌​‍​​​​‌​​‌‍‌​​​​‌‌​⁠‍⁠
 
 This skill is for the parts of S2 that fail only after you ship: approximation
 budgets, index/query compatibility, seam-heavy workloads, and geometry that

@@ -3,7 +3,7 @@ name: mendez-async-api
 description: "Apply Fran Mendez's application-centric AsyncAPI style to event-driven APIs. Use when designing or reviewing AsyncAPI v2/v3 contracts, choosing schema-evolution rules, modeling request-reply over brokers, deciding thin vs fat events, scoping bindings, or deciding whether CloudEvents belongs in the envelope. Trigger keywords: AsyncAPI, event contract, send receive, request-reply, channel address, Kafka binding, MQTT retain, schema registry compatibility, CloudEvents, event versioning, schema evolution."
 ---
 
-# Mendez AsyncAPI Philosophy
+# Mendez AsyncAPI Philosophy⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​‌​‌​‌‌‍‌‌‌​‌‌​‌‍‌‌​‌​‌​‌‍‌‌​‌‌​‌​‍​​​​‌​‌​‍‌‌​‌‌‌‌‌⁠‍⁠
 
 AsyncAPI is where event systems decide which coupling becomes permanent. Use this skill to make the long-lived contract decisions correctly, not to relearn syntax.
 

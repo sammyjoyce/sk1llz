@@ -3,7 +3,7 @@ name: stroustrup-cpp-style
 description: "Apply Stroustrup's 21st-century ISO C++ style: subset-of-superset design, tool-enforceable safety rules, semantic concepts, RAII ownership, and zero-overhead interface choices. Use when designing or repairing modern C++17/20/23 APIs, signatures, templates, move/noexcept behavior, raw-pointer migrations, virtual-base contracts, or C/ABI boundaries. Triggers: RAII, rule of zero, owner<T*>, not_null, span, string_view, concepts, enable_if, virtual destructor, noexcept move, pimpl, lifetime, invalidation, shared_ptr, unique_ptr."
 ---
 
-# Stroustrup-Style C++
+# Stroustrup-Style C++⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌‌​‌‌​​‍​​​‌‌‌‌‌‍​‌‌​​​‌‌‍​‌​​​​‌​‍​​​​‌​​‌‍​‌​​‌​​​⁠‍⁠
 
 ## Load protocol
 

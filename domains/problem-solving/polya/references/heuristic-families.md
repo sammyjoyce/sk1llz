@@ -1,4 +1,4 @@
-# Pólya Heuristic Families (Schoenfeld decomposition)
+# Pólya Heuristic Families (Schoenfeld decomposition)⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​​‌​‌‌‍​​‌​‌​​‌‍‌‌‌​​​‌​‍​​‌‌​​​‌‍​​​​‌​​‌‍​‌​‌‌‌‌‌⁠‍⁠
 
 When Schoenfeld's research group tried to teach Pólya's heuristics directly, students could not apply them. The reason: each "heuristic" in *How to Solve It* is not a single move — it is a **family** of moves that share a label. "Try a simpler related problem" names at least a dozen different procedures, each triggered by different features of the problem. To use Pólya's method you must commit to a specific family member, not the family name.
 

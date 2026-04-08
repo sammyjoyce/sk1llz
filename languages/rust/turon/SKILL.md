@@ -4,7 +4,7 @@ description: "Design Rust public APIs in Aaron Turon's style: borrowed-first asy
 tags: rust, async, api-design, futures, semver, traits, object-safety, backpressure, cancellation, ecosystem
 ---
 
-# Aaron Turon: Public API Shape
+# Aaron Turon: Public API Shape⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌‌‌‍​‌​​​​​​‍‌​​‌​‌‌‌‍​‌‌‌​‌‌‌‍​​​​‌​‌​‍​​‌​​‌​‌⁠‍⁠
 
 Turon's bar is not "idiomatic Rust." It is harder: the API should feel as direct as sync Rust, preserve zero-cost composition, and still leave room for the ecosystem to evolve around it.
 

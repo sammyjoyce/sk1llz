@@ -1,4 +1,4 @@
-# How First-Principles Thinking Fails
+# How First-Principles Thinking Fails⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌‌​‍‌‌‌​‌​‌​‍‌​‌‌​‌‌‌‍​​​‌​​​​‍​​​​‌​‌​‍‌​​​​‌‌‌⁠‍⁠
 
 First-principles reasoning feels logical, so failures feel impossible. They
 aren't. Drawing from Cedric Chin's analysis (Commoncog, 2020) and the history

@@ -1,4 +1,4 @@
-# Adaptive Layouts (window size classes & canonical layouts)
+# Adaptive Layouts (window size classes & canonical layouts)⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​‌​​‌‌‍​​​​‌‌‌​‍‌​‌‌‌‌‌​‍​​​​‌‌‌​‍​​​​‌​​‌‍‌​​​​‌​‌⁠‍⁠
 
 Load this file only when: designing for foldables, tablets, or large screens; implementing list-detail / supporting-pane / feed canonical layouts; or debugging "looks fine on phone, broken on tablet" bugs.
 

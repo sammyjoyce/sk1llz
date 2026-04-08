@@ -1,4 +1,4 @@
-# S2 Cell ID Internals, Tokens, and Cross-Library Gotchas
+# S2 Cell ID Internals, Tokens, and Cross-Library Gotchas⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌‌‌​‌​‌‌‍​​‌​‌‌‌‌‍‌‌​‌‌‌‌‌‍‌​‌​‌‌‌‌‍​​​​‌​‌​‍‌‌​​​​​​⁠‍⁠
 
 Read this only when you need to: (a) parse/construct cell IDs manually,
 (b) convert between tokens and IDs, (c) debug why your IDs don't match

@@ -1,4 +1,4 @@
-# S2 Proximity Search, Geofencing, and Sharding Patterns
+# S2 Proximity Search, Geofencing, and Sharding Patterns⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​​​​​​‌‍‌​​‌​‌‌​‍‌​‌​​​​‌‍‌‌‌​​‌‌​‍​​​​‌​‌​‍‌​‌‌​‌‌​⁠‍⁠
 
 Concrete patterns that have survived production. Each comes with the gotcha
 that made the prior version wrong.

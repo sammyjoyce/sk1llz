@@ -4,7 +4,7 @@ description: AQR-style factor-investing heuristics for building and diagnosing l
 tags: quantitative, factor-investing, risk-management, portfolio, backtesting, finance
 ---
 
-# AQR Factor Investing
+# AQR Factor Investing⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍‌​‌‌‌‌​‌‍​​​‌‌‌​​‍‌​‌​​​​​‍‌‌​‌​‌​‌‍​​​​‌​‌​‍​‌‌​​‌‌​⁠‍⁠
 
 This skill is for the gap between a pretty academic factor and a book you can
 actually survive in live capital. The AQR lesson is that data lags, neutrality

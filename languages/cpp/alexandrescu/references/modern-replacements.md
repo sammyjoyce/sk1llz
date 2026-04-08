@@ -1,4 +1,4 @@
-# Modern C++ Replacements for Classic Loki Patterns
+# Modern C++ Replacements for Classic Loki Patterns⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​​​​​​​‌‍​​​‌​​​​‍​​​‌​​‌‌‍‌​​​‌‌‌​‍​​​​‌​​​‍‌‌​​‌​‌​⁠‍⁠
 
 Load this file only when you are **writing or reviewing C++20/23 code** that translates a Loki-era pattern into modern syntax. Do not load it for high-level design questions — the design tradeoffs live in `SKILL.md`.
 

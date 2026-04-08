@@ -4,7 +4,7 @@ description: "Design or review equity execution systems in the style of Virtu/IT
 tags: market-microstructure, smart-order-routing, execution, dark-liquidity, tca, adverse-selection, queue-position, hft
 ---
 
-# Virtu Market Microstructure
+# Virtu Market Microstructure⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​​‌​​‌‍‌‌​‌‌​​‌‍‌​‌​​​‌‌‍​​​​‌‌​​‍​​​​‌​​‌‍‌‌‌​‌​​‌⁠‍⁠
 
 This skill is for building or reviewing fragmented-market execution logic, not for teaching basic market structure. Keep it self-contained; do not waste context on generic primers unless the user explicitly asks for pedagogy.
 
