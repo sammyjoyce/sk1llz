@@ -23,18 +23,14 @@ def parse_frontmatter(content):
 
     try:
         frontmatter = yaml.safe_load(raw_frontmatter) or {}
-    except yaml.YAMLError:
-        frontmatter = None
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML frontmatter: {e}") from e
 
-    if isinstance(frontmatter, dict):
-        return frontmatter
+    if not isinstance(frontmatter, dict):
+        raise ValueError(
+            f"Frontmatter must be a YAML mapping, got {type(frontmatter).__name__}"
+        )
 
-    frontmatter = {}
-    for line in raw_frontmatter.strip().splitlines():
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        frontmatter[key.strip()] = value.strip()
     return frontmatter
 
 def load_skills_json():
