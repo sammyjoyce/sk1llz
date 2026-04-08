@@ -22,6 +22,13 @@ DEFAULT_OUTPUT_TAG_COUNT = 10
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---(?P<body>.*)$", re.DOTALL)
 NAME_RE = re.compile(r"(?m)^name:\s*(.+?)\s*$")
 TAGS_RE = re.compile(r"(?m)^tags:\s*(.*?)\s*$")
+# Matches the entire `tags:` block including a trailing YAML list, so
+# --force regeneration consumes list-style entries (`  - item`) in addition
+# to the header line. Without this, replacing the single header line leaves
+# orphaned list entries and corrupts the frontmatter.
+TAGS_BLOCK_RE = re.compile(
+    r"(?m)^tags:[ \t]*.*\n(?:[ \t]+-[^\n]*\n)*"
+)
 TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9+._#-]*$")
 
 TAG_SCHEMA = {
@@ -287,8 +294,11 @@ def write_tags(skill: SkillDocument, tags: list[str]) -> None:
 
 
 def replace_tags(skill: SkillDocument, tags: list[str]) -> None:
-    replacement = f"tags: {', '.join(tags)}"
-    new_frontmatter, count = TAGS_RE.subn(replacement, skill.frontmatter, count=1)
+    # Replace the full tags block (header + any YAML-list entries). The
+    # trailing newline in the replacement mirrors the one consumed by the
+    # regex so the surrounding frontmatter structure is preserved.
+    replacement = f"tags: {', '.join(tags)}\n"
+    new_frontmatter, count = TAGS_BLOCK_RE.subn(replacement, skill.frontmatter, count=1)
     if count != 1:
         raise RuntimeError(f"Expected exactly one tags field in {skill.relative_path}")
     new_content = f"---\n{new_frontmatter}\n---{skill.body}"

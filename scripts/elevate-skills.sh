@@ -70,6 +70,13 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+# Reject bogus concurrency values (0, negatives, non-numeric) so the dispatcher
+# loop below doesn't spin forever waiting for an impossible worker slot.
+if ! [[ "$CONCURRENCY" =~ ^[0-9]+$ ]] || [ "$CONCURRENCY" -lt 1 ]; then
+	echo "--concurrency must be a positive integer (got: $CONCURRENCY)" >&2
+	exit 1
+fi
+
 if ! $DRY_RUN && ! command -v codex >/dev/null 2>&1; then
 	echo "codex CLI not found in PATH" >&2
 	exit 1
