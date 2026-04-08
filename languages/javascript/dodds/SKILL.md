@@ -1,357 +1,195 @@
 ---
 name: dodds-testing-practices
-description: Write JavaScript code in the style of Kent C. Dodds, testing advocate and React educator. Emphasizes testing best practices, React patterns, and developer productivity. Use when writing tests or building maintainable React applications.
-tags: testing, react, javascript, integration-testing, test-library, accessibility, best-practices, frontend, automation
+description: Write JavaScript/TypeScript tests in the style of Kent C. Dodds (creator of React Testing Library, MSW advocate, Testing Trophy author). Use when writing or reviewing React/DOM tests with @testing-library, debugging act() warnings, picking between waitFor / findBy / getBy / queryBy, designing MSW network mocks, deciding between unit/integration/E2E, refactoring brittle Enzyme/snapshot tests, or whenever a test feels coupled to internals. Trigger keywords - testing-library, react-testing-library, RTL, screen, getByRole, findByRole, waitFor, userEvent, MSW, mock service worker, testing trophy, implementation details, AHA testing, shallow rendering, jest-dom, vitest, test user, integration test.
+tags: testing, react, javascript, typescript, testing-library, msw, integration-testing, accessibility, jest, vitest
 ---
 
-# Kent C. Dodds Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​‌​‌‌‌‍‌​‌‌​‌‌​‍​​​‌‌​​‌‍​‌​​‌​​​‍​​​​‌​​‌‍‌​​‌‌​​​⁠‍⁠
+# Kent C. Dodds Testing Style⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​‌​‌‌‌‍‌​‌‌​‌‌​‍​​​‌‌​​‌‍​‌​​‌​​​‍​​​​‌​​‌‍‌​​‌‌​​​⁠‍⁠
 
-## Overview
+## The Mental Model: Two Users, Not Three
 
-Kent C. Dodds is a testing advocate, educator, and creator of Testing Library. His philosophy centers on writing tests that give confidence, avoiding implementation details, and making React code maintainable.
+A UI component has exactly **two** users:
 
-## Core Philosophy
+1. **The end user** — clicks, types, reads, hears (screen reader).
+2. **The developer user** — imports it, passes props, renders it inside providers.
 
-> "The more your tests resemble the way your software is used, the more confidence they can give you."
+Every test you write must serve only these two. The moment a test knows about
+state shape, hook names, internal methods, CSS classes, component display
+names, or `data-testid` values that the end user can't see, you've invented a
+third user — **the test user** — who pays no bills and breaks under refactors.
 
-> "Write tests. Not too many. Mostly integration."
+> "The more your tests resemble the way your software is used, the more
+> confidence they can give you."
 
-> "Avoid testing implementation details."
+## The Two-Question Test for Any Assertion
 
-Dodds believes tests should focus on user behavior, not internal mechanics, and that fewer well-written tests beat many brittle ones.
+Before writing or accepting any test, ask both:
 
-## Design Principles
+1. **Will this test fail if I introduce a real user-visible bug?**
+   (e.g. typo `onClick={tgogle}` instead of `toggle`)
+2. **Will this test still pass after a backward-compatible refactor?**
+   (e.g. renaming `toggle` → `handleButtonClick`, hooks → class, class → hooks,
+   extracting a sub-component, swapping Redux for Context)
 
-1. **Test User Behavior**: Test what users see and do, not how code works internally.
+A good test answers **YES to both**. Tests that touch `.state()`, `.instance()`,
+hook internals, snapshots of full component trees, or mock the component under
+test fail one or both questions and are net-negative — they slow refactors
+*and* miss real bugs.
 
-2. **Confidence Over Coverage**: Tests should give confidence, not just increase metrics.
+## Query Decision Tree (memorize this — it eliminates 80% of bad tests)
 
-3. **Integration Over Unit**: Integration tests give the best ROI.
+```
+Need to assert something EXISTS or interact with it?
+├─ Will it appear later (async)?     → await screen.findByRole(...)
+└─ It's already there?               → screen.getByRole(...)
 
-4. **Avoid Implementation Details**: Tests shouldn't break when refactoring.
+Need to assert something does NOT exist?
+└─ ONLY case for query*              → expect(screen.queryByRole(...)).not.toBeInTheDocument()
 
-## When Writing Code
-
-### Always
-
-- Query elements the way users find them (by role, label, text)
-- Test user flows, not individual functions
-- Use realistic data in tests
-- Make tests independent and isolated
-- Write accessible components (they're easier to test!)
-- Prefer integration tests over unit tests for UI
-
-### Never
-
-- Test implementation details (internal state, method names)
-- Use test IDs when semantic queries work
-- Mock everything—use real components when possible
-- Write tests that break on refactoring
-- Snapshot test entire components
-- Test third-party libraries
-
-### Prefer
-
-- `getByRole` over `getByTestId`
-- `userEvent` over `fireEvent`
-- Real network calls in integration tests (with MSW)
-- Factories over fixtures
-- Async assertions over arbitrary waits
-
-## Code Patterns
-
-### Testing Library Queries
-
-```javascript
-// Query Priority (use in this order)
-// 1. Accessible queries (reflect user experience)
-// 2. Semantic queries
-// 3. Test IDs (last resort)
-
-// BEST: Accessible queries
-screen.getByRole('button', { name: /submit/i });
-screen.getByRole('textbox', { name: /email/i });
-screen.getByRole('heading', { level: 1 });
-screen.getByLabelText(/password/i);
-
-// GOOD: Semantic queries
-screen.getByText(/welcome back/i);
-screen.getByPlaceholderText(/search/i);
-screen.getByAltText(/profile photo/i);
-
-// LAST RESORT: Test IDs
-screen.getByTestId('complex-chart');
-
-
-// BAD: Implementation details
-container.querySelector('.submit-btn');  // CSS class = implementation
-wrapper.find('SubmitButton');            // Component name = implementation
-screen.getByTestId('submit');            // When role exists
+Need to wait for an arbitrary condition?
+└─ await waitFor(() => expect(...))   ← exactly ONE assertion, NO side effects
 ```
 
-### Testing User Interactions
+**Why this matters (non-obvious):** `get*` and `find*` throw with a full
+syntax-highlighted DOM dump on failure. `query*` only returns `null`, so an
+assertion failure prints `"null is not in the document"` — useless. Always use
+`get*`/`find*` for positive assertions; reserve `query*` exclusively for
+non-existence checks.
 
-```javascript
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+**Why `findBy` over `waitFor(() => getBy)`:** they are equivalent under the
+hood, but `findBy` produces a better error message and shorter call site.
+Anyone writing `await waitFor(() => screen.getByRole(...))` is signalling they
+don't know `findBy` exists.
 
-test('allows users to submit the form', async () => {
-    const user = userEvent.setup();
-    const onSubmit = jest.fn();
-    
-    render(<ContactForm onSubmit={onSubmit} />);
-    
-    // Type in fields - like a real user
-    await user.type(
-        screen.getByRole('textbox', { name: /name/i }),
-        'Alice Smith'
-    );
-    await user.type(
-        screen.getByRole('textbox', { name: /email/i }),
-        'alice@example.com'
-    );
-    await user.type(
-        screen.getByRole('textbox', { name: /message/i }),
-        'Hello there!'
-    );
-    
-    // Submit the form
-    await user.click(screen.getByRole('button', { name: /send/i }));
-    
-    // Assert on the result
-    expect(onSubmit).toHaveBeenCalledWith({
-        name: 'Alice Smith',
-        email: 'alice@example.com',
-        message: 'Hello there!'
-    });
-});
+## The Query Priority (the *only* order that matters)
 
+1. `getByRole` with `{ name: /.../i }` — covers ~90% of cases. Implicit roles
+   come free from semantic HTML; you almost never need to add `role=` yourself.
+2. `getByLabelText` — form fields. Forces you to associate labels properly.
+3. `getByPlaceholderText` / `getByText` / `getByDisplayValue` — when no role/label.
+4. `getByAltText` / `getByTitle` — images, iframes, SVG.
+5. `getByTestId` — last resort, for things end users genuinely cannot see
+   (tracking pixels, complex SVG charts, container divs).
 
-// BAD: Testing implementation
-test('sets state when input changes', () => {
-    const { container } = render(<Form />);
-    const input = container.querySelector('input');
-    
-    fireEvent.change(input, { target: { value: 'test' } });
-    
-    expect(wrapper.state('value')).toBe('test');  // Implementation detail!
-});
-```
+**Counterintuitive rule:** Querying by actual user-visible text — even
+localized text — beats `data-testid`. If a copywriter changes "Sign up" to
+"Get started" and your test breaks, that's a *feature* — you needed to know.
+Run tests against the default locale.
 
-### Async Testing
+### When `getByRole` fails — fallback ladder
 
-```javascript
-import { render, screen, waitFor } from '@testing-library/react';
+1. **"Unable to find an accessible element with the role..."** — call
+   `screen.logTestingPlaygroundURL()` (or `screen.debug()`) and read the
+   "accessible roles" list RTL prints. Often the role is `'textbox'` not
+   `'input'`, `'combobox'` not `'select'`, `'img'` only when `alt` is set.
+2. **Element has the role but no accessible name** — add `htmlFor`/`id`
+   association on the label, an `aria-labelledby`, or a visible text node.
+   Do *not* paper over it with `data-testid`.
+3. **Multiple elements match** — use `{ name: /.../i }` to disambiguate by
+   accessible name. If two elements legitimately share a name, scope with
+   `within(screen.getByRole('navigation'))` rather than `getAllByRole(...)[1]`.
+4. **`<input>` has no role** — add `type="text"` (or `email`, `search`, etc.).
+   Bare `<input>` has no implicit role; this is the #1 "but it's a textbox!" gotcha.
+5. **Custom widget genuinely lacks semantics** — only now reach for
+   `data-testid`, and file an accessibility bug against the component.
 
-test('loads and displays user data', async () => {
-    render(<UserProfile userId="123" />);
-    
-    // Wait for loading to finish
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
-    
-    // Wait for content - findBy queries include built-in waiting
-    const userName = await screen.findByRole('heading', { name: /alice/i });
-    expect(userName).toBeInTheDocument();
-    
-    // For multiple assertions, use waitFor
-    await waitFor(() => {
-        expect(screen.getByText(/alice@example.com/i)).toBeInTheDocument();
-        expect(screen.getByRole('img', { name: /avatar/i })).toBeInTheDocument();
-    });
-});
+## Before Writing a Test, Ask Yourself
 
+- **What does the end user see / hear / do?** That is your query and your assertion.
+- **What does the developer user need to render this?** Wrap once in providers, not per-test.
+- **Am I about to mock a child component?** First try rendering it. Mocks are
+  for animation libraries, network, randomness, time, and modules with side
+  effects on import.
+- **Does this test know more than the two users?** If yes, delete the extra knowledge.
 
-// BAD: Arbitrary timeouts
-await new Promise(r => setTimeout(r, 1000));  // Flaky and slow
-```
+## The NEVER List (every item has a non-obvious failure mode)
 
-### Mocking with MSW
+NEVER use **Enzyme `shallow`** because it lets you refactor a real bug into
+existence (typo on `onClick` still passes) while breaking tests on innocent
+renames. Shallow rendering optimizes for the test user. **Instead:** mount with
+RTL and `jest.mock()` heavy children explicitly when you need to isolate.
 
-```javascript
-import { rest } from 'msw';
-import { setupServer } from 'msw/node';
+NEVER **wrap `render` or `fireEvent` in `act()`** to silence warnings. Both are
+already wrapped in `act` internally — your wrapper does literally nothing. The
+warning means you have un-awaited async state updates. **Instead:** use
+`await userEvent...` or `await findBy...` or `await waitFor(...)` and the
+warning disappears.
 
-// Set up mock server
-const server = setupServer(
-    rest.get('/api/user/:id', (req, res, ctx) => {
-        return res(ctx.json({
-            id: req.params.id,
-            name: 'Alice',
-            email: 'alice@example.com'
-        }));
-    }),
-    
-    rest.post('/api/login', async (req, res, ctx) => {
-        const { email, password } = await req.json();
-        
-        if (password === 'correct') {
-            return res(ctx.json({ token: 'fake-token' }));
-        }
-        return res(ctx.status(401), ctx.json({ error: 'Invalid credentials' }));
-    })
-);
+NEVER **put multiple assertions or any side effect inside `waitFor`**. The
+callback runs both on an interval *and* on every DOM mutation, so side effects
+fire 5–20 times. With multiple assertions, the test waits the full timeout
+before reporting which one failed. **Instead:** one assertion per `waitFor`;
+fire events *outside* the callback.
 
-beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+NEVER **snapshot a component tree**. Snapshots are pure implementation
+details — full of prop names, component names, and structure that churn on
+refactor. Reviewers become numb to "just press u" and snapshots become
+write-only confidence theater. **Instead:** assert on specific user-visible
+text/roles with `toHaveTextContent`, `toBeInTheDocument`, `toHaveAccessibleName`.
 
-test('handles login error', async () => {
-    const user = userEvent.setup();
-    render(<LoginForm />);
-    
-    await user.type(screen.getByLabelText(/email/i), 'test@example.com');
-    await user.type(screen.getByLabelText(/password/i), 'wrong');
-    await user.click(screen.getByRole('button', { name: /log in/i }));
-    
-    expect(await screen.findByText(/invalid credentials/i)).toBeInTheDocument();
-});
-```
+NEVER **mock `window.fetch` or your API client directly**. You'll hardcode
+implementation details (URL paths, request shapes, response envelopes) into
+every test, and a wrong-endpoint bug will pass. **Instead:** use **MSW**
+(`msw/node`) so the same handlers serve tests, dev, and Storybook. See
+`references/msw-patterns.md`.
 
-### Custom Render Functions
+NEVER **destructure queries from `render()`** (`const { getByRole } = render(...)`).
+You'll constantly maintain the destructure as queries change. **Instead:** use
+the global `screen` object — autocomplete works, no maintenance.
 
-```javascript
-// test-utils.js
-import { render } from '@testing-library/react';
-import { ThemeProvider } from './theme';
-import { UserProvider } from './user-context';
-import { BrowserRouter } from 'react-router-dom';
+NEVER **call `cleanup` or `afterEach(cleanup)`**. RTL has done this
+automatically since v9 (2019). Calling it manually is a tell that the codebase
+or developer is years behind. **Just delete it.**
 
-function AllProviders({ children }) {
-    return (
-        <BrowserRouter>
-            <ThemeProvider>
-                <UserProvider>
-                    {children}
-                </UserProvider>
-            </ThemeProvider>
-        </BrowserRouter>
-    );
-}
+NEVER **add `role="button"` to a `<button>`** or `aria-label` to an element
+that already has accessible text. Redundant ARIA actively *confuses* screen
+readers and is the #1 mistake in "accessible" components. The implicit role is
+already there. (Note: `<input>` only gets a role when `type` is set — that's
+why `getByRole('textbox')` fails on bare `<input>`.)
 
-function customRender(ui, options) {
-    return render(ui, { wrapper: AllProviders, ...options });
-}
+NEVER **target 100% coverage on an application**. Diminishing returns kick in
+hard around 70%. The remaining 30% drives engineers to test trivial code or
+implementation details to chase the number. 100% is appropriate *only* for
+small libraries (isolated, heavily reused, easy to maintain at 100%).
 
-// Re-export everything
-export * from '@testing-library/react';
-export { customRender as render };
+NEVER **re-run the login UI flow in every E2E test**. One UI test for the
+login flow gives all the confidence you need; the other 99 should authenticate
+via the same HTTP calls the app makes (or session injection / cookie set).
+Repeating the UI flow is wasted minutes per test run with zero confidence gain.
 
+NEVER **nest tests with `describe` + `beforeEach` to share state**. Shared
+mutable state between tests creates ordering bugs and forces the reader to
+trace upward through the file. **Instead:** use AHA Testing with a `setup()`
+factory that returns everything (see `references/aha-testing.md`).
 
-// In tests
-import { render, screen } from './test-utils';
+NEVER **use `fireEvent.change(input, ...)`** for typing. `userEvent.type` fires
+`keydown` → `keypress` → `input` → `keyup` per character, plus focus events,
+which is what real users do *and* what some libraries (Downshift, react-select,
+contenteditable editors) actually listen for. `fireEvent.change` fires one
+synthetic event and silently misbehaves with these libraries.
 
-test('shows user dashboard', () => {
-    render(<Dashboard />);  // Automatically wrapped with all providers
-});
-```
+NEVER **call `userEvent.click(...)` without `setup()`** in user-event v14+.
+You must do `const user = userEvent.setup()` once per test (before `render`),
+then `await user.click(...)`. The legacy direct API still exists but lies about
+async behavior. Always `await` user-event calls.
 
-### The Testing Trophy
+## Loading References (read only when scenario matches)
 
-```javascript
-// Static Analysis (ESLint, TypeScript) - catches typos, type errors
-// Unit Tests - test pure functions, utilities
-// Integration Tests - test features, user flows (MOST OF YOUR TESTS)
-// E2E Tests - critical paths only
+- **Fixing brittle tests, or unsure about a NEVER item's exact failure mode?**
+  READ `references/anti-patterns.md` (14 patterns, severity-ranked, before/after).
+- **Setting up MSW, mocking the network, or writing per-test edge-case handlers?**
+  READ `references/msw-patterns.md` (server lifecycle, colocation, gotchas).
+- **Test file getting repetitive, or you have ≥3 similar tests in one file?**
+  READ `references/aha-testing.md` (Test Object Factory, `renderFoo()`, the
+  ANA↔DRY spectrum, when to use `it.each` instead).
+- **Do NOT load any reference for one-off questions about query priority, the
+  NEVER list, or the two-user model — those live here in SKILL.md.**
 
-// Unit test example - pure function
-test('formatCurrency formats correctly', () => {
-    expect(formatCurrency(1234.5)).toBe('$1,234.50');
-    expect(formatCurrency(0)).toBe('$0.00');
-    expect(formatCurrency(-50)).toBe('-$50.00');
-});
+## Signature Heuristics
 
-// Integration test example - feature
-test('user can add item to cart', async () => {
-    const user = userEvent.setup();
-    render(<App />);
-    
-    // Navigate to product
-    await user.click(screen.getByRole('link', { name: /products/i }));
-    await user.click(screen.getByRole('link', { name: /widget/i }));
-    
-    // Add to cart
-    await user.click(screen.getByRole('button', { name: /add to cart/i }));
-    
-    // Verify cart
-    expect(screen.getByRole('status')).toHaveTextContent('1 item');
-    await user.click(screen.getByRole('link', { name: /cart/i }));
-    expect(screen.getByText(/widget/i)).toBeInTheDocument();
-});
-```
-
-### React Patterns
-
-```javascript
-// Prop Collections and Getters
-function useToggle(initialOn = false) {
-    const [on, setOn] = useState(initialOn);
-    
-    const toggle = () => setOn(prev => !prev);
-    
-    // Prop getter - composable with user's props
-    const getTogglerProps = ({ onClick, ...props } = {}) => ({
-        'aria-pressed': on,
-        onClick: (...args) => {
-            onClick?.(...args);
-            toggle();
-        },
-        ...props
-    });
-    
-    return { on, toggle, getTogglerProps };
-}
-
-// Usage
-function App() {
-    const { on, getTogglerProps } = useToggle();
-    
-    return (
-        <button
-            {...getTogglerProps({
-                onClick: () => console.log('clicked!'),
-                className: 'toggle-btn'
-            })}
-        >
-            {on ? 'ON' : 'OFF'}
-        </button>
-    );
-}
-
-
-// Control Props Pattern
-function Toggle({ on: controlledOn, onChange, initialOn = false }) {
-    const [internalOn, setInternalOn] = useState(initialOn);
-    
-    // Is this controlled or uncontrolled?
-    const isControlled = controlledOn !== undefined;
-    const on = isControlled ? controlledOn : internalOn;
-    
-    function toggle() {
-        if (!isControlled) {
-            setInternalOn(prev => !prev);
-        }
-        onChange?.(!on);
-    }
-    
-    return <button onClick={toggle}>{on ? 'ON' : 'OFF'}</button>;
-}
-```
-
-## Mental Model
-
-Dodds approaches testing by asking:
-
-1. **What does the user see?** Query by visible elements
-2. **What does the user do?** Simulate real interactions
-3. **What does the user expect?** Assert on visible outcomes
-4. **Does this test implementation?** If yes, refactor the test
-5. **Would this break on refactor?** If yes, it's too coupled
-
-## Signature Dodds Moves
-
-- Query by role first, test ID last
-- userEvent over fireEvent
-- MSW for network mocking
-- Integration tests as the default
-- Custom render with providers
-- Test user behavior, not code structure
+- Default to integration tests rendering the real tree with real providers;
+  mock only network (MSW), animation, time, and randomness.
+- Ship a test only if it answers YES to both questions in §"The Two-Question
+  Test." Otherwise rewrite or delete it.
+- Confidence is the goal, not coverage. 60% coverage of integration tests
+  beats 95% coverage of `state()` assertions.

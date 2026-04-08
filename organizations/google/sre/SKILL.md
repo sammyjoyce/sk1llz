@@ -1,486 +1,197 @@
 ---
 name: google-sre
-description: Apply Google's Site Reliability Engineering methodology. Emphasizes error budgets, SLO-driven operations, toil elimination, and blameless postmortems. Use when building and operating reliable services at scale.
-tags: sre, reliability, monitoring, slo, error-budget, incident-response, toil, automation, observability, on-call
+description: >-
+  Apply Google's Site Reliability Engineering methodology with expert-level
+  precision. Covers SLI selection traps, dependent-service SLO ceilings,
+  multi-window multi-burn-rate alerting (14.4×/6×/1× with derivation),
+  error budget policy enforcement, Chubby-style planned outages, postmortem
+  action-item anti-patterns (Ben Treynor's P0/P1 rule), toil ROI economics,
+  and on-call sustainability thresholds. Use when designing SLIs/SLOs,
+  setting up burn-rate alerts, writing an error budget policy, conducting
+  postmortems, measuring toil, sizing on-call rotations, or deciding whether
+  to freeze deploys. Triggers: "SRE", "SLI", "SLO", "error budget",
+  "burn rate", "toil", "postmortem", "on-call", "reliability",
+  "incident response", "service level", "production readiness",
+  "freeze deploys", "pager load".
 ---
 
-# Google Site Reliability Engineering (SRE)⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​​​‌​​‍‌​‌‌‌‌‌‌‍‌​​​​​‌​‍​‌​‌​‌‌​‍​​​​‌​‌​‍​​​​​‌​‌⁠‍⁠
+# Google SRE — Expert Decision Guide
 
-## Overview
+## Thinking Frames (ask before acting)
 
-Site Reliability Engineering (SRE) is Google's approach to running production systems. It applies software engineering principles to operations, treating reliability as a feature that can be measured, budgeted, and engineered.
+- **Who is the user, and what is the critical user journey?** SLOs measure *journeys*, not system health. If your SLI doesn't correlate with support tickets and churn, you're measuring the wrong thing.
+- **What does the error budget say right now?** Healthy → ship. Exhausted by our code → freeze. Exhausted upstream → document, don't freeze. Never negotiate the policy *during* an outage.
+- **Is this work toil or engineering?** If it scales linearly with service size and produces no compounding value, it's toil. Cap at 50%.
+- **Would a page at 3 AM require human intelligence to resolve?** If no, it is automation or a ticket, never a page.
+- **Does this postmortem have a P0/P1 action item?** Per Ben Treynor: "A postmortem without subsequent action is indistinguishable from no postmortem."
+- **Before defending this SLO in a planning meeting, can I actually win?** If not, it's decorative — delete it and propose a version you can defend.
+- **Before assigning this action item, would the receiving team prioritize it *without* a postmortem forcing the conversation?** If no, the fix is wrong or the owner is wrong — rework it before publishing.
 
-## References
+## SLI Selection — Expert Traps
 
-- **Book**: "Site Reliability Engineering: How Google Runs Production Systems" (O'Reilly, 2016)
-- **Workbook**: "The Site Reliability Workbook" (O'Reilly, 2018)
-- **Online**: https://sre.google/
+Every SLI is a ratio `good_events / valid_events`. Both numerator and denominator must be inspectable during an incident, or you cannot debug a burn.
 
-## Core Philosophy
+**Measurement point is a deliberate choice, not a default.** Server-side success rate misses DNS, TLS, CDN, and everything past the load balancer. Load-balancer metrics miss client-side JavaScript errors. Client-side RUM captures user reality but inherits the client's own reliability and deployment lag. Rule: move the SLI closer to the user only once cheaper signals are exhausted — every hop closer raises cost and complexity.
 
-> "Hope is not a strategy."
+**Precision vs recall is a real tradeoff you must measure.** Precision = fraction of SLI-captured events that were actually user-visible. Recall = fraction of real user-visible incidents the SLI captured. Improving one usually degrades the other. Replay the last quarter's incidents against your SLI: low recall → tighten SLO; low precision → loosen it or refine the SLI implementation.
 
-> "SRE is what happens when you ask a software engineer to design an operations function."
+**Latency needs *paired* thresholds, not a single percentile.** `99% < 300ms` lets the tail hide — a bug that makes 0.5% of requests take 30s looks fine. Use `90% < 100ms AND 99% < 400ms`. The second line catches the slow-tail class of bugs the first will always miss.
 
-> "Reliability is the most important feature."
+NEVER use mean latency — a 5% tail 50× slower than average hides behind a healthy mean. Use distribution-based ratio SLIs computed as counts, never as a single aggregate number. Instead: `count(requests < 300ms) / count(all)`.
 
-SRE balances the tension between development velocity and system reliability using measurable objectives and error budgets.
+NEVER set SLOs from engineering aspirations. Measure 2–4 weeks of actual performance, then set the SLO slightly below observed. A 99.99% target on a service delivering 99.95% leaves you with *negative* error budget on day one.
 
-## Key Concepts
+NEVER use a **calendar-aligned** SLO window (e.g., "99.9% per calendar month"). Teams will rush risky launches on day 1 of the month knowing the budget resets. Use a **rolling 4-week or 30-day window** so today's deploy is always measured against the last 30 days — there is no reset button to game.
 
-### The Service Level Hierarchy
+**Low-traffic trap**: a service at 10 req/hour burns 13.9% of its 30-day budget on a single failed request (a 1,000× burn rate). Below ~100 req/hour: generate synthetic probes, aggregate with sibling services into a shared SLO, or widen the window to 90 days — don't just tune alerts.
+
+## SLO Targets — Dependency Math and the Chubby Lesson
+
+**The dependency ceiling.** With N hard dependencies each at SLO *s*, your theoretical max is `s^N`. Five dependencies at 99.9% cap you at 99.5%. Teams routinely set SLOs above their ceiling and then burn budget for reasons they cannot fix. Before committing to a target, compute `product(dep_slos)` — that is your real upper bound. If it's too low, reduce hard dependencies or accept a lower SLO.
+
+**Internal SLO < SLA, always.** Your internal SLO must be tighter than your external SLA by a deliberate margin (e.g., SLA 99.9%, internal 99.95%). The buffer is what absorbs a bad deploy without triggering customer refunds. Publishing your internal number is a footgun — users will rebuild against it.
+
+**Chubby's planned-outage pattern.** If a service consistently overperforms its SLO, users build hidden hard dependencies on the higher number. Google's Chubby lock service deliberately takes planned downtime each quarter to flush out these illegal dependencies before they calcify. If you're massively exceeding your SLO *and* cannot raise it, inject controlled unavailability to reset expectations. Counterintuitive but load-bearing.
+
+**Exclude out-of-scope traffic from SLO math**: load tests, pentests, deprecated API versions, clients that went out-of-quota due to their own bugs. Count them and you'll burn budget on problems with no user impact and fight the wrong fires.
+
+**The "defend the SLO" test** (from the SRE book): if you cannot ever win a priority conversation by quoting a particular SLO, that SLO is not worth having — delete it. SLOs you can't point to during planning are reporting metrics in disguise.
+
+**Canary comparisons are relative, not absolute.** A canary error rate of 0.5% may be fine or catastrophic depending on baseline. The correct rollback trigger is `canary_error_rate > baseline_error_rate * 1.1` (10% worse than baseline), not an absolute threshold. Absolute thresholds rollback innocent canaries during real outages and miss regressions that are "within budget but worse than before".
+
+**Progressive disclosure**:
+- Before writing an SLO document, computing budget translation tables, or designing a new policy tier, **READ `references/error_budget.md`** for templates and time tables.
+- Before setting up numerical burn-rate monitoring against a historical dataset, **RUN `scripts/error_budget_calculator.py`** against your actual request counts — don't eyeball it.
+- Do NOT load `references/error_budget.md` for freeze/don't-freeze decisions — use the decision tree below in this file. Loading it wastes context on templates you don't need.
+
+## Multi-Window Multi-Burn-Rate Alerting
+
+The only alerting pattern that is simultaneously sensitive to real incidents and deaf to flaps.
+
+**Where does 14.4 come from?** The policy is "2% of a 30-day budget burned in 1 hour". Burn rate = budget_consumed / window_fraction = 0.02 / (1/720) = 14.4. The number is derived from the policy; you do not pick it separately.
+
+| Tier | Policy | Long window | Short window (1/12) | Burn rate | Action |
+|---|---|---|---|---|---|
+| 1 | 2% in 1h | 1h | 5m | 14.4× | Page immediately |
+| 2 | 5% in 6h | 6h | 30m | 6× | Page |
+| 3 | 10% in 3d | 3d | 2h | 1× | Ticket |
+
+Both windows must exceed threshold simultaneously. The short window is the "is it still burning *right now*?" confirmation — it eliminates stale alerts post-recovery and prevents flap intervals from being treated as an incident.
+
+NEVER add a Prometheus `for:` duration clause to a burn-rate alert. A spike every 10 minutes that clears between spikes resets the timer — you can lose 35% of monthly budget and never fire. The long/short window combination already handles duration.
+
+NEVER write a burn-rate query as a plain division — zero traffic yields NaN and silence during a full outage. Guard the denominator: `sum(rate(errors[1h])) / (sum(rate(total[1h])) > 0)`.
+
+NEVER tune burn-rate thresholds per microservice. Three tiers (CRITICAL / HIGH / LOW) and assign each service to a tier. Per-service tuning creates O(n) cognitive load and on-callers stop trusting the thresholds.
+
+**Recalculate 14.4 when SLO < 99%.** Max possible burn rate is `1/(1−SLO)`. A 90% SLO caps max burn rate at 10 — the 14.4× page threshold is mathematically impossible to hit, so you'll never page. For SLOs under 99%, use ~0.5× of max as the page threshold.
+
+## Error Budget Policy — Enforcement, Not Theater
+
+An unwritten policy is no policy. Pre-approve with VP/Director authority **before** any incident. Minimum contents:
+
+- **Internal-cause freeze**: SLO missed for trailing 4-week window from our code/config → halt all non-P0, non-security changes until back in SLO.
+- **External-cause exemption**: Company-wide network failures, upstream team outages, and out-of-scope load tests do NOT trigger a freeze. Document; do not punish the wrong team.
+- **Single-incident rule** (from Google's Appendix B policy): one incident consuming >20% of quarterly budget mandates a postmortem with at least one P0 action item.
+- **Class-of-outage rule**: one class of outage consuming >20% over a quarter requires a P0 item on the following quarter's planning doc.
+- **Escalation clause**: Disagreements on budget calculation escalate to the named executive (usually CTO). Name them in advance.
+
+NEVER grant ad-hoc exceptions to the freeze. Within two quarters, nobody takes the budget seriously. Define a "silver bullet" quota (max 2 per quarter, written approval required) for genuinely critical launches.
+
+NEVER wait until the budget is exhausted to act. Set an orange zone at 25% remaining that requires extra deploy review and longer canaries — by the time you hit 0%, customer-visible damage is done.
+
+## Postmortem Quality — Where Value Lives or Dies
+
+**The Treynor rule**: every postmortem following a user-affecting outage carries at least one P0 or P1 bug. No exceptions without VP approval, and Google's VP of 24/7 Ops personally reviews them.
+
+**Classify every action item** as: Investigate → Mitigate → Repair → Detect → Prevent. A plan containing only Prevent items missed faster wins. A plan containing only Mitigate items hasn't fixed the root cause.
+
+**Action item anti-patterns**:
+
+| Anti-pattern | Why it's seductive | Consequence | Correct alternative |
+|---|---|---|---|
+| "Train humans not to run unsafe commands" | Feels responsible | Per Dan Milstein: plan for a future where we're all as stupid as today. Humans will repeat the mistake. | Make the unsafe command impossible. Add idempotency, confirmation prompts, blast-radius preview. |
+| "Investigate monitoring for this scenario" | Sounds diligent | Can't be marked done. Rots in tracker. | "Alert when endpoint X error rate >1%, owned by @name, bug BUG-1234, due YYYY-MM-DD." |
+| Alert on the exact failing query | Directly addresses *this* incident | Only catches identical recurrence, misses the class | Alert on user-facing symptoms (error rate, latency) at the SLO level, not implementation details |
+| No named owner ("the team will handle it") | Feels inclusive | Never prioritized by anyone | One named human, assigned at creation, not later |
+| Tossing work over the wall | "Other team owns this area" | Receiving team has no context, deprioritizes | Co-author with the owning team, get buy-in *before* publishing the postmortem |
+| Unbalanced plan (all strategic items) | Feels ambitious | Nothing ships before the next outage | Include near-term mitigations alongside strategic fixes |
+| Finger-pointing in "Things that went poorly" | Feels like accountability | Erodes psychological safety; next incident will be hidden | Blameless language: "the automation allowed X" not "Alice did X" |
+
+**An unreviewed postmortem might as well not exist.** Schedule regular review sessions; close out comments; link every action item to a tracker bug. An AI without a bug is not an AI.
+
+**Signs the postmortem is bad**: animated language ("ridiculous", "!!!"), missing Recovery Efforts section, no numbers in impact assessment, a root cause of "human error" (always ask *why* the human was allowed to cause it), or single-category action items.
+
+## Toil — 50% Cap and Automation ROI
+
+Google caps SRE toil at 50% of team time. Sustained >50% for two consecutive quarters → SRE formally hands the service back to the dev team. That handback threat is the enforcement lever; without it, 50% is aspirational.
+
+**Ticket toil is the insidious kind**: it accomplishes its goal (users get what they wanted), disperses evenly across the team, never loudly demands remediation. Audit quarterly by sampling and categorizing.
+
+**Automation ROI**:
+```
+ROI_weeks = automation_effort_hours / weekly_toil_hours_saved
+```
+If ROI > 26 weeks, the toil may die naturally (reorg, retirement, platform migration) before automation pays off. Prioritize items with ROI < 8 weeks. Include hidden benefits in the spreadsheet: fewer human errors, less context switching, better morale, shorter onboarding — real but rarely counted.
+
+NEVER accept "it's a one-time migration" as not-toil. At scale, migrations meet every toil criterion: manual, repetitive, no lasting value, scales with inventory. Track them.
+
+NEVER script around a kernel/library bug when you can patch it (John Looney's Google lesson: 1,000 machines with full disks from a patched-driver log bug — masking the symptom removed incentive to fix the cause, and cost $1,000/hr across the fleet until the kernel was fixed).
+
+## On-Call Sustainability — Concrete Thresholds
+
+- **Min team size**: 8 for a weekly rotation; 6 absolute floor. A team of 5 rotates every 5 days and burns out within one quarter regardless of incident volume.
+- **Max pages**: 2 per 12-hour shift on average across a quarter. Exceed → do NOT add people (masks the problem). Fix alerts (non-actionable pages are bugs in the alert) and the top 3 sources of pages.
+- **Shift length**: ≤12h with ≥12h rest between. Back-to-back is a postmortem waiting to happen.
+- **Every page requires human intelligence.** Robotic responses (restart, clear queue, bounce) must be automated before they can become a page.
+
+NEVER solve "too many pages" by adding headcount — you'll burn out more people at the same rate. Fix the alerts first.
+
+## Decision Tree: Should We Freeze Deploys?
 
 ```
-SLI (Service Level Indicator)
-    ↓ Quantitative measure of service
-    ↓ Example: "Request latency < 100ms"
-
-SLO (Service Level Objective)  
-    ↓ Target value for SLI
-    ↓ Example: "99.9% of requests < 100ms"
-
-SLA (Service Level Agreement)
-    ↓ Contract with consequences
-    ↓ Example: "If SLO missed, credits issued"
-
-Error Budget = 100% - SLO
-    Example: 99.9% SLO = 0.1% error budget = 43 minutes/month downtime
+Error budget exhausted?
+├── YES → Cause internal (our code/config)?
+│   ├── YES → FREEZE. Only P0 + security fixes.
+│   │         Single incident >20% budget → mandate P0 postmortem action item.
+│   │         Single class >20% of quarter → P0 item on next quarter's plan.
+│   └── NO (external infra, upstream team outage, out-of-scope load) →
+│       Document exception. Do NOT freeze (punishes wrong team).
+│       Increment silver-bullet counter — max 2/quarter.
+└── NO → Budget remaining > 25%?
+    ├── YES → Ship freely. Run chaos experiments.
+    │         Consistently overperforming → consider Chubby-style planned outage.
+    └── NO (orange zone, 10–25%) →
+        Slow velocity. Extra review on risky changes.
+        Lengthen canary duration. No experiments.
+        Extrapolate current burn → predict freeze date → notify product owner now.
 ```
 
-### Error Budget Philosophy
-
-```
-Error Budget Remaining?
-        │
-    ┌───┴───┐
-    │       │
-   YES      NO
-    │       │
-    ↓       ↓
- Ship new   Focus on
- features   reliability
-```
-
-## Design Principles
-
-1. **Embrace Risk**: 100% reliability is wrong target; it's too expensive.
-
-2. **Error Budgets**: Explicit budget for unreliability enables velocity.
-
-3. **Eliminate Toil**: Automate repetitive operational work.
-
-4. **Simplicity**: Simple systems are more reliable.
-
-## When Implementing
-
-### Always
-
-- Define SLIs before launching a service
-- Set SLOs based on user needs, not engineering pride
-- Track error budget consumption
-- Measure and reduce toil
-- Conduct blameless postmortems
-- Automate incident response where possible
-
-### Never
-
-- Set SLOs at 100% (it's impossible and wrong)
-- Ignore SLO violations
-- Blame individuals for outages
-- Accept toil as "just how things are"
-- Skip postmortems for "small" incidents
-
-### Prefer
-
-- Automation over manual processes
-- Gradual rollouts over big-bang deploys
-- Monitoring over hoping
-- Documentation over tribal knowledge
-- Proactive work over reactive firefighting
-
-## Implementation Patterns
-
-### Defining SLIs and SLOs
-
-```python
-# slo_definitions.py
-# Define service level indicators and objectives
-
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional
-
-class SLIType(Enum):
-    AVAILABILITY = "availability"
-    LATENCY = "latency"
-    THROUGHPUT = "throughput"
-    ERROR_RATE = "error_rate"
-    FRESHNESS = "freshness"
-
-@dataclass
-class SLI:
-    """Service Level Indicator - what we measure"""
-    name: str
-    type: SLIType
-    description: str
-    good_event_query: str      # Events that are "good"
-    total_event_query: str     # All events
-    
-    def calculate(self, good_count: int, total_count: int) -> float:
-        if total_count == 0:
-            return 1.0
-        return good_count / total_count
-
-@dataclass
-class SLO:
-    """Service Level Objective - our target"""
-    sli: SLI
-    target: float              # e.g., 0.999 for 99.9%
-    window_days: int           # Rolling window
-    
-    @property
-    def error_budget(self) -> float:
-        """How much unreliability we can tolerate"""
-        return 1.0 - self.target
-    
-    def budget_remaining(self, current_sli: float) -> float:
-        """What percentage of error budget remains"""
-        errors_used = 1.0 - current_sli
-        if self.error_budget == 0:
-            return 0.0
-        return max(0, 1.0 - (errors_used / self.error_budget))
-
-
-# Example SLO definitions
-availability_sli = SLI(
-    name="api_availability",
-    type=SLIType.AVAILABILITY,
-    description="Proportion of successful API requests",
-    good_event_query="http_status < 500",
-    total_event_query="all requests"
-)
-
-availability_slo = SLO(
-    sli=availability_sli,
-    target=0.999,        # 99.9% availability
-    window_days=30       # Rolling 30-day window
-)
-
-# 99.9% over 30 days = 43 minutes of allowed downtime
-```
-
-### Error Budget Tracking
-
-```python
-# error_budget.py
-# Track and alert on error budget consumption
-
-import time
-from dataclasses import dataclass
-from typing import List
-from datetime import datetime, timedelta
-
-@dataclass
-class ErrorBudgetTracker:
-    slo: 'SLO'
-    window_seconds: int
-    
-    def __init__(self, slo: 'SLO'):
-        self.slo = slo
-        self.window_seconds = slo.window_days * 24 * 60 * 60
-        self.events: List[tuple] = []  # (timestamp, is_good)
-    
-    def record_event(self, is_good: bool):
-        """Record an event"""
-        now = time.time()
-        self.events.append((now, is_good))
-        self._prune_old_events(now)
-    
-    def _prune_old_events(self, now: float):
-        """Remove events outside window"""
-        cutoff = now - self.window_seconds
-        self.events = [(t, g) for t, g in self.events if t > cutoff]
-    
-    def current_sli(self) -> float:
-        """Calculate current SLI value"""
-        if not self.events:
-            return 1.0
-        good = sum(1 for _, is_good in self.events if is_good)
-        return good / len(self.events)
-    
-    def budget_remaining_percent(self) -> float:
-        """Percentage of error budget remaining"""
-        return self.slo.budget_remaining(self.current_sli()) * 100
-    
-    def time_until_budget_exhausted(self) -> Optional[timedelta]:
-        """Estimate when budget will be exhausted at current burn rate"""
-        remaining = self.budget_remaining_percent()
-        if remaining <= 0:
-            return timedelta(0)
-        
-        # Calculate burn rate (budget consumed per hour)
-        # This is simplified - real implementation needs more data
-        return None  # Requires historical burn rate
-    
-    def should_freeze_deployments(self) -> bool:
-        """Should we stop deploying new features?"""
-        return self.budget_remaining_percent() < 10  # Less than 10% remaining
-
-
-# Alert policies based on error budget
-def create_error_budget_alerts(tracker: ErrorBudgetTracker):
-    """Create tiered alerts for error budget consumption"""
-    remaining = tracker.budget_remaining_percent()
-    
-    if remaining < 0:
-        return "CRITICAL: Error budget exhausted! Focus 100% on reliability."
-    elif remaining < 10:
-        return "WARNING: Error budget nearly exhausted. Freeze deployments."
-    elif remaining < 25:
-        return "CAUTION: Error budget below 25%. Review recent changes."
-    elif remaining < 50:
-        return "INFO: Error budget at 50%. Monitor closely."
-    else:
-        return "OK: Error budget healthy. Safe to ship features."
-```
-
-### Toil Measurement and Elimination
-
-```python
-# toil_tracker.py
-# Measure and track operational toil
-
-from dataclasses import dataclass
-from enum import Enum
-from typing import List, Dict
-from datetime import datetime, timedelta
-
-class ToilCategory(Enum):
-    MANUAL = "manual"           # Could be automated
-    REPETITIVE = "repetitive"   # Done frequently
-    TACTICAL = "tactical"       # Reactive, not strategic
-    NO_VALUE = "no_value"       # Doesn't improve service
-    SCALES_LINEARLY = "scales"  # Grows with service size
-
-@dataclass
-class ToilTask:
-    name: str
-    categories: List[ToilCategory]
-    time_spent_minutes: int
-    frequency_per_week: float
-    automation_possible: bool
-    automation_effort_days: float
-    
-    @property
-    def weekly_toil_hours(self) -> float:
-        return (self.time_spent_minutes * self.frequency_per_week) / 60
-    
-    @property
-    def automation_roi_weeks(self) -> float:
-        """Weeks until automation pays off"""
-        if not self.automation_possible:
-            return float('inf')
-        
-        effort_hours = self.automation_effort_days * 8
-        return effort_hours / self.weekly_toil_hours
-
-@dataclass 
-class ToilBudget:
-    """SRE teams should spend <50% time on toil"""
-    team_size: int
-    hours_per_week: int = 40
-    max_toil_percent: float = 0.50
-    
-    @property
-    def max_toil_hours_per_week(self) -> float:
-        return self.team_size * self.hours_per_week * self.max_toil_percent
-    
-    def is_over_budget(self, current_toil_hours: float) -> bool:
-        return current_toil_hours > self.max_toil_hours_per_week
-
-
-class ToilTracker:
-    def __init__(self, budget: ToilBudget):
-        self.budget = budget
-        self.tasks: Dict[str, ToilTask] = {}
-    
-    def add_task(self, task: ToilTask):
-        self.tasks[task.name] = task
-    
-    def total_weekly_toil(self) -> float:
-        return sum(t.weekly_toil_hours for t in self.tasks.values())
-    
-    def toil_percent(self) -> float:
-        max_hours = self.budget.team_size * self.budget.hours_per_week
-        return (self.total_weekly_toil() / max_hours) * 100
-    
-    def automation_priorities(self) -> List[ToilTask]:
-        """Rank tasks by automation ROI"""
-        automatable = [t for t in self.tasks.values() if t.automation_possible]
-        return sorted(automatable, key=lambda t: t.automation_roi_weeks)
-    
-    def report(self) -> str:
-        report = []
-        report.append(f"Total weekly toil: {self.total_weekly_toil():.1f} hours")
-        report.append(f"Toil percentage: {self.toil_percent():.1f}%")
-        report.append(f"Budget: {self.budget.max_toil_percent * 100}%")
-        report.append(f"Status: {'OVER' if self.toil_percent() > 50 else 'OK'}")
-        report.append("\nTop automation targets:")
-        for task in self.automation_priorities()[:5]:
-            report.append(f"  - {task.name}: {task.automation_roi_weeks:.1f} weeks to ROI")
-        return "\n".join(report)
-```
-
-### Blameless Postmortem Template
-
-```markdown
-# Postmortem: [Incident Title]
-
-**Date**: YYYY-MM-DD
-**Authors**: [Names]
-**Status**: Draft | In Review | Complete
-**Severity**: P0 | P1 | P2 | P3
-
-## Summary
-
-[2-3 sentences describing what happened, impact, and resolution]
-
-## Impact
-
-- **Duration**: X hours Y minutes
-- **Users affected**: N users / X% of traffic
-- **Revenue impact**: $X (if applicable)
-- **Error budget consumed**: X%
-
-## Timeline (all times UTC)
-
-| Time | Event |
-|------|-------|
-| HH:MM | First alert fired |
-| HH:MM | On-call engaged |
-| HH:MM | Root cause identified |
-| HH:MM | Mitigation applied |
-| HH:MM | Service fully recovered |
-
-## Root Cause
-
-[Technical explanation of what caused the incident]
-
-## Resolution
-
-[What was done to resolve the incident]
-
-## Detection
-
-- How was the incident detected?
-- Could we have detected it sooner?
-- What monitoring would have helped?
-
-## Lessons Learned
-
-### What went well
-
-- [Things that worked]
-
-### What went wrong
-
-- [Things that didn't work]
-
-### Where we got lucky
-
-- [Things that could have made it worse]
-
-## Action Items
-
-| Action | Type | Owner | Due Date | Status |
-|--------|------|-------|----------|--------|
-| Add monitoring for X | Detect | @name | YYYY-MM-DD | TODO |
-| Implement circuit breaker | Mitigate | @name | YYYY-MM-DD | TODO |
-| Update runbook | Process | @name | YYYY-MM-DD | TODO |
-
-## Supporting Information
-
-- Relevant logs, graphs, or documentation
-- Links to related incidents
-```
-
-### On-Call Rotation Best Practices
-
-```python
-# oncall.py
-# On-call rotation management
-
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import List, Optional
-
-@dataclass
-class OnCallShift:
-    engineer: str
-    start: datetime
-    end: datetime
-    
-    @property
-    def duration_hours(self) -> float:
-        return (self.end - self.start).total_seconds() / 3600
-
-@dataclass
-class OnCallPolicy:
-    """Google SRE on-call best practices"""
-    
-    # Shift structure
-    max_shift_hours: int = 12          # No more than 12 hours
-    min_time_between_shifts: int = 12  # At least 12 hours rest
-    max_incidents_per_shift: int = 2   # Escalate if exceeded
-    
-    # Team structure
-    min_team_size: int = 8             # For sustainable rotation
-    secondary_oncall: bool = True      # Always have backup
-    
-    # Compensation
-    time_off_per_incident: float = 0.5 # Hours of comp time
-    
-    def validate_shift(self, shift: OnCallShift, 
-                       previous_shifts: List[OnCallShift]) -> List[str]:
-        """Check shift against policy"""
-        violations = []
-        
-        if shift.duration_hours > self.max_shift_hours:
-            violations.append(
-                f"Shift too long: {shift.duration_hours}h > {self.max_shift_hours}h"
-            )
-        
-        # Check rest time
-        for prev in previous_shifts:
-            if prev.engineer == shift.engineer:
-                gap = (shift.start - prev.end).total_seconds() / 3600
-                if gap < self.min_time_between_shifts:
-                    violations.append(
-                        f"Insufficient rest: {gap}h < {self.min_time_between_shifts}h"
-                    )
-        
-        return violations
-
-    def calculate_comp_time(self, incidents_handled: int) -> float:
-        """Calculate compensation time for incidents"""
-        return incidents_handled * self.time_off_per_incident
-```
-
-## Mental Model
-
-Google SRE asks:
-
-1. **What's the SLO?** Reliability target based on user needs
-2. **What's the error budget?** How much unreliability can we afford?
-3. **Is this toil?** Manual, repetitive, automatable, no lasting value?
-4. **What does the postmortem say?** Learn from failures, don't blame
-5. **Can we ship this safely?** Gradual rollout with monitoring
-
-## Signature SRE Moves
-
-- Error budgets to balance reliability and velocity
-- SLI/SLO/SLA hierarchy for clear targets
-- Toil tracking and elimination
-- Blameless postmortems
-- On-call that doesn't burn out engineers
-- Automation as first response to toil
+## Fallback Strategies (when the primary approach fails)
+
+- **SLI data missing or unreliable**: Start with black-box HTTP probes (cheap, low-fidelity). Add load-balancer metrics next. Move to client-side RUM only once server-side is proven insufficient.
+- **Stakeholders can't agree on a target**: Skip the debate. Measure 4 weeks, present the data, propose "observed minus one standard deviation" as the starting SLO. Iterate quarterly.
+- **Pager load spiking with no clear cause**: Don't tune alerts yet. Read the last 10 pages verbatim and classify (real / flaky / dependency / user error). Fix the biggest category first.
+- **Freeze triggered and product is furious**: Re-read the policy *text*. If it allows this release under a documented condition, spend a silver-bullet and log the decision. If not, the policy is working — escalate per the escalation clause; do not override.
+- **Team demands per-service burn-rate thresholds**: Refuse; offer a new tier instead. If three tiers can't express the need, the real fix is an SLI change, not more tiers.
+- **Postmortem AI rotted for a quarter, outage recurred**: Don't write a new AI for the same root cause. Find the original AI, promote it to P0, reassign to a senior engineer with schedule authority, and add the rotted AI itself as a datapoint in the new postmortem ("process failure: AI-1234 unowned for 90 days").
+- **New service has no SLO and launch is Friday**: Ship with a provisional 99% SLO and a 14-day review. Lower is better than missing — you can always tighten once you have data, but a service without any SLO has no protection at all.
+
+## NEVER List (summary)
+
+- NEVER set SLO at 100% — mathematically impossible, infinite cost
+- NEVER set SLO above your dependency ceiling `product(dep_slos)`
+- NEVER publish your internal SLO — publish a looser SLA number
+- NEVER use a calendar-aligned SLO window; use a rolling 4-week/30-day window
+- NEVER use mean latency as an SLI; use ratios with paired thresholds
+- NEVER add `for:` duration to burn-rate alerts; use multi-window instead
+- NEVER write a burn-rate query without a denominator-guard against NaN
+- NEVER tune burn-rate thresholds per service; use tiered buckets
+- NEVER negotiate error budget policy during an outage
+- NEVER leave a postmortem without a P0/P1 action item (Treynor rule)
+- NEVER accept "train humans to be more careful" as a preventive AI
+- NEVER count out-of-scope traffic against the SLO (load tests, buggy quota-breachers)
+- NEVER page for events that don't require human intelligence
+- NEVER solve excess pager load by adding people
+- NEVER accept toil >50% for >2 quarters without escalating to hand back the service
+- NEVER skip Chubby-style planned outages when massively overperforming — hidden dependencies are worse than the outage

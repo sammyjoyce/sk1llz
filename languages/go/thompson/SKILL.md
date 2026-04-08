@@ -1,246 +1,117 @@
 ---
 name: thompson-unix-philosophy
-description: Write Go code in the style of Ken Thompson, co-creator of Go, Unix, and C. Emphasizes Unix philosophy, minimalism, and programs that do one thing well. Use when designing tools, CLIs, or systems that should be composable and focused.
-tags: unix, utf-8, grep, regex, plan9, systems, encoding, text-processing, simplicity, operating-system, shell, pipes
+description: Write Go code in the Ken Thompson / Rob Pike Bell Labs tradition — data-dominates design, brute force before cleverness, text as interface, and programs that compose via stdin/stdout. Use when designing CLIs, filters, log processors, build tools, codegen, protocol parsers, or any Go program where simplicity, composition, and long-term maintainability matter more than feature breadth. Triggers: "unix philosophy", "filter program", "compose pipeline", "plan 9 style", "do one thing well", "brute force", "table-driven", "data-oriented Go", "pike style", "thompson style".
 ---
 
-# Ken Thompson Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​‌‌‌‌​‍‌​​​‌‌‌‌‍‌​‌‌​‌‌​‍‌​​​‌​​​‍​​​​‌​‌​‍​‌​‌​‌​‌⁠‍⁠
+# Thompson / Pike Style for Go
 
-## Overview
+> "When in doubt, use brute force." — Ken Thompson
+> "Data dominates. If you've chosen the right data structures, the algorithms will almost always be self-evident." — Rob Pike, *Notes on Programming in C*, Rule 5
 
-Ken Thompson co-created Unix, the C language, UTF-8, and Go. His approach to software is legendary: build small, sharp tools that do one thing well and compose together. The Unix philosophy is his philosophy.
+This is a **mindset skill**, not a cookbook. Load it when you must *decide* between two plausible Go designs and need a sharper razor than "clean code."
 
-## Core Philosophy
+## Before you write any Go, ask these four questions
 
-> "One of my most productive days was throwing away 1,000 lines of code."
+1. **What is the data?** Not the functions — the data. If you cannot draw the central data structure on a napkin, you do not yet understand the problem. Design the struct first; the functions fall out.
+2. **How big is N, really?** If N is bounded by something a human edits (files in a repo, flags, config keys, CPU cores, lines in `/etc/hosts`), N ≤ ~10⁴ and a linear scan over a slice beats a `map` on wall-clock every time. Fancy structures have large constants and lose badly until N is genuinely large.
+3. **Can this be a filter?** `stdin → transform → stdout` composes with every tool ever written. If yes, refuse to add flags that change *what* it reads or writes.
+4. **What is the one reason this will change?** Not "what does it do" — "who files the bug that forces an edit." Two reasons to change = two programs. This is the real meaning of "do one thing."
 
-> "When in doubt, use brute force."
+If you cannot answer (1) in one sentence and (4) without listing alternatives, stop and redesign before writing code.
 
-> "I'd rather write programs to write programs than write programs."
+## Expert-only knowledge (the things practitioners learn the hard way)
 
-Thompson believes in **minimalism and pragmatism**. Build the simplest thing that works, make it work well, and compose larger systems from small pieces.
+### The data-dominates razor, stated precisely
+Pike's complete list of data structures for "almost all practical programs" is: **array, linked list, hash table, binary tree**. Four. If your design needs a fifth (skip list, trie, Bloom filter, lock-free queue, B-tree), you owe yourself a benchmark proving the simpler choice loses on *your actual input*. In Go this means: reach for `[]T` first, `map[K]V` second, and treat `container/list`, `container/heap`, and third-party fancy structures as evidence of a design you haven't finished thinking about.
 
-## Design Principles
+### Replace branches with tables
+Long `if/else if` or `switch` chains are almost always a missing data structure. A state machine as a `[N][M]int` transition table is smaller, faster, testable as data, and diff-reviewable. This is the same insight behind Thompson's 1968 NFA regex construction: represent every state simultaneously as data, never as recursive control flow. See `references/data-dominates.md` before refactoring any `switch` with more than ~5 arms.
 
-1. **Do One Thing Well**: Each program, function, or module has one job.
+### "Brute force" is a state-space argument, not laziness
+Thompson's 5- and 6-piece chess tablebases work because there are few *distinct positions* even when there are astronomically many *move sequences*. Before reaching for a "smart" algorithm, compute the actual state space. If it fits in RAM — even 10 GB of RAM today — the brute solution is correct by construction, has no edge cases, and compiles in a weekend. A clever solution is a bug generator you will babysit for years.
 
-2. **Compose Small Programs**: Build complex behavior from simple pieces.
+### Variable name length is inversely proportional to scope
+Package-level: `maxPayloadBytes`. Function-local loop: `i`, `b`, `np`. A three-line function with `userAccountServicePointer` is *less* readable than one with `u`, because at that scope the context already tells you what it is. Long names in tiny scopes "jangle like bad typography" (Pike). The test: if a reader must scroll to understand a name, it is too short; if they must re-read the line to parse it, it is too long.
 
-3. **Text Streams as Interface**: Universal, simple, debuggable.
+### Comments lie; the compiler does not
+A comment is unchecked documentation that drifts the moment someone edits the code beside it. The only comments worth writing in Thompson-style Go are:
+- A package-level doc on the **central data structure** explaining invariants (`// nodes[0] is always the root; parent < child indices`).
+- A `// WHY` comment explaining a non-obvious *reason* (cache locality, protocol quirk, historical CVE).
+- Never a `// WHAT` comment. `i++ // increment i` is the textbook Pike anti-example and it appears in production code constantly.
 
-4. **Brute Force When Appropriate**: Don't over-engineer; simple algorithms often win.
+### Function names: verbs for actions, predicates for booleans
+`if validSize(x)` beats `if checkSize(x)` because the reader instantly knows whether `true` means good or bad. In Go: name predicates `IsX`, `HasX`, `CanX`; name fallible actions after their *outcome* (`Parse`, `Open`, `Fetch`), not their activity (`DoParse`, `TryOpen`). Pike's rule: *procedure names reflect what they do; function names reflect what they return.*
 
-## When Writing Code
+### The Unix rule of silence, applied to Go errors
+Error strings must compose when wrapped. Go's convention exists because of this:
+- **lowercase**, no trailing punctuation, no `"failed to "` prefix
+- `fmt.Errorf("parse %s: %w", path, err)` → `parse /etc/x: open /etc/x: no such file or directory`
+- Capitalised or punctuated strings make wrapped errors read like ransom notes.
 
-### Always
+### Choose sentinel vs typed errors by *caller need*, not taste
+- **Sentinel** (`var ErrNotFound = errors.New("not found")`) when callers branch on identity and carry no extra data — `io.EOF`, `sql.ErrNoRows`.
+- **Typed** (`type *PathError struct`) when callers need structured fields via `errors.As`.
+- **Plain `fmt.Errorf`** otherwise. If you are defining a sentinel "just in case someone wants to match it," delete it. Unused sentinels become API you cannot remove.
 
-- Make each function do exactly one thing
-- Use simple data formats (text, JSON)
-- Write programs that can be composed via stdin/stdout
-- Start with the simplest solution that could work
-- Measure before optimizing
-- Make tools that are easy to script
+## Go-specific gotchas that enforce the philosophy
 
-### Never
+These are the silent failures that turn a Thompson-style program into a broken one. READ the referenced files before writing the relevant code.
 
-- Build monoliths when pipelines work
-- Use complex formats when text suffices
-- Optimize without profiling
-- Add features "just in case"
-- Create interactive tools when batch works
+| Situation | Gotcha | Fix |
+|---|---|---|
+| Reading lines > 64 KiB | `bufio.Scanner` **silently stops** with `bufio.ErrTooLong`; default `MaxScanTokenSize` is 65536. | `sc.Buffer(make([]byte, 0, 1<<20), 16<<20)` or use `bufio.Reader.ReadBytes('\n')`. |
+| Exit from `main` | `os.Exit(n)` **does not run deferred functions** — open files leak, tempdirs stay. | `func run() int { defer cleanup(); ...; return code }; func main(){ os.Exit(run()) }` |
+| Copying large streams | `io.Copy`'s buffer is hardcoded to **32 KiB**; changing it rarely helps. | If you *know* it matters, use `io.CopyBuffer` with a measured size. Otherwise do not parameterize. |
+| Writing to a closed pipe | `fmt.Println` to stdout in `| head` returns `EPIPE`; ignoring it is the Unix-correct behavior. | Check `errors.Is(err, syscall.EPIPE)` and exit cleanly, or handle `SIGPIPE` via `signal.Notify`. |
+| `flag` exit codes | `flag.Parse` calls `os.Exit(2)` on parse errors. **2 means misuse**. | Preserve this: usage errors = 2, runtime errors = 1, success = 0. Scripts depend on it. |
+| `map` iteration order | Deliberately randomized per run. Tests that print a map will flake. | Sort keys before printing: `keys := maps.Keys(m); slices.Sort(keys)`. |
+| `defer` in a loop | Defers stack until function return; holding 10⁶ files open will crash. | Extract the loop body into a function so `defer` fires each iteration. |
 
-### Prefer
+Before designing a CLI in this style, READ `references/cli-conventions.md`.
+Before replacing a `switch`/`if` chain with a table, READ `references/data-dominates.md`.
+Do NOT read those files for small edits or single-function changes — they are for design decisions.
 
-- Line-oriented text formats
-- Streaming over loading everything into memory
-- `io.Reader`/`io.Writer` for data flow
-- Flags over config files for simple tools
-- Exit codes for scripting
+## Anti-patterns (the wrong path, why it seduces, what it costs)
 
-## Code Patterns
+- **NEVER add a flag "just in case someone needs to configure it."** It seduces because it feels like humility ("I don't know what users want"). The cost: every flag is a permanent API surface, a documentation obligation, an interaction to test, and a future compatibility constraint. Thompson's rule: ship with zero flags; add one only after a real user hits a wall. **Instead:** ship the brute-force default and wait for the first real bug report.
 
-### Programs as Filters
+- **NEVER write `io.Copy` variants to "avoid the 32 KiB hardcoded buffer."** It seduces because 32 KiB "feels small" on modern hardware. The cost: you lose the universal composability of `io.Copy` and gain nothing measurable — kernel readahead and page cache already dwarf user-space buffering for files; for network, latency dominates. **Instead:** benchmark first; use `io.CopyBuffer` only when the profile points there.
 
-```go
-// Unix philosophy: read stdin, write stdout
-func main() {
-    scanner := bufio.NewScanner(os.Stdin)
-    for scanner.Scan() {
-        line := scanner.Text()
-        // Transform
-        result := process(line)
-        fmt.Println(result)
-    }
-    if err := scanner.Err(); err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
-}
+- **NEVER call `os.Exit(1)` inside a function that has `defer file.Close()` above it.** It seduces because it looks like clean error handling. The cost: the file handle leaks until the OS reclaims it, and on Windows the file stays locked. **Instead:** return an error all the way to `main`, or use the `run() int` pattern so `defer` still fires.
 
-// Composable: cat file | myprogram | sort | uniq
+- **NEVER use `bufio.Scanner` on untrusted input without setting `Buffer`.** It seduces because `for scanner.Scan() { ... }` is the idiomatic loop. The cost: one 70 KB log line silently truncates your input, `Err()` returns `bufio.ErrTooLong`, and you process garbage. **Instead:** `sc.Buffer(make([]byte, 0, 64<<10), 16<<20)` or switch to `bufio.Reader.ReadBytes('\n')`.
+
+- **NEVER define a type alias or wrapper struct for "clarity" that has no behavior.** `type UserID string` with no methods seduces because it looks type-safe. The cost: every call site needs conversions, every `fmt.Println` does the wrong thing by default, and you gained zero safety — `UserID("")` still compiles. **Instead:** keep the primitive, document the invariant, and only introduce a named type when you add a method.
+
+- **NEVER capitalize an error string or end it with a period.** It seduces because it reads better in isolation. The cost: wrapped errors become `"Parse failed.: Open failed.: no such file"` — unreadable garbage. **Instead:** lowercase, no trailing punctuation, compose cleanly: `"parse %s: %w"`.
+
+- **NEVER reach for `sync.Mutex` before you've tried a single goroutine owning the data and channels to talk to it.** It seduces because locking feels "how concurrent code is done." The cost: the bugs it introduces (deadlocks, races on fields you forgot, lock ordering) are exactly the bugs Go was designed to avoid. **Instead:** one goroutine, one owner, communicate via channels. Use a mutex only when profiling proves the channel hop is the bottleneck.
+
+- **NEVER commit a regex without a benchmark if it runs on every line of user input.** It seduces because `regexp.MustCompile` is one line. The cost: Go's `regexp` (RE2) is linear-time but has a large constant — on simple prefixes, `strings.HasPrefix` is 20–100× faster. **Instead:** try `strings.Contains`/`HasPrefix`/`Cut` first; use `regexp` only when the pattern is genuinely irregular.
+
+- **NEVER add a `// TODO` without a tracking issue and a date.** It seduces because it feels responsible. The cost: the file is now lying about its intent forever. **Instead:** either fix it now, or delete the thought and open an issue with the context.
+
+## Decision tree: what to build
+
+```
+Is the input a stream of records?
+├─ Yes → filter: stdin → transform → stdout. No flags that change I/O shape.
+│        Use bufio.Scanner with explicit Buffer, or bufio.Reader for > 64 KiB lines.
+└─ No → Is it a build/codegen tool?
+        ├─ Yes → read files from args, write files atomically (tmp + rename).
+        │        Exit 0 on success, 1 on failure, 2 on usage error.
+        └─ No → Is it a long-running service?
+                 ├─ Yes → NOT a Thompson program. Stop and pick a different style.
+                 └─ No → One-shot utility: flags via `flag`, args via `flag.Args()`,
+                          errors to stderr, data to stdout, exit code carries status.
 ```
 
-### Do One Thing Well
+## Fallbacks when brute force actually fails
 
-```go
-// BAD: Swiss army knife
-func ProcessData(data []byte, format string, compress bool, 
-                 encrypt bool, output string) error {
-    // 200 lines handling all combinations...
-}
+Brute force fails in exactly three situations. Know them so you don't panic-optimize prematurely:
 
-// GOOD: Separate tools
-func Compress(r io.Reader, w io.Writer) error { ... }
-func Encrypt(r io.Reader, w io.Writer, key []byte) error { ... }
-func Format(r io.Reader, w io.Writer, fmt string) error { ... }
+1. **State space exceeds RAM.** Measure first (`pprof --alloc_space`). If yes, stream with `bufio` and process in chunks; still prefer a linear scan per chunk.
+2. **Real-time constraint (hard deadline < 1 ms).** Then `map` lookups lose to perfect hashing or sorted-slice binary search; profile before choosing.
+3. **Quadratic on large N that is actually large.** If N > ~10⁵ and the algorithm is O(N²), you need a real algorithm. Not before.
 
-// Compose:
-// cat data | compress | encrypt | format > output
-```
-
-### Simple Data Flow with io.Reader/Writer
-
-```go
-// Everything flows through Reader/Writer
-func CountWords(r io.Reader) (int, error) {
-    scanner := bufio.NewScanner(r)
-    scanner.Split(bufio.ScanWords)
-    count := 0
-    for scanner.Scan() {
-        count++
-    }
-    return count, scanner.Err()
-}
-
-// Works with files
-f, _ := os.Open("file.txt")
-n, _ := CountWords(f)
-
-// Works with strings
-n, _ := CountWords(strings.NewReader("hello world"))
-
-// Works with HTTP responses
-resp, _ := http.Get(url)
-n, _ := CountWords(resp.Body)
-
-// Works with compressed data
-gz, _ := gzip.NewReader(f)
-n, _ := CountWords(gz)
-```
-
-### Brute Force First
-
-```go
-// BAD: Premature optimization
-func FindDuplicates(items []string) []string {
-    // Complex trie-based algorithm with O(n) complexity
-    // 150 lines of code...
-}
-
-// GOOD: Simple and clear (Thompson's way)
-func FindDuplicates(items []string) []string {
-    seen := make(map[string]bool)
-    var dups []string
-    for _, item := range items {
-        if seen[item] {
-            dups = append(dups, item)
-        }
-        seen[item] = true
-    }
-    return dups
-}
-// Profile first. Optimize only if this is actually slow.
-```
-
-### Command-Line Tools
-
-```go
-package main
-
-import (
-    "flag"
-    "fmt"
-    "os"
-)
-
-func main() {
-    // Simple flags, not complex config
-    n := flag.Int("n", 10, "number of lines")
-    flag.Parse()
-    
-    // Read files from args, or stdin
-    args := flag.Args()
-    if len(args) == 0 {
-        process(os.Stdin, *n)
-    } else {
-        for _, filename := range args {
-            f, err := os.Open(filename)
-            if err != nil {
-                fmt.Fprintln(os.Stderr, err)
-                continue
-            }
-            process(f, *n)
-            f.Close()
-        }
-    }
-}
-
-// Exit codes matter for scripting
-// 0 = success
-// 1 = general error
-// 2 = usage error
-```
-
-### Text as Universal Interface
-
-```go
-// BAD: Custom binary format
-type Record struct {
-    // Complex serialization...
-}
-
-// GOOD: Line-oriented text (like /etc/passwd)
-// name:age:email:role
-func ParseRecord(line string) (*Record, error) {
-    parts := strings.Split(line, ":")
-    if len(parts) != 4 {
-        return nil, fmt.Errorf("invalid record: %s", line)
-    }
-    age, err := strconv.Atoi(parts[1])
-    if err != nil {
-        return nil, err
-    }
-    return &Record{
-        Name:  parts[0],
-        Age:   age,
-        Email: parts[2],
-        Role:  parts[3],
-    }, nil
-}
-
-// Debuggable: you can cat the file
-// Composable: grep, awk, sed all work
-// Universal: every language can parse it
-```
-
-## Mental Model
-
-Thompson asks:
-
-1. **Can this be simpler?** Usually yes.
-2. **Can this be a filter?** stdin → stdout
-3. **Does this do one thing?** Split it if not.
-4. **Will brute force work?** Start there.
-
-## The Unix Way in Go
-
-| Unix Tool | Go Equivalent |
-|-----------|---------------|
-| `cat` | `io.Copy(os.Stdout, file)` |
-| `head` | `bufio.Scanner` + counter |
-| `grep` | `strings.Contains` / `regexp` |
-| `wc` | `bufio.Scanner` with splits |
-| `sort` | `sort.Strings` |
-| `uniq` | map for dedup |
-| `tee` | `io.MultiWriter` |
-
+Everything else — "it feels slow," "it might scale," "users might have big inputs" — is Pike's Rule 1: *you cannot tell where a program will spend its time.* Measure, then fix only the part that overwhelms the rest.

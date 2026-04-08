@@ -1,446 +1,113 @@
 ---
 name: aqr-factor-investing
-description: Build investment systems in the style of AQR Capital Management, the quantitative investment firm pioneering factor investing. Emphasizes academic rigor, transparent methodology, and systematic factor exposure. Use when building factor models, conducting asset pricing research, or designing systematic portfolios.
-tags: quantitative, factor-investing, risk-management, portfolio, backtesting, finance, statistics, hedge-fund
+description: Build factor-investing systems the way AQR actually runs them, with hard-won corrections to academic formulas (HML Devil, 12-1 skip-month, capped value weights, non-micro universes), honest drawdown arithmetic, and the discipline to resist factor timing. Use when building value/momentum/quality/defensive factors, designing a multi-factor long-short book, writing a backtest that must match live P&L, attributing live returns to factor exposures, or deciding whether a drawing-down factor is broken. Triggers:  factor model, Fama-French, HML, HML Devil, UMD, QMJ, BAB, betting against beta, momentum crash, value spread, factor timing, factor zoo, craftsmanship alpha, quant winter, systematic equity, long-short portfolio, tercile sort, winsorize, z-score, factor attribution, implementation shortfall.
+tags: quantitative, factor-investing, risk-management, portfolio, backtesting, finance
 ---
 
-# AQR Capital Management Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​‌‌‌‌​‌‍​​​‌‌‌​​‍‌​‌​​​​​‍‌‌​‌​‌​‌‍​​​​‌​‌​‍‌​‌‌‌​​​⁠‍⁠
+# AQR Factor Investing
 
-## Overview
+This skill encodes the construction details, drawdown mathematics, and implementation traps that separate a live-capital AQR-style factor book from a textbook Fama-French backtest. Almost everything here is what Asness, Frazzini, Israel, Moskowitz, Pedersen, and Ilmanen published *after* getting burned by the easy version.
 
-AQR (Applied Quantitative Research), founded by Cliff Asness and other academics from Goldman Sachs, is a quantitative investment firm managing ~$100B. Known for bringing academic factor research to practical investing, they emphasize transparency, rigorous methodology, and the democratization of quantitative techniques.
+## Before writing any factor code, ask yourself
 
-## Core Philosophy
+1. **Would this survive removing every stock below the NYSE 20th percentile of market cap?** Most published anomalies die here. The Jensen-Kelly-Pedersen replication study dropped ~27 points of replication rate just by switching from uncapped deciles to non-micro terciles. If yours dies too, you are harvesting a micro-cap illusion, not a factor.
+2. **Am I using *current* prices in the denominator of B/P, or Fama-French's 6-month-lagged ones?** Lagged prices contaminate HML with ~20% of a poorly-constructed momentum factor (Asness-Frazzini 2013, "The Devil in HML's Details"). If you want "pure value," you must rebuild it.
+3. **What is my expected drawdown *duration*, not depth?** A Sharpe-0.4 factor has ~16% probability of making nothing for a full decade from a mere −1σ event. Plan for that, not for a 2-sigma catastrophe that probably never comes.
+4. **If this factor stops working, how will I distinguish structural decay from a value-spread-widening drawdown?** Without a pre-committed answer, you will capitulate at the bottom.
 
-> "The best ideas in finance come from rigorous academic research, not from Wall Street intuition."
+## Craftsmanship alpha: the details that matter more than which factors you pick
 
-> "Factors work because of risk, behavior, or structure—understand which before you invest."
+Asness's "Little Things Mean a Lot" arithmetic: each construction decision below is worth roughly 0.10 Sharpe viewed alone. Ten of them together is ~0.32 Sharpe — which still has a 37% chance of subtracting in any given year and an 8% chance of subtracting over 20 years. Adopt them as a bundle of priors, not as individual bets you can evaluate.
 
-> "If you can't explain it simply, you don't understand it well enough."
+### Value
+- Composite of ≥4 ratios (B/P, E/P, CF/P, sales/P, forward E/P). Single-metric value fails from noise, not from crowding — "if the strategy is so popular that it won't work anymore, someone forgot to tell the prices" (Asness).
+- **Use current market price in the denominator**, not Fama-French's 6-month-lagged price. This is the entire point of "HML Devil."
+- **Intra-industry**, not cross-industry. Cross-industry value is a bet on whichever sector is structurally cheap (banks 2008, energy 2020), not on value.
+- In tax-aware long-only books, value is the *expensive* factor to run because its tax drag comes from dividend income, which you cannot optimize away without destroying the signal. Momentum's drag is capital gains, which you can.
 
-AQR believes that systematic factors (value, momentum, quality, etc.) represent persistent sources of returns that can be harvested through disciplined implementation. They emphasize understanding *why* strategies work, not just *that* they work.
+### Momentum
+- **12-month return, skipping the most recent month** (the 12-1). Novy-Marx claimed 7-12 dominates 2-6; Goyal-Wahal replicated across 36 countries and found 12-1 dominated in 35. Skip-month is not optional — the last-month reversal is microstructure noise (bid-ask bounce, short-term reversal) and including it materially drags the Sharpe.
+- **Momentum crashes are conditional beta risk, not tail risk.** After a bear market, momentum is long low-beta / short high-beta. A sharp upswing (Mar-May 2009, Aug 1932) crushes the short leg. Daniel-Moskowitz showed 100% of the crash comes from the short side, not the winners. The correct fix is **not** to hedge the market beta — it is to **combine with value**, which rallies in exactly those moments.
+- **Momentum works best in expensive stocks**, not cheap ones (Asness 1997). Removing the 10% most expensive stocks drops momentum Sharpe with a −3.16 t-stat on a 50-year sample. Do not "cleanse" bubble stocks from a momentum book.
 
-## Design Principles
+### Quality (QMJ)
+- Four sub-components: profitability, growth stability, safety (low leverage + low volatility + low beta), payout. Drop any one and the factor becomes unstable. Safety alone is roughly BAB.
+- Negative correlation to value (cheap stocks are usually junk) is a feature: a QMJ book hedges a value book during junk rallies (1999, mid-2020).
 
-1. **Academic Foundation**: Start with peer-reviewed research.
+### Defensive / Betting-Against-Beta
+- BAB is dollar-neutral AND **beta-neutral**: lever the low-beta long leg to match the short leg's beta. Long-only low-vol implementations lose most of the premium because they cannot apply the leverage step.
+- The premium comes from leverage aversion (Frazzini-Pedersen 2014). Cheaper financing — not crowding — is what would erode it.
 
-2. **Factor Discipline**: Stick to factors with economic rationale.
+### Construction hygiene for all factors
+- **Tercile sort with NYSE 20th-percentile breakpoint**, not raw deciles. Tercile+non-micro is the AQR-house tradability-vs-power tradeoff.
+- **Capped value weighting**: weight by market cap winsorized at NYSE 80th percentile. Prevents mega-cap dominance (Nokia was ~70% of Finland in 1999-2000) without the microcap overfit of equal-weighting.
+- Scale factor monthly idiosyncratic vol to 10%/√12 (~10% annualized). This normalizes comparisons across methodologies.
+- Winsorize z-scores at ±3σ **after** standardizing; do not clip raw ratios before ranking. Outliers in B/P are informative up to that point.
 
-3. **Transparency**: Publish methodology, admit mistakes.
+## The drawdown arithmetic you must internalize
 
-4. **Diversification**: Across factors, geographies, and asset classes.
+- Sharpe 0.3 (roughly the long-run market itself) can make nothing for a decade from a single −1σ event. Sharpe 0.4 is ~16% probability over a decade. Sharpe 1.0 multi-factor books still have ~24% chance of a down 5-year period.
+- Every factor has had ≥1 multi-year drawdown. Value: 1999-2000, 2018-2020 (the worst in Samonov's 220-year dataset). Momentum: Mar-May 2009, Aug 1932. If your strategy cannot survive 2018-2020 *emotionally and financially* (margin calls, redemptions, staff cuts), you are not running the strategy you think.
+- AQR itself went from $226B (2018) to $98B (2020), cut staff from ~1,000 to ~600, then printed +43.5% in 2022. Asness's own postmortem: "the best we've got is that value holistically lost." There was no mechanical explanation.
+- **Never publish the backtest Sharpe as the expected Sharpe.** Every experienced AQR researcher privately discounts backtest Sharpes by 30-50% before setting client expectations. Asness has admitted this in print for decades.
 
-5. **Implementation Matters**: Transaction costs can kill paper returns.
+## NEVER / INSTEAD
 
-## When Building Factor Strategies
+- **NEVER time factors on macroeconomic regimes**, because the macro→factor link is noise in virtually every implementation (Ilmanen et al 2021, Asness-Chandra-Ilmanen-Israel 2017). Factor timing requires being "right twice" — forecast the regime *and* the factor's sensitivity to it — and the second part barely exists. **INSTEAD**, hold a disciplined multi-factor portfolio and let cross-factor diversification do the work.
 
-### Always
+- **NEVER use a trigger-threshold (±20%) rebalance rule** on a factor book, because triggers fire during trend moves and force trades *against* time-series momentum. AQR's 43-year rebalancing study shows fixed-calendar annual rebalancing beats trigger-based on Sharpe *and* on turnover cost. **INSTEAD**, rebalance on a fixed schedule (monthly or annually), widen only if turnover cost exceeds your budget.
 
-- Ground strategies in academic research
-- Understand the economic rationale (risk, behavioral, structural)
-- Test across multiple time periods and geographies
-- Account for realistic transaction costs
-- Combine multiple factors for diversification
-- Construct factors to be investment-grade (liquidity, capacity)
+- **NEVER drop "bubble" or "expensive" stocks from the universe**, because momentum works best exactly in that tail (expensive-stock momentum has roughly twice the Sharpe of cheap-stock momentum; the −3.16 t-stat drop from cleansing them is the single largest construction mistake in the literature). **INSTEAD**, let value underweight and momentum overweight the same bubble name; the offsetting exposures are the point.
 
-### Never
+- **NEVER use Fama-French HML off Ken French's website for a "pure value" book**, because its 6-month lag on price mixes ~20% momentum into HML. Your stated "60/40 value/momentum" allocation is then actually ~50/50 of pure value and pure momentum (which is why AQR uses 60/40 HML+UMD, not 50/50 — the weights are *already* compensating for the contamination). **INSTEAD**, rebuild HML with current prices ("HML Devil") if you need clean factor interpretation.
 
-- Chase factors discovered through data mining
-- Ignore the implementation gap (paper vs. real returns)
-- Assume factor premia are stable over time
-- Concentrate in single factors or markets
-- Forget about factor crowding
-- Trade more than necessary
+- **NEVER treat a wide value-spread as a go-long timing signal**, because Asness's own "Contrarian Factor Timing Is Deceptively Difficult" showed value-spread timing has out-of-sample Sharpe indistinguishable from zero. Spreads can and do widen further — 2020 set a 220-year record. **INSTEAD**, use spreads to set *expected return* (wider = higher prospective Sharpe), but keep *risk targeting constant*. Only in a genuine once-a-century extreme should you make a small (<10%) "venial value-timing sin," and Asness himself only did it twice in 30 years (1999, 2019).
 
-### Prefer
+- **NEVER run a long-only multi-factor portfolio by blending single-factor sleeves** (50% value sleeve + 50% momentum sleeve), because at the stock level a cheap-junk name and an expensive-quality name cancel, destroying the cross-factor interaction. Fitzgibbons-Friedman-Pomorski-Serban (2017), "Don't Just Mix, Integrate." **INSTEAD**, compute a composite per-stock score across all factors and build one portfolio off it.
 
-- Composite factors over single metrics
-- Long-short over long-only for pure factor exposure
-- Equal-risk weighting over equal-dollar weighting
-- Gradual rebalancing over discrete trading
-- Transaction cost-aware optimization
-- Factor timing skepticism
+- **NEVER equate "the factor is down" with "the factor is broken."** A Sharpe-0.4 factor needs only ~55% of months positive over the long run. Real decay would show as a slow premium compression with a *narrowing* value spread; real drawdowns show as a *widening* spread. **INSTEAD**, check three things: (1) Is the spread wider or narrower than at drawdown entry? (2) Have 13F filings of systematic funds actually grown materially in the same strategy? (3) Are other quant shops also drawing down? If spread wider + AUM flat + peers also down, it is a normal painful drawdown — hold the position.
 
-## Code Patterns
+## Decision tree: a factor is drawing down, what do I do?
 
-### Factor Construction
-
-```python
-class FactorBuilder:
-    """
-    AQR-style factor construction: robust, diversified, investment-grade.
-    """
-    
-    def __init__(self, data_provider):
-        self.data = data_provider
-    
-    def build_value_factor(self, 
-                           universe: List[str],
-                           date: date) -> pd.Series:
-        """
-        Value factor: composite of multiple value metrics.
-        AQR uses book/price, earnings/price, forecast earnings/price, etc.
-        """
-        metrics = {}
-        
-        # Book to Price (classic Fama-French)
-        metrics['book_to_price'] = self.data.get_fundamentals(
-            universe, 'book_value', date
-        ) / self.data.get_prices(universe, date)
-        
-        # Earnings to Price
-        metrics['earnings_to_price'] = self.data.get_fundamentals(
-            universe, 'trailing_earnings', date
-        ) / self.data.get_prices(universe, date)
-        
-        # Forward Earnings to Price (analyst estimates)
-        metrics['forward_ep'] = self.data.get_fundamentals(
-            universe, 'forward_earnings', date
-        ) / self.data.get_prices(universe, date)
-        
-        # Cash Flow to Price
-        metrics['cf_to_price'] = self.data.get_fundamentals(
-            universe, 'operating_cf', date
-        ) / self.data.get_prices(universe, date)
-        
-        # Composite: z-score and average
-        composite = pd.DataFrame(metrics)
-        z_scores = composite.apply(lambda x: self.winsorize_and_zscore(x), axis=0)
-        
-        return z_scores.mean(axis=1)
-    
-    def build_momentum_factor(self,
-                               universe: List[str],
-                               date: date) -> pd.Series:
-        """
-        Momentum: 12-month return, skipping most recent month.
-        Classic Jegadeesh-Titman with AQR refinements.
-        """
-        # 12-1 momentum (skip last month to avoid reversal)
-        prices = self.data.get_price_history(universe, date, lookback_months=13)
-        
-        # Return from t-12 to t-1
-        momentum_12_1 = prices.iloc[-22] / prices.iloc[0] - 1  # Skip last month
-        
-        # AQR enhancement: also consider intermediate momentum
-        momentum_6_1 = prices.iloc[-22] / prices.iloc[-132] - 1
-        
-        # Industry-adjusted (avoid sector bets)
-        industries = self.data.get_industries(universe)
-        mom_adj = momentum_12_1.groupby(industries).transform(
-            lambda x: x - x.mean()
-        )
-        
-        return self.winsorize_and_zscore(mom_adj)
-    
-    def build_quality_factor(self,
-                              universe: List[str],
-                              date: date) -> pd.Series:
-        """
-        Quality: profitability, stability, and financial health.
-        Based on AQR's "Quality Minus Junk" research.
-        """
-        profitability = self.calculate_profitability(universe, date)
-        growth = self.calculate_growth_stability(universe, date)
-        safety = self.calculate_safety(universe, date)
-        payout = self.calculate_payout(universe, date)
-        
-        # Composite quality score
-        quality = pd.DataFrame({
-            'profitability': self.winsorize_and_zscore(profitability),
-            'growth': self.winsorize_and_zscore(growth),
-            'safety': self.winsorize_and_zscore(safety),
-            'payout': self.winsorize_and_zscore(payout)
-        })
-        
-        return quality.mean(axis=1)
-    
-    def calculate_profitability(self, universe, date):
-        """Gross profits / assets, ROE, ROA, etc."""
-        gp = self.data.get_fundamentals(universe, 'gross_profit', date)
-        assets = self.data.get_fundamentals(universe, 'total_assets', date)
-        return gp / assets
-    
-    def calculate_safety(self, universe, date):
-        """Low leverage, low volatility, low beta."""
-        leverage = self.data.get_fundamentals(universe, 'debt_to_equity', date)
-        volatility = self.data.get_volatility(universe, date, lookback_days=252)
-        
-        # Invert so higher is better
-        return -(leverage.rank() + volatility.rank()) / 2
-    
-    def winsorize_and_zscore(self, series: pd.Series, clip_std: float = 3.0):
-        """Winsorize outliers and standardize."""
-        z = (series - series.mean()) / series.std()
-        z = z.clip(-clip_std, clip_std)
-        return (z - z.mean()) / z.std()
+```
+Is the factor's spread (value spread, momentum strength) at a historical
+extreme of CHEAPNESS vs its own history?
+├── YES (spread wider than entry)
+│   └── The factor is COMPRESSING, not DECAYING. Rebalance on schedule,
+│       do not cut. If spread > 2σ wide, consider a small (<10%) tilt up
+│       — a "venial" factor-timing sin. Do NOT scale to the spread; scale
+│       at most once.
+└── NO (spread narrower than entry, or unchanged)
+    ├── Has AUM in known factor funds grown materially? (Check 13F.)
+    │   └── YES → possible crowding decay; trim by 10-20%, do not zero.
+    ├── Is there a real economic story for structural decay (e.g.,
+    │   rates regime change with a mechanical link)?
+    │   └── Almost always NO. Macro-factor links are noise.
+    └── Is the drawdown concentrated in the short leg during a sharp
+        market upswing?
+        └── YES → this is a momentum-crash pattern (Daniel-Moskowitz).
+            Hold; your value leg is almost certainly up in the same
+            window and is your natural hedge.
 ```
 
-### Multi-Factor Portfolio Construction
+## Multi-factor portfolio construction rules
 
-```python
-class FactorPortfolio:
-    """
-    AQR's portfolio construction: factor exposure with risk management.
-    """
-    
-    def __init__(self, factors: Dict[str, FactorBuilder], 
-                 risk_model: RiskModel,
-                 transaction_cost_model: TCostModel):
-        self.factors = factors
-        self.risk = risk_model
-        self.tcost = transaction_cost_model
-    
-    def construct_portfolio(self,
-                            universe: List[str],
-                            date: date,
-                            factor_weights: Dict[str, float],
-                            risk_target: float = 0.10) -> pd.Series:
-        """
-        Build a portfolio with target factor exposures.
-        """
-        # Calculate factor scores
-        factor_scores = {}
-        for name, builder in self.factors.items():
-            factor_scores[name] = builder.build(universe, date)
-        
-        # Combine factors with weights
-        combined_score = sum(
-            factor_scores[name] * weight 
-            for name, weight in factor_weights.items()
-        )
-        
-        # Convert scores to weights (long-short)
-        raw_weights = self.scores_to_weights(combined_score)
-        
-        # Scale to target risk
-        portfolio_vol = self.risk.estimate_volatility(raw_weights)
-        scaled_weights = raw_weights * (risk_target / portfolio_vol)
-        
-        return scaled_weights
-    
-    def scores_to_weights(self, scores: pd.Series) -> pd.Series:
-        """
-        Convert z-scores to portfolio weights.
-        AQR approach: proportional to score, with constraints.
-        """
-        # Long top tercile, short bottom tercile
-        n = len(scores)
-        tercile = n // 3
-        
-        sorted_idx = scores.sort_values().index
-        
-        weights = pd.Series(0.0, index=scores.index)
-        weights[sorted_idx[:tercile]] = -1.0 / tercile  # Short bottom
-        weights[sorted_idx[-tercile:]] = 1.0 / tercile   # Long top
-        
-        return weights
-    
-    def calculate_turnover_cost(self,
-                                 current: pd.Series,
-                                 target: pd.Series,
-                                 date: date) -> float:
-        """
-        Estimate transaction costs from rebalancing.
-        """
-        trades = (target - current).abs()
-        costs = self.tcost.estimate(trades, date)
-        return costs.sum()
-    
-    def optimize_with_turnover(self,
-                                current: pd.Series,
-                                target: pd.Series,
-                                max_turnover_cost: float) -> pd.Series:
-        """
-        Trade toward target, but respect turnover budget.
-        """
-        trades = target - current
-        
-        # If unconstrained cost is acceptable, trade fully
-        full_cost = self.calculate_turnover_cost(current, target, date)
-        if full_cost <= max_turnover_cost:
-            return target
-        
-        # Otherwise, trade partially (proportionally)
-        trade_fraction = max_turnover_cost / full_cost
-        return current + trades * trade_fraction
-```
+1. Weight factors by **risk contribution**, not dollar. A 60/40 HML/UMD by dollar is ~50/50 by risk because momentum vol is higher.
+2. The canonical 60/40 HML/UMD benchmark exists **because HML already contains ~20% momentum** (the Devil). 60/40 HML/UMD is really ~50/50 of pure value and pure momentum. Do not generalize the 60/40 to other pairs.
+3. Target total portfolio vol with a floating leverage factor; do not lever individual positions. Vol-targeting is the only form of timing that survives Asness's own skepticism.
+4. For long-only: **integrate, don't mix.** One composite score per stock, one portfolio.
 
-### Factor Attribution and Reporting
+## Signals your skill is broken
 
-```python
-class FactorAttribution:
-    """
-    AQR-style transparent performance attribution.
-    Understand exactly where returns came from.
-    """
-    
-    def __init__(self, factor_returns: pd.DataFrame):
-        self.factor_returns = factor_returns
-    
-    def attribute_returns(self,
-                          portfolio_returns: pd.Series,
-                          factor_exposures: pd.DataFrame) -> AttributionResult:
-        """
-        Decompose portfolio returns into factor contributions.
-        
-        R_p = Σ(β_i * F_i) + α + ε
-        """
-        # Align data
-        common_dates = portfolio_returns.index.intersection(
-            self.factor_returns.index
-        )
-        
-        port_ret = portfolio_returns.loc[common_dates]
-        fact_ret = self.factor_returns.loc[common_dates]
-        exposures = factor_exposures.loc[common_dates]
-        
-        # Calculate factor contributions
-        contributions = {}
-        total_factor_return = 0
-        
-        for factor in fact_ret.columns:
-            factor_contribution = (exposures[factor] * fact_ret[factor]).sum()
-            contributions[factor] = {
-                'avg_exposure': exposures[factor].mean(),
-                'factor_return': fact_ret[factor].sum(),
-                'contribution': factor_contribution,
-                'contribution_pct': factor_contribution / port_ret.sum() * 100
-            }
-            total_factor_return += factor_contribution
-        
-        # Alpha is unexplained return
-        alpha = port_ret.sum() - total_factor_return
-        
-        return AttributionResult(
-            total_return=port_ret.sum(),
-            factor_contributions=contributions,
-            alpha=alpha,
-            r_squared=self.calculate_r_squared(port_ret, fact_ret, exposures)
-        )
-    
-    def factor_performance_report(self,
-                                   start_date: date,
-                                   end_date: date) -> pd.DataFrame:
-        """
-        Generate factor performance summary.
-        AQR publishes these regularly for transparency.
-        """
-        returns = self.factor_returns.loc[start_date:end_date]
-        
-        report = pd.DataFrame({
-            'Total Return': returns.sum(),
-            'Annualized Return': returns.mean() * 252,
-            'Volatility': returns.std() * np.sqrt(252),
-            'Sharpe Ratio': returns.mean() / returns.std() * np.sqrt(252),
-            'Max Drawdown': self.calculate_max_drawdown(returns),
-            'Hit Rate': (returns > 0).mean()
-        })
-        
-        return report
-```
+- Backtest Sharpe > 2.0 gross of costs on liquid stocks → you have a bug. The real ceiling for a tangency portfolio of factors across all markets and asset classes is ~1.5 (Ilmanen et al 2021).
+- Your "value" factor makes money during a momentum crash (e.g., Mar-May 2009), but the magnitude is <20% of momentum's loss → the sign is right but your "value" has contamination; check for Devil-in-HML issues.
+- Your momentum factor has <100%/year turnover on monthly rebalance → it is a long-term trend factor, not momentum; it will decorrelate from published UMD.
+- Your long-short book has large sector tilts → you forgot to industry-neutralize; you are running a sector bet with a factor label.
 
-### Backtesting with Realistic Frictions
+## Heavy references — load only when implementing
 
-```python
-class RealisticBacktest:
-    """
-    AQR emphasizes the gap between paper and real returns.
-    Model all frictions realistically.
-    """
-    
-    def __init__(self, 
-                 tcost_model: TransactionCostModel,
-                 borrow_cost_model: BorrowCostModel,
-                 market_impact_model: MarketImpactModel):
-        self.tcost = tcost_model
-        self.borrow = borrow_cost_model
-        self.impact = market_impact_model
-    
-    def run_backtest(self,
-                     strategy: Strategy,
-                     start_date: date,
-                     end_date: date,
-                     initial_capital: float = 1e8) -> BacktestResult:
-        """
-        Backtest with realistic transaction costs and frictions.
-        """
-        capital = initial_capital
-        positions = pd.Series(dtype=float)
-        
-        results = []
-        
-        for date in trading_days(start_date, end_date):
-            # Generate target portfolio
-            target = strategy.generate_positions(date, capital)
-            
-            # Calculate trading costs
-            trades = target - positions
-            
-            trading_cost = self.tcost.estimate(trades, date)
-            market_impact = self.impact.estimate(trades, date)
-            
-            # Borrow costs for short positions
-            short_positions = positions[positions < 0]
-            borrow_cost = self.borrow.estimate(short_positions, date)
-            
-            # Execute trades (adjust for costs)
-            capital -= trading_cost + market_impact
-            positions = target
-            
-            # Calculate return
-            price_returns = self.get_returns(positions.index, date)
-            gross_pnl = (positions * price_returns).sum()
-            
-            net_pnl = gross_pnl - trading_cost - market_impact - borrow_cost
-            capital += net_pnl
-            
-            results.append({
-                'date': date,
-                'gross_pnl': gross_pnl,
-                'trading_cost': trading_cost,
-                'market_impact': market_impact,
-                'borrow_cost': borrow_cost,
-                'net_pnl': net_pnl,
-                'capital': capital,
-                'turnover': trades.abs().sum() / capital
-            })
-        
-        return self.analyze_results(pd.DataFrame(results))
-    
-    def analyze_results(self, results: pd.DataFrame) -> BacktestResult:
-        """Compute performance metrics with cost breakdown."""
-        gross_returns = results['gross_pnl'] / results['capital'].shift(1)
-        net_returns = results['net_pnl'] / results['capital'].shift(1)
-        
-        return BacktestResult(
-            gross_sharpe=gross_returns.mean() / gross_returns.std() * np.sqrt(252),
-            net_sharpe=net_returns.mean() / net_returns.std() * np.sqrt(252),
-            implementation_drag=(gross_returns.sum() - net_returns.sum()) / len(results) * 252,
-            avg_turnover=results['turnover'].mean(),
-            total_trading_costs=results['trading_cost'].sum(),
-            total_impact_costs=results['market_impact'].sum(),
-            total_borrow_costs=results['borrow_cost'].sum()
-        )
-```
+- `references/construction-code.md` — Python reference for HML Devil (current-price B/P), 12-1 momentum with skip-month, QMJ composite, capped value weights, and the winsorize→z-score pipeline. **READ this before writing any factor construction code.** Do not re-derive from academic papers.
+- `references/backtest-frictions.md` — transaction cost, borrow cost, and market impact models calibrated to Frazzini-Israel-Moskowitz's $1T-of-live-trades paper. **READ this before running any long-short backtest.**
+- `references/attribution.md` — factor attribution and spread diagnostics. Load only when decomposing live P&L or diagnosing a drawdown.
 
-## Mental Model
-
-AQR approaches factor investing by asking:
-
-1. **Is there academic evidence?** Peer-reviewed research, not marketing
-2. **What's the economic story?** Risk premium, behavioral bias, or structural?
-3. **Does it survive transaction costs?** Paper returns ≠ real returns
-4. **Is it crowded?** Factor popularity erodes returns
-5. **Can we implement at scale?** Liquidity and capacity constraints
-
-## Signature AQR Moves
-
-- Composite factors over single metrics
-- Academic-quality research process
-- Transparent methodology
-- Realistic transaction cost modeling
-- Multi-asset class diversification
-- Factor timing skepticism
-- Long-short for pure factor exposure
-- Published factor returns for benchmarking
+Do **NOT** load these files for conceptual discussions, philosophy questions, or "should we use factors at all" conversations. They are strictly implementation artifacts.

@@ -1,258 +1,174 @@
 ---
 name: feynman-first-principles
-description: Think and build in the style of Richard Feynman, Nobel laureate physicist and legendary problem solver. Emphasizes first-principles reasoning, playful exploration, ruthless simplification, and the Feynman Technique for deep understanding. Use when debugging impossible problems, designing from scratch, or when conventional wisdom has failed.
-tags: first-principles, reasoning, simplification, mental-models, physics, teaching, curiosity, debugging, fundamentals
+description: Apply Richard Feynman's problem-solving craft — first-principles decomposition, self-falsification, and rebuild-to-understand — with the experienced practitioner's knowledge of when it fails. Use when a bug resists normal debugging, when specs contradict each other, when a design must survive ten years, when conventional wisdom feels suspicious, when learning an unfamiliar domain from scratch, when reviewing a "too clean" explanation, or when stakes make cargo-culting dangerous. Triggers: "debug from first principles", "why does this actually work", "rederive", "reason from scratch", "I don't understand this", "can you explain what's really happening", "Feynman technique", "first principles", "cargo cult", "rubber duck", "back of envelope", "sanity check".
 ---
 
-# Richard Feynman Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​‌‌‌​​​‌‍​​​​‌​​​‍​​​​​‌‌‌‍‌‌‌​​‌‌​‍‌‌‌​​‌‌‌‍‌​‌​‌​​‌‍​​​​‌​‌​‍​‌​​‌‌​‌⁠‍⁠
-
-## Overview
-
-Richard Feynman (1918–1988) was a Nobel Prize-winning physicist, safecracker, bongo player, and one of the greatest problem solvers who ever lived. He developed quantum electrodynamics, cracked the Challenger disaster investigation with a glass of ice water and an O-ring, and taught generations to think from first principles. His superpower was not raw intelligence—it was his *method*: disassemble everything to its atoms, rebuild understanding from the ground up, and never pretend to know what you don't.
-
-## Core Philosophy
-
-> "What I cannot create, I do not understand."
-
-> "The first principle is that you must not fool yourself—and you are the easiest person to fool."
-
-> "I learned very early the difference between knowing the name of something and knowing something."
-
-Feynman's approach: strip away every assumption, every borrowed explanation, every comfortable abstraction—until you reach bedrock truth you can verify yourself. Then build back up. If at any point you can't explain what's happening in simple words, you've found a gap in your understanding. That gap is where the bug lives.
-
-## Design Principles
-
-1. **First Principles, Not Analogy**: Don't reason by analogy to what others have done. Reason from fundamental truths. "What must be true?" not "What has been done before?"
-
-2. **The Feynman Technique**: To understand anything—explain it simply. If you can't, you don't understand it. Find the gap. Fill it. Repeat.
-
-3. **Playful Exploration**: The best discoveries come from curiosity, not obligation. Approach problems as puzzles to enjoy, not tasks to endure. Feynman's best work came when he was "playing."
-
-4. **Honest Ignorance**: Saying "I don't know" is the beginning of knowledge. Pretending to know is the end of it. Track precisely what you know, what you assume, and what you're guessing.
-
-5. **Multiple Representations**: Feynman understood quantum mechanics through equations, diagrams, physical intuition, and stories. Understand a system in multiple ways—code, diagrams, mental simulation, explanation to a beginner.
-
-## When Writing Code
-
-### Always
-
-- Start from what you *know* to be true, not what you *assume*
-- Explain your design in plain English before implementing
-- Build the simplest version first and verify it works
-- Question every abstraction: does this earn its complexity?
-- Test your understanding, not just your code
-- Make the invisible visible—add observability at every uncertain point
-- Approach debugging as a scientist: hypothesize, predict, test, conclude
-
-### Never
-
-- Copy a pattern you don't fully understand
-- Accept "it works" without understanding *why* it works
-- Use jargon to paper over gaps in understanding
-- Add complexity to solve a problem you haven't diagnosed
-- Assume a library, framework, or service does what the docs say without verification
-- Let embarrassment prevent you from admitting confusion
-
-### Prefer
-
-- Understanding over speed
-- Simple and correct over clever and fragile
-- Your own verified understanding over authoritative claims
-- Diagrams and examples over abstract descriptions
-- Direct measurement over theoretical prediction
-- Rebuilding from scratch over cargo-culting a solution
-
-## The Feynman Technique (Applied to Code)
-
-```
-Step 1: EXPLAIN
-  └── Write a comment or doc explaining what this code does
-      as if teaching a junior developer.
-
-Step 2: IDENTIFY GAPS
-  └── Where did you wave your hands? Where did you say
-      "and then it just works" or "the framework handles that"?
-      Those are the gaps.
-
-Step 3: FILL THE GAPS
-  └── Go read the source. Write a test. Trace the execution.
-      Don't stop until you can explain the gap simply.
-
-Step 4: SIMPLIFY
-  └── Now rewrite your explanation (and your code) in
-      simpler terms. If the explanation got simpler,
-      the code probably can too.
-```
-
-### Applied to Debugging
-
-```python
-# THE FEYNMAN DEBUGGING METHOD
-#
-# 1. State the bug precisely:
-#    "When input X is provided, expected output is Y,
-#     but actual output is Z."
-#
-# 2. Form a hypothesis:
-#    "I believe the bug is in function F because
-#     it transforms X and the output diverges here."
-#
-# 3. Make a prediction:
-#    "If my hypothesis is correct, then when I log the
-#     intermediate value at line N, I should see V."
-#
-# 4. Test the prediction:
-
-def debug_process(x):
-    intermediate = step_one(x)
-    print(f"After step_one: {intermediate}")  # Prediction: should be A
-    # If it's not A, the bug is in step_one.
-    # If it IS A, the bug is downstream. Move the probe.
-
-    result = step_two(intermediate)
-    print(f"After step_two: {result}")  # Prediction: should be B
-    return result
-
-# 5. Conclude:
-#    Either the hypothesis was confirmed (fix the identified component)
-#    or falsified (form a new hypothesis with new information).
-#
-# NEVER: "Let me just try changing this and see if it fixes it."
-# ALWAYS: "Let me understand what's happening first."
-```
-
-### Applied to System Design
-
-```python
-# FIRST PRINCIPLES DESIGN
-#
-# Question: "How should we build a rate limiter?"
-#
-# DON'T start with: "Redis has a rate limiter, let's use that."
-# DO start with: "What IS rate limiting, fundamentally?"
-#
-# First principles:
-# - We need to count events per time window per entity
-# - We need to reject when count exceeds threshold
-# - We need counts to expire
-#
-# Simplest possible implementation:
-
-from collections import defaultdict
-import time
-
-class RateLimiter:
-    """First-principles rate limiter. No dependencies.
-    Understand this before reaching for Redis."""
-
-    def __init__(self, max_requests: int, window_seconds: float):
-        self.max_requests = max_requests
-        self.window = window_seconds
-        self.requests = defaultdict(list)  # entity -> [timestamps]
-
-    def allow(self, entity: str) -> bool:
-        now = time.monotonic()
-        cutoff = now - self.window
-
-        # Remove expired timestamps
-        self.requests[entity] = [
-            t for t in self.requests[entity] if t > cutoff
-        ]
-
-        if len(self.requests[entity]) >= self.max_requests:
-            return False
-
-        self.requests[entity].append(now)
-        return True
-
-# NOW you understand rate limiting from the ground up.
-# NOW you can evaluate whether Redis, Nginx, or a token bucket
-# is the right choice—because you know what problem they solve.
-```
-
-## The Cargo Cult Test
-
-Feynman coined "cargo cult science"—rituals that look like science but miss the essence. Apply this test to your code:
-
-```
-For every practice you follow, ask:
-
-1. WHY do I do this?
-   └── "Because the framework docs say to" → CARGO CULT
-   └── "Because it solves problem X which I can demonstrate" → REAL
-
-2. WHAT would break if I stopped?
-   └── "I'm not sure" → CARGO CULT
-   └── "This specific failure mode" → REAL
-
-3. CAN I explain the mechanism?
-   └── "It just works" → CARGO CULT
-   └── "It works because [specific causal chain]" → REAL
-```
-
-### Examples
-
-```python
-# CARGO CULT: Adding indexes "because databases are slow"
-# FEYNMAN: Measure the query. Profile the plan. Add the specific
-#          index that addresses the specific bottleneck.
-
-# CARGO CULT: Using microservices "because Netflix does"
-# FEYNMAN: What problem does decomposition solve for YOUR system?
-#          At YOUR scale? With YOUR team?
-
-# CARGO CULT: Writing unit tests for 100% coverage
-# FEYNMAN: Which tests verify the most important invariants?
-#          Coverage of what matters > coverage of everything.
-```
-
-## The Notebook Method
-
-Feynman kept a notebook of "Problems I'm Thinking About." When he encountered a new technique or idea, he'd test it against every problem on the list. This is why he seemed to solve problems so fast—he'd been thinking about them for years.
-
-```
-Developer's version:
-
-PROBLEMS I'M THINKING ABOUT:
-├── How to make our deploy pipeline idempotent
-├── Why does latency spike every Tuesday at 3pm
-├── A cleaner abstraction for our event system
-├── How to test distributed consensus without flaky tests
-└── What the right caching strategy is for our read path
-
-For each new technique/tool/paper you encounter:
-  → Test it against every problem on your list
-  → Most won't apply
-  → Occasionally one clicks and you solve a long-standing problem
-     in an afternoon
-```
-
-## Feynman's Rules for Not Fooling Yourself
-
-1. **Report all results, not just the ones that support your theory.** If your "fix" works for 9 inputs but fails for 1, you don't have a fix.
-
-2. **Bend over backward to prove yourself wrong.** Write tests that try to break your code, not tests that confirm it works.
-
-3. **Give all the information needed to judge the result.** In code reviews, show the edge cases, the performance characteristics, the failure modes—not just the happy path.
-
-4. **If you don't know, say you don't know.** In architecture discussions, mark assumptions clearly. "I believe X but haven't verified it" is infinitely more useful than unstated assumptions.
-
-## Mental Model
-
-Feynman approaches every problem by asking:
-
-1. **What do I actually know vs. what am I assuming?** Separate rigorously.
-2. **What's the simplest version of this problem?** Solve that first.
-3. **Can I explain this to a bright beginner?** If not, I don't understand it.
-4. **What would I see if my hypothesis were wrong?** Design tests that can falsify.
-5. **Am I fooling myself?** The default answer is yes.
-
-## Signature Feynman Moves
-
-- Rebuilding understanding from scratch rather than relying on authority
-- Explaining complex systems in simple, vivid language
-- Playful exploration that looks like goofing off but is actually deep work
-- Turning "I don't know" into "Let me find out" with precise experiments
-- Spotting cargo cult reasoning in yourself and others
-- Keeping a running list of unsolved problems
-- Making the invisible visible through diagrams, simulations, and direct observation
+# Feynman First-Principles — Expert Practice
+
+## The core shift
+
+Feynman's method is not "break problems down and explain them simply." Claude
+already does that. The real shift is **treating your own understanding as the
+primary suspect** — and having the specific habits to interrogate it.
+
+**Before applying this skill to any decision with non-trivial consequence,
+READ `references/failure-modes.md`.** It teaches the four distinct ways
+first-principles reasoning arrives at confidently wrong answers, including
+the dangerous "wrong SET of true axioms" failure that is invisible from
+inside the argument.
+
+## Decision: when to use it
+
+| Situation | Approach |
+|-----------|----------|
+| Well-trodden domain (auth, HTTP, SQL, ORMs) | **Pattern-match.** Re-deriving wastes days and recreates solved bugs. |
+| Legacy code that "just works" but nobody knows why | **Pattern-match first** (Chesterton's Fence). Learn *why* before touching it. |
+| Genuine novelty — no established practice exists | **First-principles.** There's nothing to match. |
+| Stakes are low and reversible | **Pattern-match.** Ship and observe. |
+| Stakes are 10× normal, decision is one-way | **First-principles.** The extra days are cheap. |
+| Smart people disagree after real debate | **First-principles.** The axioms will expose the real split. |
+| Performance regression in hot code | **First-principles.** "Best practices" lie at scale; measure. |
+| Problem dominated by info you don't have | **Neither yet** — gather the info first. See Mode 3 in `failure-modes.md`. |
+
+Default to pattern-matching. First-principles is expensive and has its own
+failure modes. Reserve it for decisions where being wrong costs 10× more than
+investigating, *and* where you have enough ground-truth access to check your
+chain against reality.
+
+## Expert techniques
+
+### 1. The Notebook of What I Don't Know
+Feynman's prep for his Princeton orals (per Gleick): a fresh notebook titled
+*Notebook Of Things I Don't Know About*, then weeks disassembling each branch,
+"oiling the parts and putting them back together, looking for the raw edges
+and inconsistencies." Apply to any unfamiliar codebase or domain you'll own
+for more than a week. **The target is not notes — it is finding contradictions
+between your mental model and the thing.** Ask yourself: *where does my
+explanation get smooth?* Smoothness is suspicious; real understanding has rough
+edges you can point to. See `references/case-studies.md` §1 for the full
+protocol.
+
+### 2. The "three consecutive times" rule
+Manhattan Project colleagues said you could trust a Feynman claim only when
+he'd said it was true on three separate occasions — he'd usually change his
+mind twice first. **Your first correct-seeming solution is rarely correct.**
+After finding any fix, explanation, or design decision you'll commit to,
+rederive it from two additional independent starting points. Contradictions
+between derivations expose the hidden assumption. Convergence is the signal.
+
+### 3. Deliberately awkward first, elegant second
+As an undergrad Feynman would first solve problems with an intentionally clumsy
+method, *then* find the shortcut. The awkward path surfaces what the problem
+actually requires; the elegant path is only legible *after* you see the
+structure. Resist jumping to the clever solution before you've slogged through
+the ugly one — you will usually miss a constraint that the clean version
+silently drops.
+
+### 4. The 12 favorite problems (Rota, 1997)
+> "You have to keep a dozen of your favorite problems constantly present in
+> your mind, although by and large they will lay in a dormant state. Every
+> time you hear or read a new trick or a new result, test it against each of
+> your twelve problems to see whether it helps."
+
+The number matters: more than ~12 and you can't hold them live; fewer and you
+miss cross-domain collisions. This is why Feynman solved hard problems
+"instantly" — he'd been thinking about them for years, and the new paper was
+the missing key. Maintain 10–12 open problems you genuinely care about; when
+you learn anything new, silently walk the list.
+
+### 5. Hand-simulate before trusting the tool
+At Thinking Machines, Feynman invented a parallel BASIC *on paper* and
+hand-simulated QCD calculations to prove the Connection Machine could do
+number-crunching *before* the hardware existed — and was later proved right
+against the unanimous opinion of the hardware team. Before trusting any
+framework, library, compiler optimization, or LLM output on something
+non-trivial, compute the expected answer at N=3 by hand. **Disagreement
+between your hand-simulation and the tool is always valuable** — either the
+tool is wrong or your model is wrong, and you need to know which.
+
+### 6. The falsification probe
+"Bend over backward to prove yourself wrong." When you believe a fix works,
+actively *design the input that would break it*. If you can't design one, you
+don't yet understand the mechanism — you understand the symptom.
+
+## NEVER list (non-obvious failure modes)
+
+**NEVER tear down a fence you don't understand (Chesterton's Fence).** First-
+principles thinking will tell you a mysterious check, legacy config, or ugly
+branch is unnecessary. It is seductive because removing it simplifies the code
+and passes tests. The concrete consequence: you recreate a bug the team fixed
+three years ago under a production incident no one remembers. Instead: reconstruct
+the historical reason for the fence (git blame, old PRs, incident postmortems)
+*before* deciding to remove it.
+
+**NEVER trust physical intuition when the object has no physical referent.**
+Feynman refused abstract group theory on principle; Gell-Mann used SU(3) to
+discover quarks first. Rejecting formalism is seductive because it feels
+like understanding. The concrete consequence: you miss solutions that only
+exist in the formal representation (category theory for types, linear algebra
+for ML, measure theory for probability). Instead: match representation to
+phenomenon — physical pictures where they exist, formal symbols where they
+don't.
+
+**NEVER substitute "I explained it simply" for "I understand it."** A smooth
+simplification can hide the wrong model. It is seductive because explaining
+feels like knowing. The concrete consequence: your team adopts a metaphor that
+works in 9 cases and silently fails in the 10th. Instead: after simplifying,
+predict a *novel* consequence — something you didn't know at the start — and
+test it. If your simple model can't predict a new fact, it's a summary, not
+understanding.
+
+**NEVER reason from first principles on a problem dominated by information you
+don't have.** It is seductive because the logic *looks* airtight. The concrete
+consequence: Cedric Chin's Vietnam POS business spent months reasoning about
+"why the margins are so high" with a perfectly coherent story — while missing
+that government grants distorted the entire market. All their axioms were true
+and their conclusion was wrong. Instead: before trusting a chain of reasoning,
+audit for hidden information by asking *what fact, if I learned it tomorrow,
+would invalidate this argument?*
+
+**NEVER change two things at once when debugging.** Feynman's Challenger
+demonstration worked because he isolated a single variable (cold temperature +
+O-ring). Changing multiple variables is seductive because it's faster. The
+concrete consequence: the bug "goes away" and you never know which change
+fixed it, so it comes back in a new form next month. Instead: one variable at
+a time, even when it feels slow.
+
+**NEVER accept a working fix without re-deriving it.** Your first passing test
+after a bug hunt is relief, not understanding. It is seductive because you want
+to close the ticket. The concrete consequence: the "fix" was coincidence — you
+patched a symptom and the root cause will surface somewhere else within weeks.
+Instead: apply the three-consecutive-times rule — explain why it works, from
+scratch, twice more, from different starting points. If any derivation
+contradicts the others, you haven't found the bug yet.
+
+## Fallback when first-principles gets stuck
+
+If after an hour of rederivation you have not converged:
+
+1. **Switch representation.** If you were using equations, draw it. If you were
+   drawing, write pseudocode. If pseudocode, make a concrete numeric example.
+   Feynman used three representations for every hard idea; getting stuck in one
+   usually means the answer lives in another.
+2. **Shrink the problem.** Solve a toy version with 2 elements instead of N.
+   Solve it for a case where the answer is obvious. Work backward from there.
+3. **Engage diffuse mode deliberately.** Feynman's "not my department" pattern:
+   refuse the problem, do something unrelated for hours or days, return. The
+   subconscious solves what rigid attention can't.
+4. **Assume you're fooling yourself and look for where.** The exit ramp from a
+   dead-end derivation is almost always "one of my axioms is wrong or I'm at
+   the wrong abstraction level." Not "I need to think harder."
+
+## References
+
+Load on demand:
+
+- `references/failure-modes.md` — **READ BEFORE** applying first-principles to
+  a high-stakes or unfamiliar-domain decision. Details the four ways
+  first-principles fails and how to detect each.
+- `references/case-studies.md` — Load when you want concrete historical
+  material: the Notebook protocol, the Connection Machine hand-simulation,
+  Rota's 12-problems quote in full, the Challenger isolation method.
+
+Do NOT load references for quick sanity-checks of code you already understand —
+they are calibration material, not step-by-step instructions.

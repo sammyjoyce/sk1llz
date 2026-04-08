@@ -1,338 +1,112 @@
 ---
 name: helland-distributed-data
-description: Design scalable data systems in the style of Pat Helland, distributed systems veteran from Tandem, Microsoft, and Amazon. Emphasizes life beyond distributed transactions, idempotency, and practical patterns for data at scale. Use when building systems that must scale beyond single-node ACID transactions.
-tags: distributed, transactions, idempotency, scalability, partitioning, replication, eventual-consistency, microservices
+description: >-
+  Design scalable data systems applying Pat Helland's patterns from "Life Beyond
+  Distributed Transactions," "Data on the Outside vs Inside," "Building on
+  Quicksand," and "Immutability Changes Everything." Use when building systems
+  that must scale beyond single-node ACID, designing entity boundaries for
+  partitioning, implementing idempotency and deduplication, choosing between
+  sagas and eventual completion, or deciding what data crosses service
+  boundaries. Triggers: distributed transactions, entity partitioning, cross-
+  service consistency, idempotent operations, outbox pattern, saga compensation,
+  inside vs outside data, at-least-once messaging, scale-agnostic design.
 ---
 
-# Pat Helland Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌​‌‌‌​‍​​‌​​‌‌‌‍​​‌​​​​​‍‌‌‌​​‌​‌‍​​​​‌​‌​‍​​​​​‌​​⁠‍⁠
+# Pat Helland — Distributed Data Design
 
-## Overview
+## Thinking Framework
 
-Pat Helland has worked on distributed systems for 40+ years at Tandem (fault-tolerant transaction systems), Microsoft (SQL Server, Cosmos DB), and Amazon. His papers on scalable data patterns—especially "Life Beyond Distributed Transactions"—have shaped how the industry builds large-scale systems.
+Before designing any cross-entity interaction, ask yourself:
 
-## Core Philosophy
+1. **"What is the entity?"** — The entity is whatever fits in one transactional scope. If two things must update atomically, they are ONE entity, not two. Stop fighting this.
+2. **"What if this message arrives twice? Three times? After a week?"** — If you can't answer, you haven't finished designing.
+3. **"Is this data inside or outside?"** — Inside data is mutable, rich, query-able. Outside data is immutable, versioned, simple. Mixing them up is the #1 source of distributed bugs.
+4. **"Am I managing uncertainty in the business logic or hiding it?"** — If hiding it, you're building a fragile system. Uncertainty (tentative holds, pending reservations, allocation against credit) must be explicit in your domain model.
 
-> "In a world with unbounded scale, you cannot have distributed transactions."
+## Decision Tree: How to Handle Cross-Entity Operations
 
-> "Idempotency is the key to building reliable systems."
-
-> "Data on the inside is not the same as data on the outside."
-
-Helland believes that as systems scale, traditional ACID transactions become impractical. Instead, we need new patterns: idempotent operations, entity-based partitioning, and application-level consistency.
-
-## Design Principles
-
-1. **Entities, Not Tables**: Think in terms of independently scalable entities, not relational tables.
-
-2. **Idempotency Everywhere**: Operations must be safely retryable.
-
-3. **Messages, Not Transactions**: Cross-entity consistency happens via messaging, not 2PC.
-
-4. **Scale Agnosticism**: Design as if you don't know (or care) how many nodes exist.
-
-5. **Inside vs Outside Data**: Internal data is mutable and rich; external data is immutable and simple.
-
-## When Designing Distributed Data Systems
-
-### Always
-
-- Design entities that can be independently scaled and partitioned
-- Make all operations idempotent (same request twice = same result)
-- Use unique request IDs to detect and deduplicate retries
-- Accept that cross-entity operations are eventually consistent
-- Version your external data contracts
-- Plan for messages to be delivered at-least-once
-
-### Never
-
-- Depend on distributed transactions for correctness at scale
-- Assume exactly-once message delivery
-- Share mutable state across service boundaries
-- Design entities that require coordination with other entities for basic operations
-- Ignore the CAP theorem implications of your design
-
-### Prefer
-
-- Idempotent operations over exactly-once semantics
-- Event sourcing over mutable state
-- Saga pattern over 2PC
-- Entity-based partitioning over arbitrary sharding
-- Immutable messages over mutable shared state
-
-## Code Patterns
-
-### Idempotent Operations
-
-```python
-class IdempotentPaymentService:
-    """
-    Helland's key insight: if operations are idempotent,
-    retries are safe, and you don't need exactly-once delivery.
-    """
-    
-    def __init__(self, db):
-        self.db = db
-    
-    def process_payment(self, request_id: str, account_id: str, amount: Decimal):
-        # Check if we've already processed this request
-        existing = self.db.get_processed_request(request_id)
-        if existing:
-            return existing.result  # Return same result as before
-        
-        # Process the payment
-        with self.db.transaction():
-            account = self.db.get_account(account_id)
-            account.balance -= amount
-            
-            result = PaymentResult(
-                request_id=request_id,
-                status='completed',
-                new_balance=account.balance
-            )
-            
-            # Record that we processed this request (atomically with the change)
-            self.db.save_processed_request(request_id, result)
-            self.db.save_account(account)
-        
-        return result
+```
+Do both things NEED atomic consistency?
+├─ YES → They are one entity. Merge them. Stop here.
+└─ NO → Can the operation be naturally idempotent (read-only, or set-to-value)?
+    ├─ YES → No dedup infrastructure needed. Use it.
+    └─ NO → Is this a business-level decision that can be reversed?
+        ├─ YES → Saga with compensating actions (business errors only)
+        └─ NO → Eventual completion with retry + idempotency keys
+            └─ NEVER use saga compensation for technical failures.
+                Technical errors need retry-to-completion, not rollback.
 ```
 
-### Entity-Based Design
+## Expert Knowledge: What Takes Years to Learn
 
-```python
-class Order:
-    """
-    Helland's entity pattern: each entity is an island of consistency.
-    Cross-entity operations happen via messaging, not transactions.
-    """
-    
-    def __init__(self, order_id: str):
-        self.order_id = order_id
-        self.items = []
-        self.status = 'pending'
-        self.version = 0
-        
-        # Outbox: messages to send (part of entity's transaction)
-        self.outbox = []
-    
-    def add_item(self, product_id: str, quantity: int, request_id: str):
-        """All mutations include request_id for idempotency."""
-        if self.has_processed(request_id):
-            return  # Already did this
-        
-        self.items.append(OrderItem(product_id, quantity))
-        self.record_processed(request_id)
-        self.version += 1
-    
-    def submit(self, request_id: str):
-        if self.has_processed(request_id):
-            return
-        
-        self.status = 'submitted'
-        self.record_processed(request_id)
-        self.version += 1
-        
-        # Queue message for inventory service (not a distributed txn!)
-        self.outbox.append(Message(
-            type='OrderSubmitted',
-            order_id=self.order_id,
-            items=self.items
-        ))
-```
+### Entity Sizing — The Hard Part Nobody Talks About
 
-### Inside Data vs Outside Data
+- Entities grow in **number**, not in **size**. Helland's key observation: almost-infinite scaling increases entity count while individual entities stay small enough for one machine.
+- **Alternate indices cannot be transactionally consistent** at scale. If you reference a customer by SSN, credit card number, AND email, those indices will live on different machines. Accept eventual consistency for lookups or unify under one canonical key.
+- Two objects that need transactional coupling must share a key prefix. If you're assigning them different keys but wrapping them in one transaction "just in case" — you've created a scaling time bomb that works today and explodes at 10x load.
 
-```python
-# INSIDE DATA: Rich, mutable, internal representation
-class InternalOrder:
-    order_id: str
-    customer: Customer              # Full customer object
-    items: List[OrderItem]          # Mutable list
-    shipping_address: Address       # Complex nested object
-    internal_notes: str             # Internal-only field
-    audit_log: List[AuditEntry]     # Full history
-    version: int                    # Optimistic concurrency
-    
-    def to_external(self) -> 'ExternalOrder':
-        """Convert to outside representation for APIs/messages."""
-        return ExternalOrder(
-            order_id=self.order_id,
-            customer_id=self.customer.id,  # Just the ID, not full object
-            item_ids=[i.id for i in self.items],  # Just IDs
-            submitted_at=self.audit_log[0].timestamp  # Simplified
-        )
+### Activities — The Concept Most Teams Miss
 
+Helland's **activities** are per-partner state within an entity. Each entity tracks what it knows about each partner entity (messages received, messages sent, current protocol state). This is NOT just a dedup table — it's a fine-grained workflow state machine per relationship.
 
-# OUTSIDE DATA: Simple, immutable, versioned contract
-@dataclass(frozen=True)  # Immutable!
-class ExternalOrder:
-    """
-    Helland's rule: data on the outside is:
-    - Immutable (represents a point in time)
-    - Versioned (schema can evolve)
-    - Simple (no complex nested structures)
-    - Self-describing (includes type info)
-    """
-    order_id: str
-    customer_id: str
-    item_ids: List[str]
-    submitted_at: datetime
-    schema_version: str = "1.0"
-```
+- Structure idempotency state per-partner, not as a global flat table. At scale, a single `processed_requests` table becomes a bottleneck. Partition dedup state by the *partner entity key*.
+- Activities encode the protocol: "I sent an offer, they accepted, I confirmed." This makes debugging distributed interactions possible because each entity holds its complete view of each relationship.
 
-### Saga Pattern (Instead of Distributed Transactions)
+### Idempotency — Where Teams Actually Fail
 
-```python
-class OrderSaga:
-    """
-    Helland's alternative to 2PC: sagas with compensating actions.
-    Each step is a local transaction + message to next step.
-    Failures trigger compensating transactions.
-    """
-    
-    def __init__(self, order_id: str):
-        self.order_id = order_id
-        self.state = 'started'
-        self.completed_steps = []
-    
-    async def execute(self):
-        try:
-            # Step 1: Reserve inventory (local txn in Inventory service)
-            await self.reserve_inventory()
-            self.completed_steps.append('inventory_reserved')
-            
-            # Step 2: Charge payment (local txn in Payment service)
-            await self.charge_payment()
-            self.completed_steps.append('payment_charged')
-            
-            # Step 3: Ship order (local txn in Shipping service)
-            await self.ship_order()
-            self.completed_steps.append('order_shipped')
-            
-            self.state = 'completed'
-            
-        except Exception as e:
-            # Compensate in reverse order
-            await self.compensate()
-            self.state = 'compensated'
-            raise
-    
-    async def compensate(self):
-        """Undo completed steps in reverse order."""
-        for step in reversed(self.completed_steps):
-            if step == 'order_shipped':
-                await self.cancel_shipment()
-            elif step == 'payment_charged':
-                await self.refund_payment()
-            elif step == 'inventory_reserved':
-                await self.release_inventory()
-```
+- **The dedup-check-then-process race condition**: Two identical messages arrive simultaneously. Both check the dedup table, both find nothing, both process. Fix: the dedup record and the business effect MUST be in the same atomic transaction. Not "check then do" — "do with unique constraint".
+- **Idempotency keys in Redis with TTL will lose guarantees**. The second Redis evicts the key or a node fails, you lose dedup state. For anything financial, idempotency belongs in the source-of-truth database with a unique constraint, not in a cache.
+- **Return the stored result, not just "already processed"**. The original caller may not have received the first response. Returning the same result on retry is what makes the operation truly idempotent from the caller's perspective.
+- **Natural idempotency is underused**. Helland distinguishes "naturally idempotent" (reads, set-to-value) from "substantively changing" messages. Before building dedup infrastructure, ask if you can restructure the operation to be naturally idempotent (e.g., "set balance to X" instead of "decrement by Y").
 
-### Outbox Pattern for Reliable Messaging
+### Sagas — The Critical Distinction Teams Get Wrong
 
-```python
-class OutboxPublisher:
-    """
-    Helland's insight: you can't atomically update DB and send a message.
-    Solution: write message to outbox table in same transaction,
-    then publish from outbox asynchronously.
-    """
-    
-    def __init__(self, db, message_broker):
-        self.db = db
-        self.broker = message_broker
-    
-    def update_with_message(self, entity, message):
-        """Atomically update entity and queue message."""
-        with self.db.transaction():
-            self.db.save(entity)
-            self.db.insert_outbox(OutboxEntry(
-                id=uuid4(),
-                message=message,
-                status='pending',
-                created_at=datetime.utcnow()
-            ))
-    
-    async def publish_outbox(self):
-        """Background process: publish pending messages."""
-        while True:
-            pending = self.db.get_pending_outbox_entries(limit=100)
-            
-            for entry in pending:
-                try:
-                    await self.broker.publish(entry.message)
-                    self.db.mark_outbox_published(entry.id)
-                except Exception:
-                    # Will retry on next iteration
-                    pass
-            
-            await asyncio.sleep(1)
-```
+Sagas handle **business errors** (credit limit exceeded, inventory unavailable). They CANNOT handle **technical errors** (database timeout, network partition, service crash).
 
-### Request-Response with Correlation
+- When a compensating action fails due to a technical error, you cannot "compensate the compensation." This is an infinite regress. Technical errors in distributed systems are non-deterministic — a one-shot deterministic approach like saga compensation will eventually leave you with corrupted data.
+- The correct architecture: build a **reliable technical layer** that retries operations to eventual completion, then run sagas on TOP of that layer for business-level rollback.
+- **If you need sagas everywhere, your service boundaries are wrong.** Pervasive saga usage is a design smell. Services organized around entities (Order Service, Customer Service, Inventory Service) inherently require cross-service transactions. Reorganize around use cases instead.
+- Non-compensatable operations exist: sent emails, printed documents, fired missiles. Design your saga step ordering so non-compensatable steps execute LAST, after all fallible steps.
 
-```python
-class AsyncRequestResponse:
-    """
-    Helland's pattern for async request-response:
-    include correlation ID, expect response via messaging.
-    """
-    
-    def __init__(self, outbox, response_handler):
-        self.outbox = outbox
-        self.pending_requests = {}
-        self.response_handler = response_handler
-    
-    async def send_request(self, target_service: str, payload: dict) -> str:
-        correlation_id = str(uuid4())
-        
-        request = Message(
-            correlation_id=correlation_id,
-            reply_to='my-service-responses',
-            target=target_service,
-            payload=payload
-        )
-        
-        self.pending_requests[correlation_id] = {
-            'sent_at': datetime.utcnow(),
-            'request': request
-        }
-        
-        await self.outbox.publish(request)
-        return correlation_id
-    
-    async def handle_response(self, message: Message):
-        correlation_id = message.correlation_id
-        
-        if correlation_id in self.pending_requests:
-            original = self.pending_requests.pop(correlation_id)
-            await self.response_handler(original['request'], message)
-```
+### Inside vs Outside Data — Practical Consequences
 
-## Mental Model
+- **Outside data lives in the past**. The moment data leaves a service boundary, it's a snapshot from a prior point in time. Design for staleness: include version identifiers, timestamps, and explicit "as-of" semantics.
+- **"Anything called 'current' is not stable"** (Helland's rule). `current_inventory`, `current_price` — these are not safe to pass across boundaries. Pass `inventory_as_of_2024_03_15T10:00:00Z` instead.
+- **Don't recycle identifiers**. `customer_id = 42` must mean the same customer forever. Reusing IDs after deletion creates semantic corruption across every system that cached that reference.
+- Outside data forms a DAG (Directed Acyclic Graph) of immutable items generated independently by different services. New data references old data but never mutates it. Schema must travel with the data (self-describing messages).
 
-Helland approaches distributed data design by asking:
+### Immutability — The Operational Insight
 
-1. **What are the entities?** What are the natural units of consistency?
-2. **How do entities interact?** Via messages, not shared transactions
-3. **What if this message is delivered twice?** Design for idempotency
-4. **What if this operation fails halfway?** Design compensating actions
-5. **What data crosses boundaries?** Keep it simple and immutable
+Helland: "The truth is the log. The database is a cache of a subset of the log."
 
-## Signature Helland Moves
+- **Immutable data eliminates eventual-consistency anomalies in distributed storage.** When storing immutable blocks in a consistent-hashing ring, you cannot get stale versions — each block has the only version it will ever have. This is why append-only designs tolerate weaker storage guarantees.
+- **You can know WHERE you are writing or WHEN the write will complete, but not both.** By preallocating immutable file IDs from a strongly consistent catalog, writes to weakly consistent storage become predictable.
+- **Immutability enables idempotent retry of computation**, not just storage. MapReduce, Dryad, and modern batch jobs work because functional computation over immutable inputs is inherently idempotent. Apply this to your own data pipelines.
+- Dark side: denormalization consumes storage, copy-on-write layers compound, and you must still solve garbage collection ("DOES NOT EXIST" queries require knowing all references are gone — a coordination problem immutability doesn't solve).
 
-- Idempotent operations with request IDs
-- Entity-based partitioning
-- Outbox pattern for reliable messaging
-- Saga pattern instead of 2PC
-- Inside data vs outside data distinction
-- At-least-once delivery with deduplication
-- Immutable external data contracts
+## NEVER
 
-## Key Papers
+- **NEVER use saga compensation to recover from technical errors** — it will eventually corrupt your data. Technical errors need retry-to-completion on a reliable lower layer. Sagas are for business rule violations only.
+- **NEVER store idempotency keys only in a cache (Redis/Memcached)** — TTL expiry or node failure silently destroys your exactly-once guarantees. Use a durable store with a unique constraint.
+- **NEVER design two entities that must coordinate for basic operations** — if they must be atomic, they are one entity. If you're adding distributed locking between entities, you're rebuilding 2PC without admitting it.
+- **NEVER pass mutable or "current" references across service boundaries** — outside data must be immutable and timestamped. "Current price" is meaningless to a receiver who processes it 200ms later.
+- **NEVER assume exactly-once message delivery exists** — at-least-once with idempotent processing is the only practical guarantee. Building on exactly-once is building on quicksand.
+- **NEVER implement check-then-act idempotency outside a transaction** — the race window between "check if processed" and "mark as processed" is exactly where duplicate processing hides.
 
-- "Life Beyond Distributed Transactions: An Apostate's Opinion" (2007, 2016)
-- "Data on the Outside vs Data on the Inside" (2005)
-- "Building on Quicksand" (2009)
-- "Immutability Changes Everything" (2015)
-- "Standing on Distributed Shoulders of Giants" (2016)
+## Fallbacks When Things Go Wrong
+
+| Situation | Primary approach | Fallback |
+|---|---|---|
+| Saga compensation fails | Retry compensation with backoff | Escalate to dead-letter + human review queue |
+| Outbox publisher falls behind | Increase polling frequency / batch size | Switch to CDC (Change Data Capture) from the outbox table |
+| Entity too large for one node | Identify sub-entities with independent lifecycle | Split into parent + child entities connected by messages |
+| Idempotency table growing unbounded | TTL-based cleanup of old entries | Archive to cold storage; keep last N days in hot path |
+| Stale reference data causing bad decisions | Increase refresh frequency | Add version-check callback before committing ("is offer still valid?") |
+
+## Key Helland Papers (Read These)
+
+- **"Life Beyond Distributed Transactions"** (2007/2016) — entities, activities, idempotency
+- **"Data on the Outside vs Data on the Inside"** (2005) — inside/outside, temporal domains, stable data
+- **"Building on Quicksand"** (2009) — memories, guesses, apologies; accept uncertainty
+- **"Immutability Changes Everything"** (2015) — append-only at every layer
+- **"Decoupled Transactions"** (2022) — quorum-based snapshot isolation on jittery servers

@@ -1,676 +1,119 @@
 ---
 name: bolton-rapid-software-testing
-description: Test software in the style of Michael Bolton, Rapid Software Testing co-creator with James Bach. Emphasizes the distinction between testing and checking, critical thinking, oracles, and the social nature of quality. Use when designing test strategies, evaluating test automation, or developing critical thinking in testers.
-tags: rapid-testing, context-driven, heuristics, oracles, risk-based, exploratory, skills, critical-thinking
+description: Apply Michael Bolton and James Bach's Rapid Software Testing (RST) methodology — the testing/checking distinction, FEW HICCUPPS oracles, SFDIPOT product modeling, session-based test management, and three-part test reports. Use when designing a test strategy, writing or reviewing test charters, evaluating test automation proposals, framing bug reports, defending exploratory testing to managers or auditors, replacing scripted test cases, deciding what to automate, or when someone says "all our tests pass" and you need to know whether that means anything.
 ---
 
-# Michael Bolton Rapid Software Testing Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌‌​​‌‌‌‍​​‌‌​​​​‍‌​‌​​‌​‌‍‌‌‌‌​‌​​‍​​​​‌​‌‌‍​​​‌‌​‌​⁠‍⁠
+# Bolton & Bach Rapid Software Testing
 
-## Overview
+## The one idea that reframes everything
 
-Michael Bolton is the co-creator of Rapid Software Testing (with James Bach) and one of the most influential voices in the testing community. He is known for making crucial distinctions—most famously between "testing" (a human cognitive activity) and "checking" (a machine-executable verification). His work emphasizes that quality is a relationship between people, and that testing is fundamentally about critical thinking and learning.
+In RST, **testing ≠ checking**. A *check* is an observation linked to a decision rule, both applicable non-sapiently. *Testing* is the human cognitive activity of evaluating a product by learning about it through experiencing, exploring, and experimenting. Machines and instructed humans can do checks. Only humans can test.
 
-## Core Philosophy
+This is not pedantry. The RST Namespace exists because the word "test" was historically drained of meaning in programming (Turing called it "checking a large routine"; the distinction was clear in 1972's *Program Test Methods* and dissipated after). When someone says "the tests pass," ask: *which tests, and what does pass mean here?* In RST, a passing check means "we (or the automation) didn't notice anything that might be a problem" — not "the product is good."
 
-> "Testing is the process of evaluating a product by learning about it through experiencing, exploring, and experimenting."
-
-> "Checking is the process of making evaluations by applying algorithmic decision rules to specific observations of a product."
-
-> "Quality is value to some person(s) who matter(s)."
-
-Bolton argues that much of what we call "automated testing" is actually "automated checking"—valuable, but not the same as the skilled cognitive work of testing. Real testing requires a human mind to recognize problems that we couldn't specify in advance.
-
-## Design Principles
-
-1. **Testing ≠ Checking**: Distinguish human investigation from algorithmic verification.
-
-2. **Quality Is Relational**: Quality means value to someone who matters—understand who.
-
-3. **Oracles Are Heuristic**: We recognize problems through fallible principles, not perfect rules.
-
-4. **Testing Is Social**: Communicate findings in terms stakeholders understand and care about.
-
-5. **Critical Thinking First**: Question everything, including your own assumptions.
-
-## Testing vs. Checking
+## Mental model (load this into working memory)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     TESTING                                  │
-│                                                              │
-│  Human cognitive activity:                                   │
-│  • Learning about the product                                │
-│  • Exploring unknown territories                             │
-│  • Recognizing problems we couldn't predict                  │
-│  • Applying judgment and sapience                            │
-│  • Adapting to what we discover                              │
-│  • Modeling and questioning                                  │
-│                                                              │
-│  Cannot be automated (requires human mind)                   │
-├─────────────────────────────────────────────────────────────┤
-│                     CHECKING                                 │
-│                                                              │
-│  Algorithmic verification:                                   │
-│  • Confirming expected behaviors                             │
-│  • Applying decision rules                                   │
-│  • Binary pass/fail outcomes                                 │
-│  • Repeatable observations                                   │
-│  • Regression detection                                      │
-│  • Fast feedback on known behaviors                          │
-│                                                              │
-│  CAN be automated (but requires human design and oversight)  │
-└─────────────────────────────────────────────────────────────┘
-
-CRITICAL: "Automated testing" is mostly automated checking.
-          A human DESIGNS the checks.
-          A human INTERPRETS the results.
-          A human DECIDES what problems matter.
+TESTING                              CHECKING
+─────────────────────────────────    ────────────────────────────────
+Investigation, learning, judgment    Confirmation of expected output
+Generative (produces test ideas)     Confirmatory (verifies a claim)
+Cannot be automated                  Can be automated
+Finds bugs we couldn't predict       Detects regression of known behavior
+A performance, like dance            An artifact, like sheet music
+Output: a story about the product    Output: a green/red signal
 ```
 
-## When Testing
+Checking is *part of* testing, not opposed to it. The error is conflation: pretending the green CI bar tells you the product is good. It tells you only that a finite set of decision rules did not fire.
 
-### Always
+## Before you do anything, ask yourself
 
-- Distinguish what you're testing from what you're checking
-- Identify who cares about quality and what they value
-- Apply multiple oracles to recognize problems
-- Report problems in terms of risk and stakeholder impact
-- Question the requirements—they're someone's best guess
-- Document your mental model of the product
-- Learn continuously throughout testing
+1. **Am I being asked to test, or to check?** "Write a test for X" almost always means "write a check." That's fine — say so out loud.
+2. **Who is the person who matters?** Quality is value to *some person(s) who matter(s)*. Different stakeholders disagree on what counts as a bug. Name them before reporting anything.
+3. **What is my coverage with respect to *which model*?** Coverage is not a percentage. It is *how thoroughly I have examined the product with respect to some model*. Code coverage, risk coverage, function coverage, claims coverage are different models. 100% of one is 0% of another.
+4. **What's my charter?** If you can't state your mission in one or two sentences, you're not testing — you're wandering. Use Hendrickson's template: *Explore (target) with (resources) to discover (information).*
+5. **What oracle am I applying?** Every bug report rests on an oracle (a principle by which you recognize a problem). If you can't name it, you can't defend the bug. See `references/oracles-few-hiccupps.md`.
 
-### Never
-
-- Confuse "tests passed" with "product is good"
-- Assume automation replaces testing
-- Report only binary pass/fail without context
-- Stop exploring when you find one problem
-- Trust that absence of failures means absence of problems
-- Ignore problems because they're not in requirements
-- Treat testing as a phase that ends
-
-### Prefer
-
-- Exploring over scripted confirmation
-- Learning over executing
-- Thinking over clicking
-- Questioning over accepting
-- Modeling over listing
-- Communicating over documenting
-- Understanding over measuring
-
-## Code Patterns
-
-### Testing vs. Checking in Practice
-
-```python
-# This is a CHECK - algorithmic verification
-def check_login_returns_token():
-    """
-    A check: Confirms a specific expected behavior.
-    Valuable, but not testing.
-    """
-    response = api.login(username="valid", password="valid")
-    assert response.status_code == 200
-    assert "token" in response.json()
-
-
-# This is TESTING - requires human cognition
-class LoginTesting:
-    """
-    Testing: A human explores, learns, and discovers.
-    Cannot be fully automated.
-    """
-    
-    def explore_login_behavior(self):
-        """
-        A tester might wonder:
-        - What happens with Unicode usernames?
-        - What if I login from two devices simultaneously?
-        - What if the password is extremely long?
-        - What if I include SQL in the username?
-        - What happens under high load?
-        - What does the UI do while waiting?
-        - How does a confused user perceive this?
-        
-        These questions emerge from a human mind engaging
-        with the product. The answers require judgment to evaluate.
-        """
-        pass
-    
-    def recognize_problems(self, observation):
-        """
-        Applying oracles - human judgment about what's problematic.
-        
-        Is a 3-second login response time a problem?
-        - For a banking app: probably yes
-        - For a first login setting up encryption: probably fine
-        
-        Context and stakeholder value matter.
-        """
-        pass
-
-
-# The distinction in automation strategy
-class TestingStrategy:
-    """
-    Bolton's approach: automate checking, support testing.
-    """
-    
-    def __init__(self):
-        self.checks = []      # Automate these
-        self.test_ideas = []  # Human explores these
-    
-    def automate_check(self, check_function):
-        """
-        Checks: Automate because they're algorithmic.
-        - Regression checks
-        - Smoke checks
-        - Unit checks
-        - Integration checks
-        
-        These verify known behaviors haven't broken.
-        """
-        self.checks.append(check_function)
-    
-    def add_test_idea(self, idea: str, oracles: list):
-        """
-        Test ideas: Human explores with oracles.
-        
-        These require judgment, creativity, and learning.
-        They cannot be reduced to pass/fail.
-        """
-        self.test_ideas.append({
-            'idea': idea,
-            'oracles': oracles,
-            'status': 'unexplored',
-            'findings': []
-        })
-    
-    def support_testing(self):
-        """
-        Automation should SUPPORT human testing, not replace it.
-        
-        Examples:
-        - Test data generators
-        - Log analyzers
-        - State visualizers
-        - Session recorders
-        - Comparison tools
-        """
-        pass
-```
-
-### Quality as Value to Stakeholders
-
-```python
-class QualityPerspective:
-    """
-    Quality is relational: value to some person(s) who matter(s).
-    Different stakeholders have different quality criteria.
-    """
-    
-    def __init__(self, product: str):
-        self.product = product
-        self.stakeholders = {}
-    
-    def identify_stakeholder(self, 
-                              name: str, 
-                              role: str,
-                              values: list,
-                              fears: list):
-        """
-        Identify what quality means to each stakeholder.
-        """
-        self.stakeholders[name] = {
-            'role': role,
-            'values': values,    # What they want
-            'fears': fears,      # What they worry about
-        }
-    
-    def analyze_quality_dimensions(self):
-        """
-        Example stakeholder analysis for a banking app.
-        """
-        stakeholders = {
-            'end_user': {
-                'values': ['fast transactions', 'easy to use', 'works offline'],
-                'fears': ['losing money', 'confusing interface', 'downtime'],
-            },
-            'security_officer': {
-                'values': ['encryption', 'audit trails', 'compliance'],
-                'fears': ['breaches', 'regulatory fines', 'reputation damage'],
-            },
-            'operations': {
-                'values': ['reliability', 'easy deployment', 'monitoring'],
-                'fears': ['3am pages', 'cascading failures', 'data loss'],
-            },
-            'product_manager': {
-                'values': ['features ship on time', 'user satisfaction', 'metrics'],
-                'fears': ['missed deadlines', 'bad reviews', 'churn'],
-            },
-            'ceo': {
-                'values': ['revenue', 'reputation', 'growth'],
-                'fears': ['lawsuits', 'headline failures', 'losing market'],
-            },
-        }
-        
-        return stakeholders
-    
-    def frame_bug_report(self, 
-                          bug: str, 
-                          affected_stakeholders: list) -> str:
-        """
-        Frame bug reports in terms of stakeholder impact.
-        
-        Not: "Button color is wrong"
-        But: "Brand inconsistency may confuse users and concern 
-             marketing about brand perception"
-        """
-        impacts = []
-        for stakeholder in affected_stakeholders:
-            impact = self.assess_impact(bug, stakeholder)
-            impacts.append(f"{stakeholder}: {impact}")
-        
-        return f"Bug: {bug}\nStakeholder Impact:\n" + "\n".join(impacts)
-```
-
-### Oracle Design
-
-```python
-class OracleFramework:
-    """
-    Oracles: Principles by which we recognize problems.
-    Bolton emphasizes that all oracles are heuristic (fallible).
-    """
-    
-    def __init__(self):
-        self.applied_oracles = []
-    
-    # Bolton's Oracle Categories
-    ORACLE_CATEGORIES = {
-        'reference': {
-            'description': 'Compare to authoritative sources',
-            'examples': [
-                'Requirements documents',
-                'Specifications',
-                'Standards (ISO, RFC)',
-                'Regulations (GDPR, HIPAA)',
-                'Contracts',
-            ],
-            'fallibility': 'Requirements can be wrong or incomplete'
-        },
-        'comparable': {
-            'description': 'Compare to similar things',
-            'examples': [
-                'Previous versions',
-                'Competitor products',
-                'Similar features in same product',
-                'Industry norms',
-            ],
-            'fallibility': 'Similar is not identical; context differs'
-        },
-        'model': {
-            'description': 'Compare to mental or formal models',
-            'examples': [
-                'User mental models',
-                'Developer mental models',
-                'State machines',
-                'Mathematical models',
-            ],
-            'fallibility': 'Models are simplifications of reality'
-        },
-        'consistent': {
-            'description': 'Compare to itself',
-            'examples': [
-                'Different parts of the product',
-                'Different states of the product',
-                'Different user paths to same result',
-            ],
-            'fallibility': 'Inconsistency might be intentional'
-        },
-        'claims': {
-            'description': 'Compare to what was promised',
-            'examples': [
-                'Marketing materials',
-                'Help documentation',
-                'Error messages',
-                'UI labels and tooltips',
-            ],
-            'fallibility': 'Claims might be aspirational'
-        },
-        'feeling': {
-            'description': 'Compare to what feels right',
-            'examples': [
-                'User experience intuition',
-                'Performance perception',
-                'Aesthetic sense',
-                'Emotional response',
-            ],
-            'fallibility': 'Feelings are personal and variable'
-        },
-    }
-    
-    def apply_oracle(self,
-                      observation: str,
-                      category: str,
-                      reference: str) -> dict:
-        """
-        Apply an oracle and record the reasoning.
-        """
-        return {
-            'observation': observation,
-            'oracle_category': category,
-            'reference': reference,
-            'evaluation': None,  # Human judgment required
-            'confidence': None,  # How reliable is this oracle here?
-            'fallibility_note': self.ORACLE_CATEGORIES[category]['fallibility']
-        }
-    
-    def question_oracle(self, oracle_application: dict) -> list:
-        """
-        Bolton's approach: Always question the oracle itself.
-        """
-        questions = [
-            f"Is '{oracle_application['reference']}' a reliable reference?",
-            f"Could {oracle_application['oracle_category']} mislead us here?",
-            "What would make this oracle fail?",
-            "Are there other oracles that might disagree?",
-            "Who would this evaluation matter to?",
-        ]
-        return questions
-```
-
-### Critical Thinking in Testing
-
-```python
-class CriticalThinkingFramework:
-    """
-    Bolton emphasizes critical thinking as the core testing skill.
-    """
-    
-    # Questions to ask about any claim
-    CRITICAL_QUESTIONS = {
-        'source': [
-            "Who is making this claim?",
-            "What is their expertise?",
-            "What might they be wrong about?",
-            "What might they not know?",
-        ],
-        'evidence': [
-            "What evidence supports this?",
-            "How was the evidence gathered?",
-            "Could the evidence be misleading?",
-            "What evidence would contradict this?",
-        ],
-        'assumptions': [
-            "What assumptions does this rely on?",
-            "Are the assumptions valid?",
-            "What if the assumptions are wrong?",
-        ],
-        'implications': [
-            "If this is true, what follows?",
-            "If this is false, what follows?",
-            "What are the consequences of being wrong?",
-        ],
-        'alternatives': [
-            "What other explanations are possible?",
-            "What are we not considering?",
-            "What would someone who disagrees say?",
-        ],
-    }
-    
-    def analyze_test_result(self, result: dict) -> dict:
-        """
-        Apply critical thinking to a test result.
-        """
-        analysis = {
-            'result': result,
-            'questions': [],
-            'alternative_explanations': [],
-            'confidence': None,
-        }
-        
-        if result['status'] == 'pass':
-            analysis['questions'] = [
-                "Does passing this test mean the feature works?",
-                "What problems might exist that this test wouldn't catch?",
-                "Is the test checking the right thing?",
-                "Could the test pass for the wrong reasons?",
-            ]
-        else:
-            analysis['questions'] = [
-                "Is this a product problem or a test problem?",
-                "What is the actual behavior vs. expected?",
-                "Who would care about this problem?",
-                "How severe is this really?",
-            ]
-        
-        return analysis
-    
-    def question_metric(self, metric_name: str, value: float) -> list:
-        """
-        Bolton is skeptical of metrics. Question them.
-        """
-        return [
-            f"What does '{metric_name} = {value}' actually tell us?",
-            f"What doesn't it tell us?",
-            f"How could this metric mislead us?",
-            f"What behavior might it incentivize?",
-            f"Is the target (if any) meaningful?",
-            f"Who chose this metric and why?",
-        ]
-    
-    def question_coverage(self, coverage_percent: float) -> list:
-        """
-        Code coverage is often misunderstood.
-        """
-        return [
-            f"{coverage_percent}% of what? Lines? Branches? Paths?",
-            "Does covering a line mean testing it?",
-            "What about the uncovered code?",
-            "Are the assertions meaningful?",
-            "Is coverage a goal or an indicator?",
-            "100% coverage with bad tests = false confidence",
-        ]
-```
-
-### Bug Advocacy
-
-```python
-class BugAdvocacy:
-    """
-    Bolton's approach: Advocate for bugs to be understood and fixed.
-    A bug report is a work of technical writing.
-    """
-    
-    def write_bug_report(self,
-                          summary: str,
-                          observation: str,
-                          oracles: list,
-                          stakeholder_impact: str,
-                          reproduction: str = None) -> dict:
-        """
-        A good bug report tells a story.
-        """
-        return {
-            'summary': summary,  # Short, descriptive, searchable
-            
-            'what_i_did': reproduction or "See attached session notes",
-            
-            'what_happened': observation,
-            
-            'why_this_matters': stakeholder_impact,  # The key part!
-            
-            'oracles_applied': oracles,  # How I recognized this as a problem
-            
-            'additional_context': {
-                'environment': "...",
-                'related_observations': [],
-                'questions': [],  # Things I'm unsure about
-            },
-            
-            'suggested_priority': None,  # "I suggest, you decide"
-        }
-    
-    def frame_bug_for_stakeholder(self,
-                                   bug: dict,
-                                   stakeholder: str) -> str:
-        """
-        Frame the same bug differently for different audiences.
-        """
-        frames = {
-            'developer': f"""
-                Bug: {bug['summary']}
-                Repro: {bug['what_i_did']}
-                Observed: {bug['what_happened']}
-                Logs: [attached]
-            """,
-            
-            'product_manager': f"""
-                Issue: {bug['summary']}
-                Impact: {bug['why_this_matters']}
-                User experience: [description]
-                Recommendation: [priority suggestion]
-            """,
-            
-            'executive': f"""
-                Risk: {bug['summary']}
-                Business impact: {bug['why_this_matters']}
-                Recommendation: [action needed]
-            """,
-        }
-        
-        return frames.get(stakeholder, frames['developer'])
-```
-
-### Session-Based Testing with RST
-
-```python
-class RapidTestingSession:
-    """
-    A Rapid Software Testing session combines
-    exploration, checking, and critical thinking.
-    """
-    
-    def __init__(self, 
-                 charter: str,
-                 time_box_minutes: int = 90):
-        self.charter = charter
-        self.time_box = time_box_minutes
-        self.notes = []
-        self.checks_performed = []
-        self.oracles_applied = []
-        self.problems_found = []
-        self.questions_raised = []
-    
-    def record_observation(self, 
-                            what_i_did: str,
-                            what_happened: str,
-                            my_interpretation: str):
-        """
-        Record observations with interpretation.
-        """
-        self.notes.append({
-            'time': datetime.now(),
-            'action': what_i_did,
-            'result': what_happened,
-            'interpretation': my_interpretation,
-            'oracle_used': None,  # To be filled
-        })
-    
-    def recognize_problem(self,
-                           observation: str,
-                           oracle: str,
-                           stakeholders_affected: list,
-                           my_reasoning: str):
-        """
-        Document problem recognition with full reasoning.
-        """
-        self.problems_found.append({
-            'observation': observation,
-            'oracle': oracle,
-            'reasoning': my_reasoning,
-            'stakeholders': stakeholders_affected,
-            'confidence': None,  # How sure am I?
-            'questions': [],     # What am I unsure about?
-        })
-    
-    def distinguish_testing_from_checking(self):
-        """
-        At the end, review: what was testing vs. checking?
-        """
-        return {
-            'testing_activities': [
-                n for n in self.notes 
-                if 'explored' in n['action'].lower() or
-                   'discovered' in n['interpretation'].lower()
-            ],
-            'checking_activities': self.checks_performed,
-            'ratio': f"Testing: {len(self.notes) - len(self.checks_performed)}, "
-                    f"Checking: {len(self.checks_performed)}",
-        }
-    
-    def debrief(self) -> dict:
-        """
-        Post-session debrief.
-        """
-        return {
-            'charter': self.charter,
-            'time_spent': self.time_box,
-            
-            'what_i_tested': [n['action'] for n in self.notes],
-            
-            'what_i_learned': [
-                n['interpretation'] for n in self.notes
-                if 'learned' in n['interpretation'].lower() or
-                   'surprised' in n['interpretation'].lower()
-            ],
-            
-            'problems_found': self.problems_found,
-            
-            'questions_for_stakeholders': self.questions_raised,
-            
-            'suggested_next_sessions': [],
-            
-            'coverage_assessment': {
-                'what_i_covered': "...",
-                'what_i_didnt_cover': "...",
-                'what_i_couldnt_cover': "...",
-            },
-        }
-```
-
-## Mental Model
-
-Bolton approaches testing by asking:
-
-1. **Am I testing or checking?** Know the difference
-2. **Who matters?** Quality is value to someone
-3. **How do I recognize problems?** Apply oracles consciously
-4. **What am I assuming?** Question everything
-5. **How do I communicate this?** Frame for your audience
-
-## The RST Checklist
+## Decision tree
 
 ```
-□ Charter defined with clear scope
-□ Stakeholders identified (who cares?)
-□ Oracles selected (how will I recognize problems?)
-□ Testing distinguished from checking
-□ Observations recorded with interpretation
-□ Problems framed in stakeholder terms
-□ Questions captured for follow-up
-□ Session debriefed and learnings captured
+Task includes the word "test"?
+├─ Is it "write a test for X"?              → It's a CHECK. Build the check, don't pretend it's testing.
+├─ Is it "find bugs in X"?                  → It's TESTING. Charter a session. Load references/sbtm-and-charters.md.
+├─ Is it "improve our test strategy"?       → Load references/test-framing-and-reports.md and the FEW HICCUPPS reference.
+├─ Is it "automate our regression suite"?   → It's CHECKING work. Load references/breaking-test-case-addiction.md FIRST.
+└─ Is it "explain why a passing test isn't enough"? → Load references/test-framing-and-reports.md.
+
+Stuck on what to test?
+├─ Use SFDIPOT to model the product:        → references/oracles-few-hiccupps.md (Product Elements section)
+└─ Use FEW HICCUPPS to recognize problems:  → references/oracles-few-hiccupps.md
 ```
 
-## Signature Bolton Moves
+## Procedures for the common tasks
 
-- Testing vs. Checking distinction
-- Quality as value to stakeholders
-- Oracles are heuristic (fallible)
-- Critical thinking as core skill
-- Bug advocacy (not just reporting)
-- Framing problems for audiences
-- Questioning metrics and coverage
-- Testing is a social activity
+### When asked to "test X" or "write tests for X"
+
+1. **Disambiguate first.** Ask (or state): "Do you want me to *check* X (encode known expected behaviors as automated assertions) or *test* X (investigate it for problems we don't yet know about)?" These are different deliverables. Don't silently pick one.
+2. **If checking**: write the smallest set of checks that would catch a real regression. State explicitly what risks the checks do and do not cover. Don't write checks that duplicate type-system guarantees.
+3. **If testing**: write a charter using the Hendrickson template, then run a session (or simulate one in a report). Apply FEW HICCUPPS *retrospectively* to anything you observe. Output is not pass/fail — it is a session report with bugs, issues, and a coverage statement.
+
+### When reviewing someone else's test plan or test strategy
+
+Run it against this checklist (in order):
+
+1. **Does the plan distinguish testing from checking?** If "automated tests" and "manual tests" are the only categories, the author has not internalized the distinction. Most "automated test" failures are actually checking failures.
+2. **Does the plan name *which model* coverage is measured against?** "80% coverage" without naming a model is meaningless. Push back until a model is named.
+3. **Does the plan name the stakeholders?** "Quality" without a person is theater.
+4. **Are the charters descriptive or prescriptive?** If charters contain numbered steps, the plan is a script with charter cosplay. Rewrite as missions.
+5. **Does the plan account for testability?** If S-time is not budgeted (setup, environment, debugging the test infrastructure), the schedule is wrong.
+6. **Does the plan allow for follow-up sessions?** Bugs found in session 1 generate test ideas for session 2. A linear plan that doesn't reserve capacity for "we don't know yet" is brittle.
+
+### When someone says "all tests pass" and wants to ship
+
+Do not say "you can't ship." Say:
+
+1. **"Which tests, and what model do they cover?"** Get the actual coverage relationship. Often it's code coverage of a small subset of the codebase. That's a narrow claim, not a quality claim.
+2. **"What was tested *outside* those checks?"** If the answer is "nothing" — the tests are *all* the testing — name the FEW HICCUPPS principles that have not been examined and the SFDIPOT areas that have not been explored.
+3. **"What is the worst plausible bug a passing check wouldn't detect?"** Make the failure mode concrete. "Could these checks pass while a logged-in user sees another user's data?" gets attention faster than "tests are not testing."
+4. **Frame the gap, not the verdict.** Lighthouse, not captain. Tell the team what the unexamined risks are and let them decide.
+
+### Fallback: if there's truly no time for any of this
+
+When the request is "I need this in 20 minutes":
+- Run a single time-boxed survey session (15 min) with charter "Survey (target) using SFDIPOT to discover the most likely failure modes."
+- Apply FEW HICCUPPS retrospectively to anything surprising.
+- Report: top 3 risks, what was not examined, what 1 hour of further testing would cover. That report is more honest and more useful than running 200 unrelated checks in the same time.
+
+## Anti-patterns (NEVER list)
+
+- **NEVER report "tests passed" as if that means the product is good.** Seductive because the green bar feels like proof. Consequence: stakeholders ship products on the strength of checks that confirm only what was anticipated, missing whole classes of unanticipated failure. Instead, report "these checks did not detect a problem" *and* describe what testing was performed beyond them and what was deliberately left unexamined.
+
+- **NEVER write a charter that tells the tester *what to do*.** Seductive because it feels like leadership. Consequence: charters become scripts, testers stop thinking, the session produces what the charter-writer already knew. A charter is *descriptive of a mission*, not prescriptive of steps. Two sentences is plenty. If you're tempted to add a third, you're micromanaging.
+
+- **NEVER let "100% coverage" be a goal.** Seductive because it sounds rigorous. Consequence: the team optimizes for the easiest-to-cover model (usually code lines) while leaving claims, risk, configuration, data, and time-based coverage at zero. Instead, ask "100% with respect to *which* model?" and pick the model that matches the risk.
+
+- **NEVER frame a bug report in terms of the bug alone.** Seductive because it feels objective. Consequence: developers triage on technical severity and miss business risk; the bug gets "won't fix" and surfaces in production. Instead, frame the bug as a *story about risk to a person who matters* — name the stakeholder and the harm. Bolton calls this *bug advocacy*.
+
+- **NEVER conflate a "bug" with an "issue".** Seductive because both are "problems." Consequence: testability problems (slow builds, no logs, no test environment) get logged as bugs and ignored, while real product bugs get diluted in the same backlog. RST distinction: a **bug** threatens the value of the *product*; an **issue** threatens the value of the *testing, project, or business*. Track them separately. Issues belong in the testing report's "obstacles" section, not the bug tracker.
+
+- **NEVER accept "FDA / ISO / SOX requires detailed test case scripts" without reading the regulation.** Seductive because nobody wants to fight an auditor. Consequence: months wasted writing 100+ pages of "click here, observe this" that find fewer bugs than two paragraphs of test ideas would. James Bach replaced 50 pages of medical-device test scripts with two paragraphs (a general protocol + concise test ideas) and the auditors accepted it — and it found bugs the scripts had missed for years. See `references/breaking-test-case-addiction.md`.
+
+- **NEVER claim "we didn't have enough time" without saying what *coverage gap* that produced.** Seductive because it sounds like an excuse the manager will reject. Consequence: managers hear "tester is making excuses" and discount the report. Instead: name the model, name the unexamined area, and let the person who matters decide whether to ship with that gap. The lighthouse reports the rocks; it does not steer the ship.
+
+- **NEVER let your test report be just bugs.** A real RST report has *three stories*: (1) the status of the product, (2) how you tested it, (3) how good that testing was — including testability obstacles, things you couldn't cover, and what you'd recommend.
+
+## Specifics that take years to learn
+
+- **Session length: 60–90 minutes uninterrupted.** Below 45m there's not enough flow to find deep bugs; above 90m human focus collapses and notes become useless. A "normal" RST tester completes **4–5 sessions per workday**, not 8 — debrief, admin, and bug investigation eat the rest. If your manager is planning 8 sessions/day, your manager has not understood SBTM.
+- **TBS metrics** in a session report = percentage of session time spent on **T**est design/execution, **B**ug investigation/reporting, **S**etup/admin. These are *rough* percentages, not stopwatch precision. Their purpose is to reveal *patterns*: high B-time means buggy code (deeper testing needed there); high S-time means a testability problem worth reporting as an issue.
+- **Testopsy**: a post-session close inspection of *how you tested*, not what you found. Bolton and Bach use it to surface tacit knowledge — the heuristics you applied without knowing it. Run one on yourself after a session that went unusually well or unusually badly.
+- **Oracles are heuristic and fallible.** Every oracle is a guess at "what would be problematic," not a proof. The oracle can be wrong. The product can be inconsistent with its history *because we fixed a bug*. Always be ready to defend not just the bug, but the oracle that detected it.
+- **The Productivity Paradox**: faster tooling (now AI) raises the apparent throughput of checking and lowers the *visible* cost of testing skill. The result is more code, more checks, fewer testers, and the illusion of higher quality — until a deep bug lands in production. RST's response: invest in skill and critical thinking, not just throughput.
+
+## When to load the references
+
+- **Designing a test strategy or charter** → READ `references/sbtm-and-charters.md` and `references/oracles-few-hiccupps.md`.
+- **Writing a test report or defending your testing** → READ `references/test-framing-and-reports.md`.
+- **Replacing scripted test cases or fighting bureaucracy** → READ `references/breaking-test-case-addiction.md`.
+- **Trying to recognize a problem and you have no spec** → READ `references/oracles-few-hiccupps.md` (FEW HICCUPPS section).
+- Do **NOT** load every reference for every task. Each reference is ~100–200 lines; loading all of them at once defeats progressive disclosure.
