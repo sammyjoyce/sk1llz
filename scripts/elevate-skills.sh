@@ -84,7 +84,10 @@ fi
 
 # ── Discover skills ───────────────────────────────────────────────────────────
 mapfile -t SKILL_PATHS < <(
-	find "$REPO_ROOT" -name 'SKILL.md' -not -path '*/.git/*' | shuf
+	# Sort deterministically so `--resume-from` has stable skip semantics
+	# across reruns. Previously this used `shuf`, which made the resume
+	# marker skip a different random prefix every invocation.
+	find "$REPO_ROOT" -name 'SKILL.md' -not -path '*/.git/*' | LC_ALL=C sort
 )
 
 echo "Found ${#SKILL_PATHS[@]} skills in repo."
