@@ -1,297 +1,126 @@
 ---
 name: hickey-simple-made-easy
-description: Write functional code in the style of Rich Hickey, creator of Clojure. Emphasizes simplicity over easiness, immutability, data-oriented programming, and managing state explicitly. Use when designing systems that need to be understood and maintained.
-tags: simplicity, immutability, data-oriented, values, state-management, composition, clojure, functional, decoupling
+description: Use Rich Hickey's simplicity lens to decomplect value, identity, time, coordination, and side effects in Clojure systems. Use when reviewing atoms/refs/agents/volatiles, choosing seq vs transducer vs eduction vs transient pipelines, or redesigning APIs where "functional" code still behaves unpredictably. Triggers: simple vs easy, complecting, value+time, swap! retries, commute/ensure, chunked laziness, transients, agent failure.
 ---
 
-# Rich Hickey Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌‌‌​​‍​​‌​​‌‌‌‍​‌‌‌‌​‌​‍‌​​​‌​​​‍​​​​‌​‌​‍​​​​‌‌‌‌⁠‍⁠
-
-## Overview
-
-Rich Hickey is the creator of Clojure and Datomic. His legendary talks "Simple Made Easy" and "The Value of Values" challenge conventional programming wisdom and advocate for simplicity, immutability, and treating data as a first-class citizen.
-
-## Core Philosophy
-
-> "Simple is not easy. Easy is familiar. Simple is about lack of interleaving."
-
-> "State. You're doing it wrong."
-
-> "It is better to have 100 functions operate on one data structure than 10 functions on 10 data structures."
-
-Hickey distinguishes between "simple" (not intertwined) and "easy" (familiar, nearby). He argues we should pursue simplicity even when it's not easy.
-
-## Design Principles
-
-1. **Simple ≠ Easy**: Simple means not complected (intertwined). Pursue it.
-
-2. **Values Over State**: Immutable values simplify everything.
-
-3. **Data > Objects**: Plain data with generic functions beats object hierarchies.
-
-4. **Explicit State**: When state is needed, manage it explicitly.
-
-## When Writing Code
-
-### Always
-
-- Prefer immutable data structures
-- Use maps, vectors, sets—plain data
-- Separate data from functions
-- Make state changes explicit and controlled
-- Design with time in mind (values don't change)
-- Question complexity—is this complected?
-
-### Never
-
-- Conflate simple with easy
-- Hide state in objects
-- Create unnecessary abstractions
-- Reach for classes when data suffices
-- Ignore the cost of complexity
-- Complect things that could be separate
-
-### Prefer
-
-- Maps over objects
-- Pure functions over methods
-- Composition over inheritance
-- Declarative over imperative
-- Data literals over constructors
-- Namespaced keywords over types
-
-## Code Patterns
-
-### Data Orientation
-
-```clojure
-;; BAD: Object-oriented thinking
-(defrecord Person [name age email])
-(defn person-greet [person]
-  (str "Hello, " (:name person)))
-
-;; GOOD: Just use maps—they're data
-(def person {:name "Alice" :age 30 :email "alice@example.com"})
-
-;; Generic functions work on all maps
-(defn greet [entity]
-  (str "Hello, " (:name entity)))
-
-;; Works for any map with :name
-(greet {:name "Bob" :type :user})
-(greet {:name "Acme" :type :company})
-
-
-;; 100 functions on 1 data structure
-;; All of these work on your map:
-(get person :name)
-(assoc person :age 31)
-(update person :age inc)
-(select-keys person [:name :email])
-(keys person)
-(vals person)
-(merge person {:title "Dr."})
-```
-
-### Immutability
-
-```clojure
-;; Data doesn't change—you create new data
-(def v1 [1 2 3])
-(def v2 (conj v1 4))
-
-v1  ;; Still [1 2 3]
-v2  ;; [1 2 3 4]
-
-;; Structural sharing makes this efficient
-;; v1 and v2 share structure in memory
-
-
-;; Update nested structures with assoc-in, update-in
-(def user {:name "Alice" 
-           :address {:city "Portland" 
-                     :zip "97201"}})
-
-(def updated (assoc-in user [:address :city] "Seattle"))
-;; user is unchanged, updated has new city
-
-
-;; No defensive copying needed
-(defn process [data]
-  ;; data cannot be mutated, safe to pass around
-  (transform data))
-```
-
-### Explicit State with Atoms
-
-```clojure
-;; When you need state, make it explicit
-(def counter (atom 0))
-
-;; Read state
-@counter  ;; 0
-
-;; Update state (pure function applied atomically)
-(swap! counter inc)  ;; 1
-(swap! counter + 10) ;; 11
-
-;; State is in ONE place, not scattered through objects
-;; Updates are explicit, not hidden in setters
-
-
-;; For complex state, use a single atom with a map
-(def app-state 
-  (atom {:users {}
-         :sessions {}
-         :config {:debug false}}))
-
-;; Update specific parts
-(swap! app-state assoc-in [:config :debug] true)
-(swap! app-state update-in [:users] assoc "alice" {:name "Alice"})
-```
-
-### Simple vs Easy
-
-```clojure
-;; EASY but COMPLEX: Object with intertwined concerns
-;; - State + identity + behavior all mixed
-;; - Hard to test, hard to reason about
-(defprotocol OrderProcessor
-  (add-item [this item])
-  (remove-item [this item-id])
-  (calculate-total [this])
-  (submit [this]))
-
-;; SIMPLE: Separate concerns
-;; Data (just values)
-(def order {:items [] :status :draft})
-
-;; Pure functions (no state)
-(defn add-item [order item]
-  (update order :items conj item))
-
-(defn calculate-total [order]
-  (reduce + (map :price (:items order))))
-
-;; Side effects isolated
-(defn submit-order! [order]
-  (db/save! order)
-  (email/send-confirmation! order))
-
-;; Each piece is:
-;; - Testable in isolation
-;; - Understandable alone
-;; - Recombinable
-```
-
-### Spec for Data Validation
-
-```clojure
-(require '[clojure.spec.alpha :as s])
-
-;; Describe your data
-(s/def ::name string?)
-(s/def ::age pos-int?)
-(s/def ::email (s/and string? #(re-matches #".+@.+" %)))
-
-(s/def ::person
-  (s/keys :req-un [::name ::age ::email]))
-
-;; Validate
-(s/valid? ::person {:name "Alice" :age 30 :email "alice@example.com"})
-;; true
-
-;; Explain failures
-(s/explain ::person {:name "Alice" :age -5 :email "bad"})
-;; :age - failed: pos-int?
-;; :email - failed: regex match
-
-;; Generate test data
-(require '[clojure.spec.gen.alpha :as gen])
-(gen/sample (s/gen ::person))
-```
-
-### Transducers for Composition
-
-```clojure
-;; Problem: each step creates intermediate collections
-(->> data
-     (map transform)      ;; new collection
-     (filter valid?)      ;; new collection
-     (take 10))           ;; new collection
-
-;; Solution: transducers compose without intermediate collections
-(def xform
-  (comp
-    (map transform)
-    (filter valid?)
-    (take 10)))
-
-;; Apply to any collection type
-(into [] xform data)        ;; vector
-(into #{} xform data)       ;; set
-(transduce xform + 0 data)  ;; reduce
-
-;; Same transformation, different contexts
-;; No intermediate collections created
-```
-
-### Managing Time
-
-```clojure
-;; Values are immutable—they represent a point in time
-;; This enables powerful patterns:
-
-;; 1. History (undo/redo)
-(def history (atom []))
-(def current (atom {:count 0}))
-
-(defn update-with-history! [f & args]
-  (swap! history conj @current)
-  (swap! current #(apply f % args)))
-
-(defn undo! []
-  (when (seq @history)
-    (reset! current (peek @history))
-    (swap! history pop)))
-
-
-;; 2. Snapshotting
-(defn snapshot []
-  @app-state)  ;; Returns immutable value
-
-(def before (snapshot))
-;; ... make changes ...
-(def after (snapshot))
-
-;; Compare states directly
-(= before after)
-(clojure.data/diff before after)
-```
-
-## The Complectedness Test
-
-Ask these questions:
-
-1. **Is state complected with identity?** Separate them with values + refs.
-2. **Is behavior complected with data?** Use data + functions, not objects.
-3. **Is order complected with logic?** Use declarative over imperative.
-4. **Is specificity complected with generality?** Use generic data structures.
-
-## Mental Model
-
-Hickey approaches design by asking:
-
-1. **Is this simple or just easy?** Familiar ≠ simple
-2. **What is this complected with?** Find the intertwining
-3. **Is this data or process?** Separate them
-4. **Where does state live?** Make it explicit
-5. **What happens over time?** Values + references
-
-## Signature Hickey Moves
-
-- Maps for everything
-- Pure functions on immutable data
-- Atoms for explicit state
-- Transducers for composable transforms
-- Spec for data validation
-- Separating complected concerns
+This skill is for system-shape decisions, not Clojure syntax.
+Use it when the bug is "duplicate effects", "mystery retries", "lazy code read too much", or "functional code still feels brittle under load".
+
+## Mandatory loading triggers
+- Before redesigning boundaries or critiquing architecture, READ `references/philosophy.md`.
+- Before scanning an existing `.clj` file for obvious complexity smells, inspect `scripts/simplicity_check.clj`.
+- Do NOT load `scripts/simplicity_check.clj` for concurrency diagnosis, STM tuning, or performance work; it is a smell scanner, not runtime truth.
+
+## Freedom calibration
+- High freedom: renaming seams, collapsing abstractions, changing data shapes, splitting orchestration from model transitions.
+- Low freedom: transaction bodies, validators, watches, agent actions, transient ownership, and resource-backed lazy pipelines. These have sharp runtime semantics; follow the rules exactly.
+
+## The decomplecting pass
+Before adding or keeping an abstraction, ask:
+- Which dimensions does this unit know about: value, identity, time, coordination, effect?
+- If it knows more than two, what can be pushed to the edge?
+- If an invariant spans multiple mutable places, can the places become one value instead?
+- If correctness depends on "exactly when input is consumed", should this be a seq at all?
+- If a reviewer says "it looks functional", what mutable or temporal fact is still hidden?
+
+Operational rule: every function should primarily do one of these jobs:
+- compute a model transition
+- coordinate state
+- interpret external input
+- perform an effect
+
+If one function does two or more, assume it will be harder to replay, test, and change than it looks.
+
+## Decision tree: pick the state primitive
+- Need local, single-owner reduction state inside one transducing process or tight loop?
+  - Use `volatile!`.
+  - Reason: no validators, watches, or CAS overhead.
+  - Sharp edge: `vswap!` is explicitly non-atomic.
+- Need synchronous, independent shared state?
+  - Use `atom`.
+  - Only safe when the update function is pure and retry-safe.
+  - If you keep reaching for `compare-and-set!`, remember it compares with `identical?`, not `=`.
+- Need synchronous, coordinated updates across locations?
+  - Use `ref` + `dosync`.
+  - Default history is `:min-history 0` and `:max-history 10`; do not tune unless long transactions are faulting on history.
+- Need asynchronous, independent state transitions?
+  - Use `agent`.
+  - `send` is for CPU-bound work; `send-off` is for blocking I/O.
+  - Agents fail closed until `restart-agent`; short-lived tools/tests often need `shutdown-agents`.
+- Can state be derived from immutable input or an event log?
+  - Use no shared mutable cell at all.
+
+## Decision tree: invariant spans more than one thing
+1. Can you collapse the invariant into one ref or one append-only event pipeline?
+   - Do that first. Most multi-ref designs are accidental normalization.
+2. If you must keep multiple refs, is the cross-ref update truly commutative?
+   - If yes, `commute` may reduce contention.
+   - If no, use `alter`.
+3. If you only need to protect a read of another ref, `ensure` is legal but not cheap.
+   - In symmetric contention, official Clojure Q&A shows `ensure` can livelock with repeated 100ms timeout retries and seconds of delay.
+   - If the path is hot, prefer one coarser ref or explicit serialization.
+4. If helper code must never run inside a transaction, wrap it with `io!`.
+   - Do not rely on discipline alone.
+
+## Decision tree: seq, transducer, eduction, sequence, transient
+- Want the clearest debugging story and over-consumption does not matter?
+  - Use ordinary seqs.
+- Want reusable transformation logic without caching and without surprise early consumption?
+  - Use `eduction`.
+  - Non-obvious win: every `reduce`/`iterator` reapplies the xform from source; this is safer for offset-sensitive or stateful producers.
+- Need a seq result from a transducer and can tolerate eager probing?
+  - Use `sequence`.
+  - Sharp edge: current implementation may consume the first chunk before the caller pulls; on chunked sources this is commonly 32 items.
+  - This is toxic for parsers, PRNG-driven simulations, and sources where read position matters.
+- Need exact stopping semantics or deterministic consumption?
+  - Use `reduce`/`transduce` with `reduced`, or `loop/recur`.
+- Need a collection output?
+  - Use `into`; it already uses `reduce` and transients when possible.
+- Need speed in a large builder loop?
+  - Try transients only after removing unnecessary intermediate seqs.
+  - Official Clojure 1.12 docs show a 1M-element vector builder moving from about `8.4 ms` to `5.5 ms`; good, but not magic.
+
+## Runtime truths people learn the hard way
+- `swap!` may call the update function multiple times. Treat the function like a pure reducer, never like a command.
+- `commute` replays its function at commit against the most recently committed value, not the in-transaction snapshot. If order matters, you already chose the wrong primitive.
+- Watches are synchronous, may run on multiple threads, and an atom/ref may have changed again before the watch runs. Use the `old-state`/`new-state` args; do not re-deref for truth.
+- Sends from inside an agent action are held until that action completes. `release-pending-sends` is a rare escape hatch, not a design pattern.
+- Sends made inside `dosync` are held until commit and discarded on retry or abort. This makes agents a good post-commit handoff, but only if you keep the transaction pure.
+- `seq` over Java `Iterable`s and arrays is not a true immutable value boundary; later mutation can be observed, and iterator-backed seqs can still surface `ConcurrentModificationException`.
+- Since Clojure 1.7, transients no longer auto-detect wrong-thread use. Frameworks like `core.async` may still make them safe, but your own cross-thread leak may fail only as "weird behavior".
+
+## Anti-pattern ledger
+NEVER put logging, HTTP calls, UUID generation, or metrics emission inside `swap!`, `alter`, `commute`, validators, or `dosync` bodies because "the state change is atomic" is seductive but false for effects; retries duplicate work and desynchronize the outside world. Instead compute pure state first and emit effects from a committed boundary.
+
+NEVER use `commute` for order-sensitive updates because the extra concurrency looks free, but commit-time replay turns the code into last-one-in-wins behavior. Instead use `alter`, or remodel the update as a truly commutative aggregate.
+
+NEVER use `ensure` as a default "cheap read lock" because it feels lighter than changing another ref, but under cross-ensuring writers it can livelock and burn whole seconds in retry storms. Instead collapse the invariant into one ref, or serialize through one reducer/event stream.
+
+NEVER use `sequence` on offset-sensitive, resource-backed, or PRNG-backed sources because "it returns a lazy seq" sounds safe, yet it may consume an initial chunk before anyone asks and it fully realizes intermediate transducer steps. Instead use `eduction` or an explicit `reduce`/`loop`.
+
+NEVER spread a transient across helper boundaries or threads because "it still looks like a collection" hides mutable shared structure and aliasing. Instead keep one owner, capture every returned transient value, and call `persistent!` as soon as the local construction phase ends.
+
+NEVER deref inside a watch and treat that as current truth because watches are synchronous but not snapshot-stable, and they may run concurrently. Instead use `old-state` and `new-state`, then hand off slow work elsewhere.
+
+NEVER use agents as a generic queue when callers need acknowledgements or strict end-to-end ordering because per-agent serialization is seductive but failure mode matters: a failed agent holds queued actions until `restart-agent`. Instead use agents only for independent async state, or choose a queue/stream abstraction with explicit delivery semantics.
+
+NEVER use `compare-and-set!` as if it were value equality because it is easy to assume "same logical value" is enough; the actual test is `identical?`. Instead reserve it for identity-sensitive handshakes and use `swap!` for logical state transitions.
+
+## Recovery moves when the design is already tangled
+- Duplicate effects under contention:
+  - Move effects out of retry regions.
+  - Store intent as data, then consume it after commit.
+- STM retry storms:
+  - Replace cross-ref invariants with one coarser ref or one ordered reducer.
+  - Tune ref history only after proving read faults, not as a first response.
+- Lazy pipeline leaks memory or over-reads:
+  - Replace the hot slice with `transduce`/`reduce`.
+  - Use `eduction` when you still want reusable transforms.
+- "Functional" API is still hard to test:
+  - Split pure model transition functions from orchestration and side-effect code.
+
+## Review checkpoints
+- If a component mixes business rules with clocks, retries, or backpressure, it is not simple yet.
+- If replaying yesterday's inputs cannot reproduce today's behavior, time leaked into the model.
+- If changing the scheduler changes business meaning, coordination leaked into the model.
+- If the only reason a mutable cell exists is "it was convenient to thread through here", delete it or push it outward.

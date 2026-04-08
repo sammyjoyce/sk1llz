@@ -1,361 +1,103 @@
 ---
 name: cro-practical-zig
-description: Write Zig code in the style of Loris Cro, VP Community at Zig Software Foundation. Emphasizes practical patterns, build system mastery, and teaching Zig effectively. Use when building real applications or learning Zig idioms.
-tags: zig, comptime, allocators, safety, systems, build-system, cross-compilation, simplicity
+description: Practical Zig decision guide in Loris Cro's style: use Zig as a toolchain and integration layer first, keep build.zig and build.zig.zon as the source of truth, migrate C/C++ gradually, and express I/O and concurrency requirements precisely. Use when writing production Zig, designing build.zig, packaging cross-platform apps, wrapping C libraries, or evaluating async and event-loop code. Triggers: zig, build.zig, build.zig.zon, zig cc, zig translate-c, @cImport, std.Build, cross-compilation, system library, Io, asyncConcurrent, snapshot testing.
+tags: zig, build-system, c-interop, async, cross-compilation, package-management, testing
 ---
 
-# Loris Cro Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​​​‌​‌‍‌‌​‌‌‌​​‍‌‌​​​​‌​‍‌​​​​‌​‌‍​​​​‌​‌​‍‌‌​‌​​‌​⁠‍⁠
-
-## Overview
-
-Loris Cro is the VP of Community at the Zig Software Foundation, known for explaining Zig concepts clearly and demonstrating practical applications. His focus is on making Zig accessible and showing how to build real software.
-
-## Core Philosophy
-
-> "Zig's build system is one of its killer features."
-
-> "Start simple, add complexity only when needed."
-
-Cro emphasizes practical application—building real things, understanding the build system, and using Zig's unique features to solve actual problems.
-
-## Design Principles
-
-1. **Build System First**: Understand `build.zig` deeply.
-
-2. **Practical Patterns**: Focus on what works in production.
-
-3. **C Interop**: Leverage existing C libraries seamlessly.
-
-4. **Incremental Adoption**: Use Zig where it helps most.
-
-## When Writing Code
-
-### Always
-
-- Master the build system early
-- Use `build.zig` for all project configuration
-- Leverage C interop for existing libraries
-- Write tests alongside code
-- Use `std.log` for structured logging
-- Profile before optimizing
-
-### Never
-
-- Fight the build system—learn it
-- Rewrite working C code without reason
-- Ignore the standard library—it's excellent
-- Skip writing tests
-- Optimize without measurements
-
-### Prefer
-
-- `build.zig` over external build tools
-- Standard library over reinvention
-- C library bindings over pure Zig rewrites (when sensible)
-- Incremental compilation during development
-- Cross-compilation from the start
-
-## Code Patterns
-
-### Build System Mastery
-
-```zig
-// build.zig - the heart of a Zig project
-const std = @import("std");
-
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    // Main executable
-    const exe = b.addExecutable(.{
-        .name = "myapp",
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // Link C library
-    exe.linkLibC();
-    exe.linkSystemLibrary("sqlite3");
-
-    // Add include paths
-    exe.addIncludePath(.{ .path = "vendor/include" });
-
-    b.installArtifact(exe);
-
-    // Run step
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    const run_step = b.step("run", "Run the application");
-    run_step.dependOn(&run_cmd.step);
-
-    // Test step
-    const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const run_unit_tests = b.addRunArtifact(unit_tests);
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
-}
-```
-
-### C Interoperability
-
-```zig
-// Import C headers directly
-const c = @cImport({
-    @cInclude("stdio.h");
-    @cInclude("sqlite3.h");
-});
-
-pub fn main() void {
-    // Call C functions directly
-    _ = c.printf("Hello from C!\n");
-}
-
-// Wrap C libraries idiomatically
-const Database = struct {
-    handle: *c.sqlite3,
-
-    pub fn open(path: [*:0]const u8) !Database {
-        var db: ?*c.sqlite3 = null;
-        const result = c.sqlite3_open(path, &db);
-        if (result != c.SQLITE_OK) {
-            return error.DatabaseOpenFailed;
-        }
-        return .{ .handle = db.? };
-    }
-
-    pub fn close(self: *Database) void {
-        _ = c.sqlite3_close(self.handle);
-    }
-
-    pub fn exec(self: *Database, sql: [*:0]const u8) !void {
-        var err_msg: ?[*:0]u8 = null;
-        const result = c.sqlite3_exec(
-            self.handle,
-            sql,
-            null,
-            null,
-            &err_msg,
-        );
-        if (result != c.SQLITE_OK) {
-            if (err_msg) |msg| {
-                std.log.err("SQL error: {s}", .{msg});
-                c.sqlite3_free(msg);
-            }
-            return error.SqlExecutionFailed;
-        }
-    }
-};
-```
-
-### Structured Logging
-
-```zig
-const std = @import("std");
-
-// Scoped logging
-const log = std.log.scoped(.myapp);
-
-pub fn processRequest(request_id: u64) !void {
-    log.info("Processing request {d}", .{request_id});
-
-    const result = doWork() catch |err| {
-        log.err("Request {d} failed: {}", .{ request_id, err });
-        return err;
-    };
-
-    log.debug("Request {d} result: {any}", .{ request_id, result });
-}
-
-// Configure log level at build time
-pub const std_options = struct {
-    pub const log_level: std.log.Level = .debug;
-
-    // Custom log function
-    pub fn logFn(
-        comptime level: std.log.Level,
-        comptime scope: @TypeOf(.enum_literal),
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        const scope_prefix = if (scope != .default)
-            "[" ++ @tagName(scope) ++ "] "
-        else
-            "";
-
-        const prefix = "[" ++ level.asText() ++ "] " ++ scope_prefix;
-
-        std.debug.print(prefix ++ format ++ "\n", args);
-    }
-};
-```
-
-### Testing Patterns
-
-```zig
-const std = @import("std");
-const testing = std.testing;
-
-fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-test "add basic" {
-    try testing.expectEqual(@as(i32, 5), add(2, 3));
-}
-
-test "add negative" {
-    try testing.expectEqual(@as(i32, -1), add(2, -3));
-}
-
-// Test with allocator
-test "dynamic allocation" {
-    const allocator = testing.allocator;  // Detects leaks!
-
-    var list = std.ArrayList(u8).init(allocator);
-    defer list.deinit();
-
-    try list.append(42);
-    try testing.expectEqual(@as(usize, 1), list.items.len);
-}
-
-// Fuzz testing
-test "fuzz example" {
-    const input = std.testing.fuzzInput(.{});
-    // Process fuzz input...
-}
-```
-
-### Standard Library Gems
-
-```zig
-const std = @import("std");
-
-// ArrayList - dynamic arrays
-fn arrayListExample(allocator: std.mem.Allocator) !void {
-    var list = std.ArrayList(u32).init(allocator);
-    defer list.deinit();
-
-    try list.append(1);
-    try list.append(2);
-    try list.appendSlice(&[_]u32{ 3, 4, 5 });
-
-    for (list.items) |item| {
-        std.debug.print("{d} ", .{item});
-    }
-}
-
-// HashMap
-fn hashMapExample(allocator: std.mem.Allocator) !void {
-    var map = std.StringHashMap(u32).init(allocator);
-    defer map.deinit();
-
-    try map.put("one", 1);
-    try map.put("two", 2);
-
-    if (map.get("one")) |value| {
-        std.debug.print("one = {d}\n", .{value});
-    }
-}
-
-// File I/O
-fn fileExample() !void {
-    const file = try std.fs.cwd().openFile("data.txt", .{});
-    defer file.close();
-
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var reader = buf_reader.reader();
-
-    var line_buf: [1024]u8 = undefined;
-    while (try reader.readUntilDelimiterOrEof(&line_buf, '\n')) |line| {
-        std.debug.print("{s}\n", .{line});
-    }
-}
-
-// JSON parsing
-fn jsonExample(allocator: std.mem.Allocator) !void {
-    const json_str =
-        \\{"name": "Alice", "age": 30}
-    ;
-
-    const User = struct {
-        name: []const u8,
-        age: u32,
-    };
-
-    const parsed = try std.json.parseFromSlice(
-        User,
-        allocator,
-        json_str,
-        .{},
-    );
-    defer parsed.deinit();
-
-    std.debug.print("Name: {s}, Age: {d}\n", .{
-        parsed.value.name,
-        parsed.value.age,
-    });
-}
-```
-
-### Cross-Compilation
-
-```zig
-// build.zig - cross-compile easily
-pub fn build(b: *std.Build) void {
-    // Default to native
-    const target = b.standardTargetOptions(.{});
-
-    // Or target specific platforms:
-    // zig build -Dtarget=x86_64-linux-gnu
-    // zig build -Dtarget=aarch64-macos
-    // zig build -Dtarget=x86_64-windows-gnu
-
-    const exe = b.addExecutable(.{
-        .name = "myapp",
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = b.standardOptimizeOption(.{}),
-    });
-
-    b.installArtifact(exe);
-}
-
-// Target-specific code
-const builtin = @import("builtin");
-
-fn platformSpecific() void {
-    switch (builtin.os.tag) {
-        .linux => linuxImpl(),
-        .macos => macosImpl(),
-        .windows => windowsImpl(),
-        else => @compileError("Unsupported platform"),
-    }
-}
-```
-
-## Mental Model
-
-Cro approaches Zig projects by asking:
-
-1. **Is the build system set up right?** Start with `build.zig`
-2. **Can I use an existing C library?** Don't reinvent the wheel
-3. **Is this tested?** Write tests early and often
-4. **Will this cross-compile?** Think portable from the start
-5. **Is this practical?** Ship working software
-
-## Signature Cro Moves
-
-- Master `build.zig` before deep language features
-- C interop for rapid development
-- Standard library fluency
-- Tests with leak-detecting allocator
-- Cross-compilation as default mindset
-- Structured logging from the start
+# Cro Practical Zig
+
+## Start Here
+
+- Before editing `build.zig`, read the official build-system guide for the exact Zig version in use and scan that version's release notes for build API removals. Zig examples age fast; build API drift is not theoretical.
+- Before binding a C library, read the official `@cImport` / `zig translate-c` section for the exact Zig version. If target triple or `-cflags` are not pinned, stop: you do not yet know what ABI you are binding.
+- Before adopting `std.Io` / `io.async*` patterns from blog posts, verify whether the project tracks stable Zig or roadmap/master. Cro often writes about the direction of the language before those APIs land in a release.
+- Do not load the full language reference for routine work. Load the smallest relevant build-system, C interop, or testing section first.
+
+## Mindset
+
+- Treat Zig first as a toolchain for making a codebase operable: build graph, packaging, cross-compilation, tests, and C interop. Rewriting everything in Zig is the last move, not the first.
+- The build graph is part of the product. If a user cannot `zig build` the project reproducibly on macOS, Linux, and Windows, the code is not yet practical no matter how elegant the internals are.
+- Prefer boundaries that surface intent. An allocator parameter says "this code may allocate"; an `Io` parameter says "this code performs I/O"; `asyncConcurrent` says "correctness requires overlap", not merely "parallelism would be nice".
+
+## Before You Change Anything, Ask
+
+- Is the pain semantic or operational?
+  - If the bug is build, release, dependency, or cross-target friction, fix `build.zig`, `build.zig.zon`, or `zig cc` first.
+  - If the bug is at a C boundary, fix ABI and translation discipline before rewriting the library.
+- Is concurrency required for correctness or only a performance opportunity?
+  - If correctness requires overlap, encode that explicitly.
+  - If not, keep the code correct under blocking I/O first and let the runtime exploit concurrency when available.
+- Am I copying a blog-era API into a stable codebase?
+  - If yes, verify against the codebase's exact Zig version before writing any code.
+- Does this task belong in the build graph or in application code?
+  - If it coordinates artifacts, fixtures, tests, assets, or packaging, it probably belongs in `build.zig`.
+
+## Decision Tree
+
+- Need to integrate upstream C/C++?
+  - If upstream has no `build.zig`, depend on it as files and keep the Zig layer as a clean adapter.
+  - If the integration burden is mostly compiler flags, headers, libraries, or cross targets, use `zig cc` / `zig build` and stop there.
+  - Only rewrite the dependency in Zig after the boundary itself becomes the bottleneck.
+- Need C bindings?
+  - Use `@cImport` for quick access to constants, typedefs, and record shapes when no custom `-cflags` or manual cleanup is needed.
+  - Use `zig translate-c` when flags matter, when you need to inspect output, or when you plan to tighten pointer types and edit macro fallout.
+  - If translation hits bitfields, token-pasting macros, or `goto`, keep the boundary `extern` / `opaque` and do not force fake purity.
+- Need tests?
+  - For pure logic, use normal `test {}` blocks with `std.testing.allocator`.
+  - For tools that emit directories, websites, codegen, or other file trees, make the build graph drive integration tests and compare snapshots with `git diff`.
+  - For cross-target test matrices, compile widely but only run on targets you can execute; use `skip_foreign_checks` instead of pretending host execution is free.
+
+## Procedures That Matter
+
+### Build Graph Discipline
+
+- Keep dependency metadata in `build.zig.zon` and build logic in `build.zig`. That separation exists so tools can inspect and fetch the graph without executing arbitrary build code.
+- Model reusable units as modules first. In Zig 0.14+, artifact constructors moved toward explicit `root_module`; if you keep stuffing configuration directly into executable or test creation, later migrations hurt more.
+- Default to Zig-managed dependencies for developer builds. Link against system libraries only in an explicit packager mode; distro builders need system libs, normal users need reproducibility.
+- On macOS, `zig build --watch` became usable again in 0.15.x after the file-watching rewrite. If team lore says "watch is broken on macOS", re-check that assumption before building wrapper scripts around stale pain.
+- When Debug compile time on x86_64 is the bottleneck, try the default self-hosted backend first. Zig 0.15.1 reports roughly 5x faster Debug compilation than LLVM in many cases. If you hit backend-specific issues, fall back to `-fllvm` or `.use_llvm = true` for that target/configuration rather than globally.
+
+### C Interop Without Footguns
+
+- Pin the same `-target` and `-cflags` for translation that the final build will use. Enum width, `long` size, packing, and calling convention drift can compile cleanly and still be ABI-wrong.
+- After `zig translate-c`, spend effort where it pays:
+  - Replace overly permissive `[*c]T` with `*T` or `[*]T` where the boundary guarantees it.
+  - Collapse `anytype` macro artifacts into concrete types only after you understand the originating macro family.
+  - Use `--verbose-cimport` when `@cImport` behaves strangely; inspect cached `cimport.h` and translated output before blaming Zig.
+- If you cannot explain the header search path, the macro environment, and the target ABI in one sentence, you are not ready to publish bindings.
+
+### Async and I/O Boundaries
+
+- Write libraries so the caller chooses the I/O implementation. This keeps blocking, evented, and future runtimes from forking your API surface.
+- Separate "can run out of order" from "must progress concurrently". `io.async` expresses the first; `asyncConcurrent` expresses the second. Conflating them is how code passes tests under a generous runtime and fails under a stricter one.
+- Futures are resources. If multiple futures are live, either await all results before propagating errors or install `defer future.cancel(io) catch {};` before any `try` that can escape early.
+- Assume `io.async` may legally run inline when resources are scarce. If inline execution breaks correctness, you chose the wrong primitive.
+
+### Testing Like a Toolchain Engineer
+
+- `std.testing.allocator` is not just a convenience; it is a leak oracle. If a test allocates, default to it until the ownership story is obviously stable.
+- For snapshot-heavy tools, stage snapshot paths before diffing. Cro's pattern uses `git add` plus `git diff --cached --exit-code` specifically so new files fail the test instead of slipping past as untracked output.
+- Do not recurse into `zig build` from `build.zig` unless you truly have separate build roots. For normal artifact orchestration, use the build graph directly; subprocess builds forfeit graph semantics, cache visibility, and better failure reporting.
+
+## NEVER
+
+- NEVER start by rewriting working C/C++ code because Zig makes rewriting tempting. The fast win is usually replacing the build and integration layer; a rewrite trades operational certainty for semantic risk. Instead, prove the boundary with `zig build` or `zig cc` first.
+- NEVER treat `build.zig.zon` like Cargo or npm because Zig package management does not do version resolution for you. It is seductive because the file looks familiar. The consequence is surprise dependency conflicts that are yours to solve. Instead, keep the graph small, pinned, and explicit.
+- NEVER copy stable-looking `build.zig` snippets from old blog posts or gists because minor Zig releases remove deprecated build APIs aggressively. The seductive part is that the code looks official. The consequence is hard compile breaks during upgrades. Instead, verify against the exact-version build-system docs before editing.
+- NEVER use `@cImport` when flags or target ABI differ across environments because the host build may "work" while cross-target binaries become subtly wrong. Instead, translate with the exact `-target` and `-cflags`, inspect the generated Zig, and then wrap it.
+- NEVER shell out to `zig build` from inside `build.zig` for ordinary composition because it bypasses the build graph's dependency model. It is seductive because it feels like "just run the other thing". The consequence is worse caching, worse diagnostics, and invisible dependencies. Instead, use `b.addRunArtifact` / `b.installArtifact`; recurse only for genuinely separate workspaces or fixture roots.
+- NEVER write `try future.await(io)` on the first live future when later futures still need awaiting. It is seductive because it reads like ordinary Zig error propagation. The consequence is an un-awaited future and a resource leak or programming error. Instead, capture results first or install cancellation defers.
+- NEVER encode correctness-critical overlap with plain `io.async` because some `Io` implementations may legitimately run the function inline. It is seductive because it often works under thread-pool runtimes. The consequence is code that silently serializes or deadlocks under non-concurrent implementations. Instead, use the API that explicitly requires concurrency.
+- NEVER default to system libraries in user-facing builds because packager constraints are not end-user constraints. It is seductive if you come from distro tooling. The consequence is unreproducible cross-platform support and fragile onboarding. Instead, make Zig-managed dependencies the default and gate system linking behind an explicit packaging option.
+
+## Fallbacks
+
+- If a Cro-style frontier API is not available on the project's Zig version, keep the interface shape explicit anyway: pass allocators, isolate I/O at call boundaries, and hide version-specific build churn behind small helper functions in `build.zig`.
+- If `translate-c` output is ugly but correct, prefer a thin handwritten wrapper over "fixing" generated code beyond recognition. The goal is a stable ABI boundary, not aesthetic purity.
+- If cross-target execution is blocked, still compile every target in CI. Practical Zig means catching build drift even when you cannot run the binary on every host.
+- If the build script starts to look like application code, stop and split responsibilities: build graph here, runtime logic in normal Zig modules.
+
+## Freedom Level
+
+- High freedom: data structures, internal APIs, and how much Zig to introduce into an existing codebase.
+- Low freedom: ABI boundaries, build graph wiring, cross-target flags, package sourcing, and future cancellation or await discipline. Small mistakes here create failures that look random later.

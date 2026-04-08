@@ -1,188 +1,87 @@
 ---
 name: stonebraker-database-architecture
 description: >-
-  Design database systems applying Michael Stonebraker's architectural principles:
-  workload-specific engine selection, OLTP/OLAP separation, main-memory optimization,
-  shared-nothing partitioning, and extensible type systems. Use when making fundamental
-  database architecture decisions, choosing between row-store and column-store,
-  designing partitioning schemes, evaluating NewSQL vs traditional RDBMS, building
-  storage engines, or deciding whether to specialize or use a general-purpose database.
-  Use when user mentions "database architecture", "OLTP vs OLAP", "column store",
-  "partition strategy", "VoltDB", "Vertica", "H-Store", "C-Store", "storage engine design",
-  "one size fits all", or "specialized database".
+  Make database architecture calls in Michael Stonebraker's style: classify workloads by dominant
+  bottleneck, decide when OLTP and OLAP must be split, choose when shared-nothing and main-memory
+  designs actually pay off, and avoid hidden costs in column stores, deterministic OLTP, and
+  Postgres-style extensibility. Use when deciding OLTP vs OLAP vs HTAP, choosing a partition key,
+  evaluating VoltDB/Vertica/Postgres-like designs, designing a storage engine, or arguing against
+  "one database for everything." Triggers: "database architecture", "OLTP vs OLAP", "HTAP",
+  "shared nothing", "partition key", "column store", "projection", "tuple mover", "VoltDB",
+  "Vertica", "Postgres extensibility", "anti-caching", "storage engine".
 ---
 
 # Stonebraker Database Architecture
 
-## Thinking Framework
+Stonebraker's move is not "tune harder." It is "identify the overhead the incumbent system treats as normal, then delete the subsystem that exists only to pay that overhead." The right first question is never "which database is best?" It is "what is the dominant tax here: coordination, scans, memory misses, write amplification, or lack of extensibility?"
 
-Before any database architecture decision, ask yourself:
+## Use Order
 
-1. **What is the actual workload shape?** Count the ratio of reads to writes, average
-   rows touched per query, and concurrency level. A workload touching <100 rows per
-   transaction with >10K TPS is OLTP. Scanning >10K rows with aggregations is OLAP.
-   Mixing them in one engine is the #1 architectural mistake.
+- Use this skill standalone for first-pass architecture decisions.
+- Do not dive into vendor tuning guides, ORM advice, or index cookbooks before you finish the tests below. Those docs optimize a chosen architecture; they do not tell you whether the architecture is wrong.
 
-2. **Where does the overhead actually live?** In a traditional RDBMS under OLTP load,
-   the 2008 "Looking Glass" study found useful work was <12% of CPU time—the rest was
-   buffer management, locking, latching, and logging. The 2025 follow-up found that
-   after eliminating those (as VoltDB does), communication/networking becomes the new
-   bottleneck: 51–68% of server CPU in stored-procedure mode, higher with client-side
-   transactions. Know which era your system lives in before optimizing.
+## Before You Commit
 
-3. **Can you partition such that >95% of transactions are single-partition?** If yes,
-   single-threaded partitions (H-Store model) eliminate locking entirely. If multi-partition
-   transactions exceed ~10%, performance collapses because they serialize through a
-   global coordinator—only one multi-partition transaction executes at a time across
-   the entire cluster.
+Before choosing an engine or topology, ask yourself:
 
-4. **Is this a data-fits-in-memory problem?** If your working set fits in RAM, disk-oriented
-   structures (buffer pool, page-level locking, ARIES recovery) are pure overhead. But
-   if data exceeds memory, anti-caching or tiered storage is essential—don't pretend
-   everything is in-memory when it isn't.
+- Where does CPU go after you remove the old bottleneck? In the original "Looking Glass," classic OLTP wasted most instructions on buffer management, locking, latching, and logging. In "Looking Glass 2.0," VoltDB-style systems moved the pain to communication: stored-procedure mode still spent 23%/51%/68% of CPU on communication for TPC-C/Voter/YCSB-C, and client-driven mode rose to 47%/63%/68%.
+- Are transactions routable before execution starts? H-Store gets its economics only when input parameters tell you the partition(s) up front and the procedure set is known before deployment. If procedures arrive after deployment, the physical design is already misaligned.
+- Are you optimizing for a bounded historical window or pretending "time travel" is free? C-Store's HWM/LWM split exists because near-now history consumes write-store space and delays cleanup.
+- Do indexes stay memory-resident even when base data does not? H-Store anti-caching assumes they do. If large secondary indexes spill, the design premise changes.
+- Is the hot spot semantic or accidental? Shared-nothing does not remove hot rows. Stonebraker's answer is usually to delete the hot aggregate or split it into N subobjects, not to buy a different cluster shape.
 
-## Decision Tree: Choosing Architecture
+## Decision Rules
 
-```
-Workload?
-├─ OLTP (short txns, point lookups, high concurrency)
-│  ├─ Data fits in memory? → Main-memory engine, no buffer pool
-│  │  ├─ >95% single-partition? → Single-threaded partitions (H-Store/VoltDB model)
-│  │  └─ Multi-partition heavy? → Shared-memory MVCC (Hekaton/Silo model)
-│  └─ Data exceeds memory? → Disk-based with anti-caching or tiered storage
-│
-├─ OLAP (aggregations, scans, few writers)
-│  ├─ Queries touch <30% of columns? → Column store (C-Store/Vertica model)
-│  ├─ Queries touch >70% of columns? → Row store may match column store
-│  └─ Mixed: wide tables, selective columns → Column store wins decisively
-│
-├─ HTAP (real-time analytics on operational data)
-│  └─ CAUTION: True HTAP is an unsolved problem. Separate engines with
-│     CDC replication is more predictable than any single-engine HTAP.
-│     The physics of optimization for both is fundamentally adversarial.
-│
-└─ Streaming / Scientific / Array
-   └─ Different data models entirely. Don't force relational.
-```
+- If the workload is repetitive OLTP and requests can be routed from their input parameters to one partition, prefer main-memory shared-nothing with predefined transaction classes. The gain is not "RAM is fast"; it is deleting buffer-pool, latch, and lock-manager work.
+- If the same product must support ad hoc analytical scans, do not hide behind "HTAP." Stonebraker's claim is that OLTP and OLAP want adversarial physical designs: row-oriented, coordination-minimized execution versus reordered, compressed, scan-oriented execution. Treat them as separate engines even if they share a parser or SQL surface.
+- If analytics read a small subset of wide rows, prefer columnar projections, not "a row store plus more indexes." C-Store wins when sort order, encoding, and operators all align around the same scan patterns.
+- If queries routinely touch most columns, or the table is narrow, columnar advantage shrinks because tuple reconstruction and join-index work start to dominate.
+- If the product needs new types, temporal semantics, spatial operators, or custom indexes, copy Postgres's seam: new types, operators, operator classes, and access methods. Do not keep adding planner special cases one feature at a time.
 
-## Expert Knowledge: What Takes Years to Learn
+## Procedures That Matter
 
-### The OLTP Overhead Taxonomy (Quantified)
+### 1. Partitionability Test
 
-Stonebraker's "Looking Glass" (2008) decomposed where CPU time goes in a traditional
-RDBMS running TPC-C. The numbers that matter:
+1. List the top transaction classes, not the biggest tables.
+2. For each class, mark the routing key available before the first statement runs.
+3. If touched partitions cannot be inferred from the call boundary, deterministic single-partition execution is the wrong bet.
+4. For every cross-partition step, ask whether duplicating a small reference table or moving a derived summary upstream would make it local.
+5. If the remaining distributed work is still central to the product, stop asking "how do we shard this?" and ask "why is this service boundary forcing coordination?"
 
-- **Buffer pool management**: ~35% of CPU (page mapping, pin/unpin, replacement)
-- **Locking**: ~25% (lock table, deadlock detection, lock waits)
-- **Latching**: ~15% (short-term mutual exclusion on internal structures)
-- **Logging (WAL)**: ~15% (serializing log writes, group commit, fsync)
-- **Useful work**: ~10% (actually executing queries)
+### 2. Column-Store Reality Check
 
-H-Store/VoltDB eliminated the first four by going main-memory + single-threaded
-partitions + deterministic execution + command logging instead of WAL. Result: 82×
-faster on TPC-C. But the 2025 "Looking Glass 2.0" (Stonebraker et al., CIDR 2025)
-revealed the *new* bottleneck: VoltDB spends only 23% of CPU on transaction processing;
-~40% goes to internal DBMS networking, ~38% to Linux kernel networking. Kernel bypass
-(DPDK/F-Stack) reclaims this, pushing useful work from 33% to 54% on YCSB.
+1. Enumerate the 3-5 query shapes that actually matter; every extra projection multiplies write cost.
+2. Choose projection sort orders for pruning and compression, not to mimic OLTP indexes.
+3. Verify that operators can run on compressed data. If the executor inflates early, most of the architectural gain is already lost.
+4. Budget tuple-mover headroom. WS->RS movement also updates delete metadata, storage keys, and join indexes; if write-store growth outruns merge-out, the engine degrades into a dual-format liability.
+5. Bound historical visibility. LWM chases HWM because "recent as-of queries" are not free; they delay cleanup and bloat the write store.
 
-### Column Store Crossover Points
+### 3. Extensibility Seam Test
 
-Column stores don't always win for analytics. The crossover depends on table width:
+1. When a team asks for a new data type, ask whether it needs a new planner branch or just a type + operators + operator class + access method.
+2. Prefer indirection that avoids secondary-index churn on ordinary updates. POSTGRES anchor pointers let rows move and delta chains grow without rewriting every index entry.
+3. Only choose no-overwrite / append-only internals if you are also willing to own vacuum economics. Instant recovery is the sales pitch; background cleanup debt is the bill.
 
-- **<5 columns in table**: Row store and column store perform similarly
-- **Query touches >70% of a wide table's columns**: Row store can match or beat
-  column store because you're reconstructing tuples anyway
-- **Sweet spot for column stores**: Wide tables (20+ columns) where queries touch
-  <30% of columns. Here compression + skip-scan gives 10–100× advantage
-- **C-Store's projection trick**: Store overlapping sorted projections, not just
-  columns. Each projection is a subset of columns sorted on a chosen key.
-  The optimizer picks the projection whose sort order best matches the query.
-  Maintaining multiple projections costs write amplification—budget 2–4× storage
+## Numbers That Change Decisions
 
-### The Multi-Partition Transaction Cliff
-
-In VoltDB/H-Store, multi-partition transactions serialize globally. Practical thresholds:
-
-- **<5% multi-partition**: System performs well, single-partition throughput dominates
-- **5–15%**: Noticeable degradation; multi-partition becomes the scheduling bottleneck
-- **>15%**: System effectively serializes; throughput collapses to single-threaded speed
-
-The database designer's job is to find a partitioning key that keeps cross-partition
-work below 5%. For e-commerce: partition by customer_id, not order_id (because
-payment transactions join customer and warehouse—partition on the anchor entity).
-When you can't partition cleanly, consider replicating small read-only tables to every
-partition to convert joins into local lookups.
-
-### C-Store's Write Store / Read Store Architecture
-
-C-Store maintains two physical stores: a Write Store (WS) optimized for inserts
-(row-oriented, uncompressed) and a Read Store (RS) optimized for queries
-(column-oriented, compressed, sorted). A Tuple Mover periodically migrates WS→RS.
-
-Practitioner traps:
-- **Tuple Mover stalls**: If write rate exceeds Tuple Mover throughput, WS grows
-  unboundedly and query performance degrades because the executor must merge
-  WS and RS results. Monitor WS size as a health metric.
-- **Projection maintenance cost**: Each write must update ALL projections. N projections
-  means N× write amplification. Keep projection count to 3–5 per table maximum.
-- **Join index fragility**: Join indexes connecting projections are expensive to maintain
-  under updates. Each modification to a projection requires updating every join
-  index that points into or out of it.
+- C-Store's published prototype stored the benchmark at 1.987 GB where the compared row store needed 4.480 GB and another column store needed 2.650 GB. Redundant projections can still win on space when sort order and encoding are chosen together.
+- C-Store's Type-2 bitmap encoding makes selection cheap, but operators may need one memory page per possible value. A column that looked "few-valued" in design review can become a memory sink when cardinality drifts.
+- In H-Store anti-caching, sampled LRU stayed within roughly 2-7% of baseline overhead, while full-LRU tracking cost materially more. Approximate coldness unless the access pattern is nearly flat.
+- Anti-caching beat tuned MySQL by 9x/18x/10x on skewed YCSB read-only/read-heavy/write-heavy workloads with data 8x memory size, but that result depended on skew and memory-resident indexes. This is a skew play, not a universal oversubscription strategy.
+- Looking Glass 2.0 showed DPDK/F-Stack raising VoltDB's transaction-processing share from 33%/48%/70% to 53.8%/72%/91% on TPC-C/Voter/YCSB-C. After you delete disk-era overheads, the network stack becomes architecture, not plumbing.
 
 ## NEVER
 
-- **NEVER run OLAP queries against your OLTP database** "just for now." A single
-  analytical scan holding locks or consuming buffer pool pages will spike p99 latency
-  for all OLTP transactions. Stonebraker calls this the cardinal sin. Even read-committed
-  isolation causes cache pollution that degrades OLTP for minutes afterward.
+- NEVER keep OLTP and analytics in one engine because the seductive story is "one source of truth." The concrete result is that scan costs and coordination costs share the same blast radius. Instead split by bottleneck and make replication or CDC an explicit seam.
+- NEVER choose shared-nothing because "it scales linearly" while skipping placement work. The seductive path is buying nodes before proving locality. The consequence is distributed commit machinery plus unchanged hot spots. Instead prove routing keys, hotspot strategy, and local-transaction dominance first.
+- NEVER benchmark a column store on read-only RS behavior and declare victory. The seductive path is celebrating scan numbers before tuple-mover, delete-vector, and join-index pressure show up. The consequence is a warehouse that wins demos and loses once writes age. Instead capacity-plan WS->RS merge throughput as a first-class number.
+- NEVER treat stored procedures as a cosmetic API choice. The seductive path is keeping client-side transaction logic for debuggability while expecting deterministic OLTP economics. The consequence is that communication becomes the new bottleneck even after disk-era taxes are gone. Instead decide explicitly whether you want stored-procedure locality or client-side flexibility.
+- NEVER add projections or indexes "just in case." The seductive path is covering every imaginable query. The consequence is multiplicative write amplification and brittle maintenance paths. Instead keep only the few orderings that materially change pruning or compression.
+- NEVER promise append-only history "for free." The seductive path is instant recovery and time travel. The consequence is vacuum debt, longer delta chains, and archival/index maintenance that somebody must eventually pay. Instead bound retention windows and fund the cleanup path.
 
-- **NEVER assume HTAP solves the separation problem.** HTAP systems (TiDB,
-  AlloyDB, SingleStore) use internal replication from row-store to column-store replicas.
-  This is the same architecture as separate engines + CDC—just hidden. You still pay
-  for replication lag, and the column replica's resource consumption can impact the
-  OLTP engine through shared memory/CPU. Prefer explicit separation where you
-  control the blast radius.
+## If The First Choice Fails
 
-- **NEVER design a partitioning scheme without profiling your actual transaction mix.**
-  The seductive path is to partition by primary key. But if 20% of transactions join
-  across the partition boundary, you've built a system that serializes 20% of throughput.
-  Profile first, then partition on the key that minimizes cross-partition transactions.
-
-- **NEVER use ad-hoc SQL in a high-throughput OLTP system.** Stored procedures
-  (or pre-defined transaction classes) allow the system to pre-plan execution,
-  determine partition routing at compile time, and eliminate per-query optimization
-  overhead. Ad-hoc SQL in OLTP is a 2–5× throughput penalty from parsing,
-  planning, and extra client-server round trips.
-
-- **NEVER add a general-purpose index to a column store "just in case."** B-tree
-  indexes on column stores add write amplification without benefiting scan-heavy
-  workloads. Column stores achieve selectivity through sorted projections, zone maps,
-  and min/max pruning—not traditional indexes.
-
-- **NEVER ignore the network stack in a modern OLTP engine.** Once you eliminate
-  buffer pool/locking/latching overhead, 50–70% of CPU goes to networking. If you
-  benchmark only the query engine, you're measuring the wrong bottleneck. Measure
-  end-to-end including serialization, socket I/O, and kernel overhead.
-
-## Stonebraker's Postgres Extensibility Insight
-
-Postgres survived 40+ years because of one architectural bet: user-defined types,
-operators, index methods, and procedural languages as first-class citizens. This enabled
-PostGIS, JSONB, pgvector, and hundreds of extensions without forking the engine.
-
-The principle: **build extensibility at the type system level, not at the query level.**
-If you let users define new types + operators + index access methods, the optimizer
-and executor handle them automatically. This is cheaper than special-casing every
-new data type in the query engine. When designing a new database system, the
-question isn't "what types should we support?" but "how do we let users add types
-we haven't imagined?"
-
-## Fallback Strategies
-
-| Primary approach fails | Fallback |
-|---|---|
-| Partitioning can't get <5% cross-partition | Replicate hot dimension tables to all partitions; or switch to shared-memory MVCC |
-| Column store write throughput insufficient | Add a row-oriented write buffer (WS/RS pattern); batch writes into larger appends |
-| Main-memory engine exceeds RAM | Anti-caching: evict cold tuples to SSD, fetch on demand; or use tiered storage with access-frequency tracking |
-| Stored procedures too rigid for evolving schema | Use parameterized query templates with pre-compiled plans; avoid full ad-hoc but allow controlled flexibility |
-| Deterministic execution can't handle external calls | Isolate non-deterministic operations (e.g., current_timestamp, random) into a pre-processing step that resolves them before entering the deterministic engine |
+- If locality fails, first replicate tiny read-mostly dimensions and delete synthetic hot rows; if that still leaves unpredictable multi-partition work, move to a design that expects coordination instead of hiding it.
+- If the column store cannot keep up with writes, reduce projection count before touching codecs; projection entropy usually hurts more than imperfect compression.
+- If anti-caching misses too often, stop tuning eviction policy first and re-check whether the working-set assumption is false. Anti-caching is for skewed access, not uniform churn.
+- If the organization insists on "one database product," keep a common parser or SQL layer and specialize the execution engines underneath. Stonebraker's compromise is shared front-end, fractured back-end.

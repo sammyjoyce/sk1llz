@@ -1,106 +1,90 @@
 ---
 name: eich-language-fundamentals
-description: Write JavaScript that respects both Eich's original design (prototypes, first-class functions, dynamic objects) and how V8/SpiderMonkey actually execute it (hidden classes, inline caches, elements kinds). Use when writing hot-path Node/browser code, debugging mysterious slowdowns or memory leaks, auditing closures and this-binding, hardening code against prototype pollution, or designing objects and inheritance that won't deoptimize. Triggers: "JavaScript performance", "V8 optimization", "hidden class", "inline cache", "deopt", "prototype chain", "prototype pollution", "closure leak", "this binding", "NaN", "coercion", "== vs ===", "Object.create(null)", "language fundamentals", "ECMAScript semantics", "Eich".
-tags: javascript, v8, performance, prototypes, closures, hidden-classes, inline-cache, prototype-pollution, coercion, ecmascript
+description: Write JavaScript with expert-level control over prototypes, dynamic objects, function binding, coercion, and V8 shape/array behavior. Use when working on hot Node/Chrome paths, serialization-heavy DTO pipelines, prototype-pollution risk, tricky `this` or optional-chaining bugs, or equality/defaulting migrations. Triggers: "hidden class", "shape", "deopt", "elements kind", "prototype pollution", "__proto__", "Object.assign vs spread", "this binding", "arrow vs method", "optional chaining", "nullish coalescing", "Object.hasOwn", "Map vs Object", "coercion", "Eich", "ECMAScript semantics".
+tags: javascript, v8, prototypes, coercion, security, performance
 ---
 
-# Eich — JavaScript Language Fundamentals⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​‌‌‌​​‍‌‌‌‌​‌​​‍‌‌​‌‌​​‌‍​​​​​​‌‌‍​​​​‌​‌​‍‌‌​‌​‌‌​⁠‍⁠
+# Eich - JavaScript Language Fundamentals
 
-JavaScript is two languages stacked: the one Eich designed in ten days (prototypes, first-class functions, dynamic property bags) and the one V8 actually runs (hidden classes, inline caches, elements-kind lattices, deopt cliffs). Expert code obeys both. Every rule below is something a 10-year JS practitioner learned by shipping a bug.
+Use this skill when the bug is about JavaScript *semantics* or when V8/Node performance and object layout actually matter. Do **not** cargo-cult engine rules into ordinary feature work; first classify whether you are solving a semantics bug, a security boundary, or a measured hot path.
 
-## Mental model: what actually runs
+## Classify the problem before editing
 
-**Objects are not hash maps — they are C-structs with transitioning layouts.** V8 assigns every object a *hidden class* (shape). Adding a property transitions to a new shape; two objects share a shape only if they took the *same transition path*. Property initialization order is a correctness-for-performance decision, not a style choice: `{x, y}` and `{y, x}` are different types to the engine.
+Before changing code, ask yourself:
 
-**Arrays are tagged by elements kind, and transitions are one-way.** The lattice is `PACKED_SMI_ELEMENTS` → `PACKED_DOUBLE_ELEMENTS` → `PACKED_ELEMENTS` → `HOLEY_*`. One `-0`, `NaN`, or `Infinity` demotes a SMI array to doubles forever. One `delete` or sparse write poisons it to holey forever (`Array.prototype.fill` is the only exception, as of a 2025 V8 change).
+- **Is this a measured V8 hot path?** If not, prefer the clearest semantics and schema validation over engine folklore. Hidden-class rules are worth paying for only on profiled code or record-heavy serialization paths.
+- **Can keys or option bags be influenced by JSON, query params, CLI flags, or third-party merges?** If yes, this is a prototype-pollution problem first, not a style problem.
+- **Am I migrating `&&`/`||`, `?.`, `??`, `bind`, or method extraction?** Treat it as a parse/runtime correctness task; these operators have failure modes that look locally harmless but break at compile time or only after refactors.
+- **Will this object be serialized thousands of times?** If yes, object shape and key spelling become throughput decisions, not just readability choices.
 
-**Every property access has state.** Each source-level call site carries an inline cache that progresses *uninitialized → monomorphic → polymorphic (≤4 shapes) → megamorphic → dictionary fallback*. Megamorphic is a cliff (typical 2–20× slowdown), not a slope.
+## High-value mental models
 
-**Closures capture bindings, not values.** The "backpack" holds live references to the entire enclosing activation record — so `var i` in a loop gives every closure the same final `i`, and a 1 MB object in an outer scope stays alive as long as any returned inner function does, even if that function never mentions it.
+- **Shape path beats final key set.** In V8, two objects share a hidden class only if properties were added in the same order. `const x = {}; if (flag) x.a = 1; x.b = 2;` and `const y = { a: 1, b: 2 }` may look equivalent to you and still fragment ICs for the engine. Normalize once at construction.
+- **`delete` and prototype mutation are "slow path forever" signals.** `delete obj.k` pushes named properties toward dictionary mode; `Object.setPrototypeOf` / `obj.__proto__ = ...` invalidates optimized property access far beyond the single line that changed it.
+- **Array performance is a one-way lattice.** Sparse writes, `delete arr[i]`, and `new Array(n)` move arrays into holey or dictionary territory; out-of-bounds reads permanently taint that load site for slower prototype-aware checks.
+- **DTO shape stability now affects JSON throughput directly.** In V8 13.8+ (Chrome 138+), `JSON.stringify` gets an "express lane" for repeated objects with the same hidden class when keys are enumerable, non-`Symbol`, and don't need escaping. If you emit arrays of records, keep key order identical and prefer `null` for absent optional fields instead of omitting keys on some rows.
+- **Null-prototype objects change both security and ergonomics.** `{ __proto__: null }` is a spec-level prototype setter at creation time and is safe; `obj.__proto__ = null` is a deprecated accessor mutation and slow. On a null-prototype object, later `obj.__proto__ = x` creates an own property named `"__proto__"` instead of mutating the prototype.
+- **Bound and arrow functions solve different `this` problems.** Arrow functions capture lexical `this`; class-field arrows therefore auto-bind but allocate one closure per instance. Prototype methods share code across instances, but extracted callbacks lose their receiver unless you bind or wrap them. Bound classes still construct, but lose own static properties and cannot be used on the right side of `extends`.
+- **Prototype pollution is often a read bug, not only a write bug.** The attack is complete when polluted values are *observed*. `if (opts.isAdmin)` or `fetch(url, opts)` becomes unsafe if missing keys can resolve through a polluted prototype. Define defaults or require `Object.hasOwn`.
 
-**`this` is not part of the function, it's part of the call site.** For non-arrow functions it's determined at call time by how you call it; for arrow functions it's frozen at creation to the `this` of the enclosing scope — which is the behavior Eich admits he wanted for `function` but couldn't ship in 1995.
+## Expert heuristics that save time
 
-## Before you write: ask these
+- When you need a dynamic dictionary with untrusted keys, choose **`Map` first**. Use a null-prototype object only when an API requires plain-object shape.
+- When you must stay with objects, **declare all expected keys eagerly**. This simultaneously hardens reads against pollution and keeps shapes stable for optimized code and repeated serialization.
+- For hot numeric storage, choose **`TypedArray`** over "clever" sparse arrays. It prevents mixed-type drift and removes `push`/hole footguns by construction.
+- Prefer **`user?.id ?? fallback`** over legacy `user && user.id || fallback`. It fixes both falsy-value loss (`0`, `''`) and the `??`/`&&` parse trap during partial migrations.
+- Treat **cross-realm values** as hostile to `instanceof`. If values can come from iframes, workers, or `vm`, use realm-stable checks such as `Array.isArray`, `Buffer.isBuffer`, or `Object.prototype.toString.call(x)`.
+- For options objects that survive refactors, **use explicit defaults, not truthy reads**. `const opts = { __proto__: null, method: 'GET', mode: 'cors', ...userOpts }` is safer than branching on missing properties later.
 
-- **"Is this object on a hot path?"** If yes: every property must exist at construction, in a fixed order, with no later `delete`. Initialize absent fields to `null`, don't omit them.
-- **"Will this array ever hold mixed types?"** If yes, decide now whether to keep it integer-only (normalize `-0`, reject `NaN`) or accept the double tier. Don't find out at 3 a.m.
-- **"Does any key in `obj[k] = v` originate from JSON, query strings, or user input?"** If yes, `k ∈ {__proto__, constructor, prototype}` is a prototype-pollution vector. Use `Map`, or target a `{ __proto__: null }` object.
-- **"Am I checking for nullish?"** Use `value == null` — the single sanctioned `==`. Everywhere else use `===`.
-- **"Does this closure outlive the work that created it?"** Audit what's *in scope* at the moment of creation, not what the function body mentions. The runtime keeps the whole environment alive.
+## Decision trees
 
-## The expert rules (non-obvious)
+### Choosing the container
 
-1. **Pre-shape your objects.** `const u = { id: null, name: null, perms: null }` then assign. One shape, one IC entry, monomorphic for life. The pattern `const u = {}; if (admin) u.perms = [...];` creates two shapes and makes every consumer polymorphic.
+- Compile-time keys, JSON output, no untrusted writes: use a plain object literal.
+- Dynamic or user-controlled keys: use `Map`.
+- Dynamic keys but downstream API requires an object: use `{ __proto__: null }`, then validate/normalize before passing it on.
+- Dense fixed-length numeric data: use a `TypedArray`.
+- Arrays of records for API/cache serialization: use a single factory/constructor so every record gets the same keys in the same order.
 
-2. **Never `delete` from a long-lived object in hot code.** `delete` flips the object to dictionary mode permanently; *every* property access on that object — not just the deleted key — becomes a hash lookup. Set to `undefined` instead, or store in a `Map`.
+### Choosing the callable form
 
-3. **Prefer `[]` + `push` over `new Array(n)`.** `Array(n)` creates a `HOLEY_SMI_ELEMENTS` array from birth; you cannot recover PACKED status by filling it. Literal `[]` stays packed. If you need a filled fixed-length array, use `Array.from({length: n}, () => 0)` — that returns PACKED.
+- Needs `new`, `prototype`, shared methods, or `extends`: use `function` / class prototype methods.
+- Needs callback-safe lexical `this` and instance count is small enough that one closure per instance is acceptable: use an arrow class field.
+- Needs a callback with stable `this` but shared prototype methods: keep a normal method and bind/wrap at the boundary where it is passed away.
+- Needs constructor currying: use a wrapper function or subclass, not `Class.bind(...)`.
 
-4. **Never read `arr[i]` where `i >= arr.length`.** V8 walks the prototype chain for the missing index and marks the IC at that load site "has seen out-of-bounds" — permanently slower. The classic bug `for (let i = 0; i <= arr.length; i++)` costs ~6× on a 10 k-element array, purely from that one extra read.
+### Debugging "JS got weird"
 
-5. **`Object.setPrototypeOf(obj, p)` and `obj.__proto__ = p` deoptimize every object that ever had that prototype.** MDN is blunt: "currently a very slow operation in every browser and engine… effects are subtle and far-flung, not limited to the statement itself." Set the prototype at creation with `Object.create(proto)` or `{ __proto__: proto, ... }` in a literal. Never mutate it afterward.
+- `wrong map`, shape mismatch, or repeated deopts in Node/V8 traces: audit constructor/factory order and remove conditional property adds.
+- Array code got slower after "harmless" refactor: look for `new Array(n)`, sparse writes, `delete`, `-0`, `NaN`, `Infinity`, or one out-of-bounds read.
+- Missing option suddenly behaves truthy: suspect prototype pollution or inherited reads before you blame business logic.
+- `?.` still throws: check whether someone grouped part of the chain, e.g. `(obj?.a).b`.
+- Mechanical `||` to `??` migration fails to parse: parenthesize or rewrite as optional chaining; mixed `??` with `&&`/`||` is intentionally a syntax error without parentheses.
 
-6. **`{ __proto__: null }` in an object literal is a different feature from `obj.__proto__ = null`.** The literal form is a fast, spec-dedicated construct — the *only* fully safe way to create a null-prototype object. The accessor form triggers a setter that can be shadowed, and on a null-prototype target silently creates an own property named `"__proto__"` instead of mutating the prototype.
+## NEVER do these
 
-7. **Use `Object.hasOwn(obj, key)`, not `obj.hasOwnProperty(key)`.** The latter throws `TypeError` on null-prototype objects and can be shadowed by an attacker-controlled `hasOwnProperty` key in user input. `Object.hasOwn` is ES2022 and works unconditionally.
+- **NEVER** use `Object.assign({}, parsedUserJson)` on untrusted data because it performs `[[Set]]` on the target, which triggers `__proto__` setters. It is seductive because it looks like a harmless clone. The consequence is prototype mutation on the target object. **Instead do** spread into a fresh object or normalize into `{ __proto__: null }`.
+- **NEVER** read option bags with inherited fallthrough (`if (opts.flag)`, `opts.method || 'GET'`) when the object crossed a trust boundary. It is seductive because plain objects make missing keys feel cheap. The consequence is that polluted prototypes silently change control flow or request config. **Instead do** explicit defaults up front and gate reads with `Object.hasOwn`.
+- **NEVER** partially migrate `a && a.b || fallback` into `a && a.b ?? fallback`. It is seductive because it looks like a one-token upgrade. The consequence is a parse-time `SyntaxError` because `??` cannot mix unparenthesized with `&&` or `||`. **Instead do** `a?.b ?? fallback` or parenthesize deliberately.
+- **NEVER** group halfway through an optional chain, e.g. `(obj?.a).b`, because short-circuiting stops only along one continuous chain. It is seductive during refactors and formatting. The consequence is a runtime `TypeError` on `undefined`. **Instead do** `obj?.a?.b`.
+- **NEVER** use arrow functions as shared methods by default. It is seductive because the syntax is shorter and "auto-bound". The consequence is one closure per instance, no `prototype`, and unusable `call`/`apply` rebinding. **Instead do** prototype methods unless lexical `this` is the actual requirement.
+- **NEVER** curry classes with `bind()` when subclassing or statics matter. It is seductive because bound constructors still work with `new`. The consequence is lost own static properties and a constructor that cannot be used with `extends`. **Instead do** a wrapper factory or subclass.
+- **NEVER** preallocate hot arrays with `new Array(n)` or terminate scans by reading past `arr.length`. It is seductive if you come from C/C++ and think in reserve/capacity terms. The consequence is holey arrays, prototype-chain checks, and load sites that never become fast again. **Instead do** dense pushes, `fill`/factory initialization, or `TypedArray`.
 
-8. **`JSON.parse('{"__proto__": ...}')` is safe at parse time**, because `JSON.parse` defines an own property named `"__proto__"` without invoking the setter. It becomes unsafe the moment you `Object.assign({}, parsed)` or a deep-merge utility touches it — *that* invokes the setter and poisons `Object.prototype`. Spreading (`{...parsed}`) does not invoke the setter and is safe. This exact interaction is the source of most lodash/minimist/jQuery prototype-pollution CVEs.
+## Fallbacks when the ideal path is unavailable
 
-9. **For user-keyed dictionaries, `Map` beats plain objects.** Keys live outside the prototype chain, iteration order is insertion order and guaranteed for *all* key types (plain objects sort integer-like string keys numerically first — surprise), `size` is O(1), and any value can be a key. Use a plain object only when you need JSON serialization of code-authored keys.
+- If you cannot keep record shapes uniform because upstream data is sparse, normalize once at the boundary into a DTO with a fixed key set; keep raw data raw and make the DTO the thing hot code touches.
+- If a null-prototype object breaks downstream helpers that expect `toString`/`hasOwnProperty`, keep the unsafe shape at the edge only: use `Map` internally, then convert with `Object.fromEntries()` or a validated serializer at the boundary.
+- If V8-specific tuning hurts readability and the profiler says the code is not hot, delete the tuning and keep the semantics. Engine folklore without measurement is technical debt.
 
-10. **`NaN !== NaN`. Use `Number.isNaN(x)`, not the global `isNaN(x)`**, which coerces its argument and returns `true` for `'abc'`, `[1,2]`, and `undefined`. Use `Object.is` only when you also need to distinguish `+0` from `-0` — `Object.is(+0, -0)` is `false` while `+0 === -0` is `true`, and `Object.is(NaN, NaN)` is `true`.
+## Mandatory reference loading
 
-11. **`value == null` is the one sanctioned `==`.** Exactly equivalent to `value === null || value === undefined`; recognized by `eslint: eqeqeq: ['error', { null: 'ignore' }]`. Everywhere else `==` is asymmetric and non-transitive: `[] == ![]` is `true`, `'0' == false` is `true`, `'0' == 0` is `true`, yet `'0' == ''` is `false`, and `null == 0` is `false` even though `null >= 0` is `true`.
+- **Before** interpreting `--trace-opt`, `--trace-deopt`, `--trace-ic`, `%DebugPrint`, hidden-class churn, array hole regressions, or `JSON.stringify` throughput on Node/Chrome, **READ** [`references/v8-perf.md`](references/v8-perf.md).
+- **Before** accepting user-controlled keys, reviewing deep merge / clone / `obj[k] = v` code, hardening options objects, or deciding between `Map` and null-prototype objects, **READ** [`references/prototype-pollution.md`](references/prototype-pollution.md).
+- **Before** changing equality/defaulting semantics, writing `==`, implementing `Symbol.toPrimitive`, or migrating legacy guard expressions to `?.` / `??`, **READ** [`references/coercion-traps.md`](references/coercion-traps.md).
 
-12. **Arrow functions are not "shorter functions."** They have no own `this`, no `arguments`, no `.prototype`, cannot be `new`'d, and cannot be generators. Use arrows for callbacks where you want the enclosing `this` (replaces `const self = this` and `.bind(this)`); use `function` for methods that will go on a prototype.
+## Do NOT load references for these cases
 
-13. **`for...in` walks the prototype chain** and includes any enumerable property inherited from polyfilled prototypes. Prefer `for...of` (iterables), `Object.keys/values/entries` (own enumerable string keys), or `Reflect.ownKeys` (own, including Symbols and non-enumerable).
-
-14. **Proper tail calls are in the ES2015 spec but only Safari ships them.** Recursive code that "should be tail-safe" will still blow the stack in V8, SpiderMonkey, and every Node version. Trampoline manually or convert to iteration.
-
-15. **ASI cliff.** A line beginning with `[`, `(`, `` ` ``, `/`, `+`, or `-` after a line that could have ended an expression is parsed as continuation. The two real-world bugs: `return\n  { x: 1 }` returns `undefined`, and the leading `;` in `;(function(){…})()` at the top of a file is not paranoia — it's the fix for a concatenation hazard.
-
-16. **Cross-realm `instanceof` lies.** An `Array` from an iframe, `vm` context, or worker has a different `Array.prototype`, so it is not `instanceof Array` in the current realm. Use `Array.isArray`, `Number.isFinite`, `Buffer.isBuffer`, or brand-check with `Object.prototype.toString.call(x)` / `Symbol.toStringTag`.
-
-## NEVER — wrong path, why it's seductive, consequence, correct alternative
-
-- **NEVER add a property to an object after it's used on a hot path.** Seductive because "objects are dynamic — that's the point." Consequence: new hidden class, IC goes polymorphic, TurboFan invalidates the code specialized for the old shape. **Instead:** declare every field up front, even as `null`.
-
-- **NEVER `delete obj.key` on a long-lived hot-path object.** Seductive because it is the literal inverse of assignment. Consequence: the object flips to dictionary mode permanently and every property access on it becomes a slow hash lookup. **Instead:** `obj.key = undefined`, or use a `Map`.
-
-- **NEVER write `target[userKey] = value` without rejecting `__proto__`, `constructor`, and `prototype`.** Seductive because the language lets you. Consequence: one of those keys writes to `Object.prototype` and every object in the program inherits the poisoned property. Real CVEs in lodash, minimist, jQuery, set-value. **Instead:** `Map`, or `{ __proto__: null }` as the target, or an allow-list validator (ajv, zod).
-
-- **NEVER rely on `this` inside a callback without binding it.** Seductive because `obj.m` reads like a method reference. Consequence: `setTimeout(obj.tick, 1000)` calls `tick` with `this === undefined` (strict) or `globalThis` (sloppy). **Instead:** arrow `() => obj.tick()`, `.bind(obj)`, or a class-field arrow method.
-
-- **NEVER use `new Array(n)` to "preallocate."** Seductive because it looks like C++ `reserve`. Consequence: the array is born `HOLEY_SMI_ELEMENTS` and stays holey forever; every read does a hole check plus a prototype walk. **Instead:** `const a = []` then push; or `Array.from({length: n}, () => 0)` for a packed filled array.
-
-- **NEVER check `typeof v === 'object'` to detect objects.** Seductive because that is what the operator sounds like. Consequence: `typeof null === 'object'` — Eich's famous regret, unfixable for web compatibility. **Instead:** `v !== null && typeof v === 'object'`, or `Object(v) === v` (excludes all primitives), or `Array.isArray(v)` when you specifically want arrays.
-
-- **NEVER use `with`, `eval`, or `new Function()` with user input.** Seductive because they look like metaprogramming. Consequence: breaks every static analysis, forces V8 to bail out of the entire enclosing function's optimizations, and on user input is trivial RCE. Even `Function('return this')()` is obsolete — use `globalThis`.
-
-- **NEVER mix types in an array you care about.** Seductive because "JS lets you put anything in an array." Consequence: one `arr.push(NaN)` demotes PACKED_SMI to PACKED_DOUBLE; one `arr.push('x')` demotes further to PACKED_ELEMENTS; transitions are one-way and previously optimized code is discarded. **Instead:** keep numeric arrays homogeneous (and normalize `-0` away); or use a `TypedArray` (`Int32Array`, `Float64Array`) which is permanently typed and cannot transition.
-
-## Decision tree — "my JS is slow"
-
-1. Run with `node --trace-deopt --trace-opt` and look for your function deopting repeatedly.
-2. Deopt reason says "wrong map" / "map mismatch"? → Hidden class instability. Audit construction sites for inconsistent property order or post-hoc assignment. Fix with rule 1.
-3. Deopt reason says "not a smi" / "not a heap number"? → Elements-kind transition. Find the push/assign that introduced the other type (`-0`, `NaN`, `Infinity`, a string, an object). Normalize on ingest, or commit to a `TypedArray`.
-4. No deopts but still slow? → Run with `--trace-ic` and look for `megamorphic` at your hottest property access. Usually one function is called with too many object shapes. Split it, or normalize shapes upstream.
-5. Memory climbs under load? → Closure retention of activation records. Take a Chrome DevTools heap snapshot, filter by `(closure)` / `(system) / Context`, look for small functions retaining large `bigData`-shaped objects. Fix by narrowing scope — move the allocation into a helper the closure doesn't close over.
-
-## Decision tree — "I need a key-value store"
-
-- Keys are code-authored, fixed set, JSON-serializable? → plain `{}` literal.
-- Keys from user input or untrusted sources? → `Map`, or `Object.create(null)` if you need object-literal syntax.
-- Keys are objects that should be collectable when unreferenced? → `WeakMap`.
-- Need guaranteed insertion-order iteration, including numeric-string keys? → `Map`. Plain objects sort integer-like string keys numerically first, which silently breaks "ordered config" patterns.
-
-## References — load only on the named trigger
-
-**Before optimizing a hot path under V8/Node, or before diagnosing `--trace-deopt` / `--trace-ic` output**, READ `references/v8-perf.md`. It has the full elements-kind lattice, the IC state machine, the `delete`/dictionary-mode details, and the list of diagnostic flags.
-
-**Before accepting user-controlled keys into any merge, clone, deep-set, or `obj[k]=v` pattern**, READ `references/prototype-pollution.md`. It has the attack patterns (`__proto__`, `constructor.prototype`), the `JSON.parse` + `Object.assign` interaction, the safe-vs-unsafe literal forms, and a defense checklist.
-
-**Before writing any `==`, relying on a coercion, or implementing `Symbol.toPrimitive`**, READ `references/coercion-traps.md`. It has the ToPrimitive algorithm, the "number"/"string"/"default" hint table, the full equality asymmetry matrix, and the `value == null` exception.
-
-Do **NOT** load any of these files for ordinary feature work, code review of non-hot paths, or greenfield component authoring. The rules above are sufficient. Load only on the named triggers.
+- Do **NOT** load `references/v8-perf.md` for ordinary feature work, code review with no profile evidence, or cross-engine library code that has not been benchmarked on the target runtime.
+- Do **NOT** load `references/prototype-pollution.md` when every key is compile-time authored and the object never accepts user input or third-party merge data.
+- Do **NOT** load `references/coercion-traps.md` for straightforward typed code paths where there is no equality/defaulting/coercion behavior under review.

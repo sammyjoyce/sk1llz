@@ -1,304 +1,106 @@
 ---
 name: kelley-zig-philosophy
-description: Write Zig code in the style of Andrew Kelley, creator of Zig. Emphasizes simplicity, explicit behavior, compile-time metaprogramming, and being a better C. Use when writing systems code that prioritizes clarity and safety.
-tags: zig, comptime, allocators, manual-memory, simplicity, explicit, no-hidden-control-flow, systems, safety
+description: Write Zig in Andrew Kelley's style: explicit ownership, visible control flow, compile-time used for proof or specialization instead of cleverness, and ABI-aware data layout. Use when writing or reviewing Zig systems code, choosing allocators and lifetime models, debugging comptime or result-location bugs, or designing FFI/MMIO boundaries. Triggers: zig, comptime, allocator, ownership, lifetime, packed struct, extern struct, sentinel slice, OutOfMemory, result location semantics, ArrayList.items.
 ---
 
-# Andrew Kelley Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​‌‌​‌‌‍‌​‌‌​‌​‌‍‌‌‌‌​‌​‌‍​‌​‌‌‌​‌‍​​​​‌​‌‌‍​‌​​‌‌​​⁠‍⁠
+# Andrew Kelley Zig Philosophy
 
-## Overview
+Kelley-style Zig is not "metaprogram aggressively because the language lets you." It is "make the bytes, control flow, and failure modes obvious enough that someone can predict the machine consequences by reading the source."
 
-Andrew Kelley created Zig to address the shortcomings of C and C++ while maintaining their strengths. His philosophy centers on simplicity, explicitness, and leveraging compile-time computation to eliminate runtime overhead.
+## Working stance
 
-## Core Philosophy
+- Optimize for legibility under systems pressure: bounded memory, freestanding targets, FFI, MMIO, and postmortem debugging.
+- Favor proofs the compiler can enforce over conventions humans can forget.
+- Treat compile-time execution as a tool for specialization and validation, not as a second runtime.
+- Push policy outward. If an allocator, ownership rule, or layout choice belongs to the caller, do not hide it in the callee.
 
-> "Zig is not trying to be Rust. Zig is trying to be a better C."
+## Before writing Zig, ask yourself
 
-> "The language should not have hidden control flow."
+### Ownership
 
-> "Communicate intent to the compiler and other programmers."
+- Where are the bytes right now: global constant data, stack, allocator-owned heap, caller buffer, or container storage?
+- Who frees them, and what mutation invalidates the current view?
+- If I return this pointer or slice, can the caller outlive it or resize the backing container?
 
-Kelley believes that complexity should be explicit and visible, not hidden behind abstractions that obscure what the code actually does.
+### Specialization
 
-## Design Principles
+- Does `comptime` remove branches, types, layout decisions, or whole code paths?
+- Or am I only moving ordinary data work from runtime into compile time and making every build pay for it?
+- If this is a public API, will specialization improve clarity, or will it multiply instantiations and make errors worse?
 
-1. **No Hidden Control Flow**: What you see is what executes.
+### Representation
 
-2. **No Hidden Allocations**: Memory operations are explicit.
+- Is this normal in-memory data, a C ABI contract, or a bit-exact register or wire image?
+- Do I need an owned allocation, or would a caller-provided buffer or returned value keep policy out of the API?
+- Am I choosing a sentinel type because the sentinel is semantically required, or just because C is nearby?
 
-3. **Compile-Time Over Runtime**: Move computation to compile time.
+## Decision rules that matter in practice
 
-4. **Simplicity Over Features**: Small, orthogonal feature set.
+### Allocators are policy, so libraries do not pick one
 
-## When Writing Code
+- Library boundary: accept `Allocator` or write into caller-owned storage.
+- Known upper bound at comptime: use `FixedBufferAllocator`.
+- One-shot CLI, frame, or request lifetime where everything dies together: use `ArenaAllocator`.
+- Tests: use `std.testing.allocator`; when OOM handling matters, add `std.testing.FailingAllocator`.
+- Application-level general allocation: keep one allocator near `main`; in debug builds, `DebugAllocator` is the default pressure test. In `ReleaseFast`, `smp_allocator` is a reasonable general fallback.
 
-### Always
+### Handle OOM even on Linux
 
-- Use `comptime` to eliminate runtime overhead
-- Make allocations explicit with allocator parameters
-- Handle all error cases explicitly
-- Prefer slices over pointers when possible
-- Use `defer` for cleanup
-- Document with `///` doc comments
+- Zig's standard failure mode is `error.OutOfMemory`, not "the process will probably crash anyway."
+- Overcommit is not universal, and on Linux it can degrade into OOM-killer roulette rather than a clean failure.
+- Kelley-style code treats OOM handling as part of portability: embedded, RT, Windows, tests, and reusable libraries all benefit.
 
-### Never
+### Use `comptime` to prove or specialize, not to show off
 
-- Hide control flow in operator overloads (Zig doesn't have them)
-- Allocate implicitly—always pass allocators
-- Ignore errors—handle or explicitly discard
-- Use C-style null-terminated strings when slices work
-- Rely on undefined behavior
+- If compile-time work only computes ordinary data, keep it runtime unless specialization changes generated code or proves a real invariant.
+- The default `@setEvalBranchQuota` budget is `1000` backwards branches. Needing to raise it is a design review trigger, not a badge of honor.
+- `inline` and `inline for` are for compile-time-known structure. Using them to unroll mundane data paths usually buys code size and compile-time cost, not better design.
 
-### Prefer
+### Prefer value semantics until pointer semantics are truly required
 
-- `comptime` over runtime generics
-- Error unions over exceptions
-- Slices over raw pointers
-- `defer` over manual cleanup
-- Explicit allocators over global state
-- Packed structs for binary compatibility
+- Zig may pass aggregates by value or by reference, whichever is cheaper. Treat parameters as values and any address derived from them as ephemeral.
+- Returning structs by value is normal Zig, not "expensive C". Result-location semantics often let Zig construct directly in the destination.
+- Before introducing out-pointers, ask whether you are solving a real pinning or mutation need or just importing C habits.
 
-## Code Patterns
+### Result-location semantics are a real design constraint
 
-### Compile-Time Computation
+- `.{ ... }` can write directly into the destination. That is why `arr = .{ arr[1], arr[0] }` is not a swap.
+- Typed initializers `T{ ... }` do not propagate result locations. Use that fact, or an explicit temporary, when in-place construction would alias the old value.
+- If an initializer reads from the object it is overwriting, stop and decide whether you want in-place writes or a temporary. Do not let syntax choose for you.
 
-```zig
-// comptime: evaluated at compile time, zero runtime cost
-fn fibonacci(comptime n: u32) u32 {
-    if (n <= 1) return n;
-    return fibonacci(n - 1) + fibonacci(n - 2);
-}
+### Layout choice is semantic, not aesthetic
 
-// This is computed at compile time
-const fib_10 = fibonacci(10);  // 55, no runtime computation
+- Default `struct`: ordinary in-memory data; let the compiler reorder and pad.
+- `extern struct`: exact C ABI contract.
+- `packed struct`: exact bit layout only when you truly mean "this value is a register or wire image."
+- Packed layout still does not erase byte-order concerns. Andrew's bit-field design defines layout, but fields wider than 8 bits behave differently depending on byte alignment, so "packed" is not a substitute for thinking about endianness.
 
-// Generic programming with comptime
-fn max(comptime T: type, a: T, b: T) T {
-    return if (a > b) a else b;
-}
+### Slices, sentinels, and borrowed container views have sharp edges
 
-const result = max(i32, 5, 10);  // Type-safe, zero overhead
+- `[:0]T` guarantees a sentinel at index `len`; it does not promise there are no earlier sentinel bytes.
+- Sentinel slicing checks the promised sentinel and traps if the backing data does not actually contain it at that position.
+- `std.ArrayList.items` is a borrowed view whose lifetime ends at the next resize. Hand it out only if you freeze mutation or transfer ownership first.
 
+## NEVER do these
 
-// Compile-time type reflection
-fn printFields(comptime T: type) void {
-    const fields = @typeInfo(T).Struct.fields;
-    inline for (fields) |field| {
-        @compileLog(field.name);
-    }
-}
-```
+- NEVER smuggle an allocator choice into a library because "page allocator is fine for now." That hides policy, breaks bounded-memory and freestanding callers, and makes tests less meaningful. Instead accept an `Allocator` or a caller-owned buffer.
+- NEVER paper over comptime blowups with `@setEvalBranchQuota` because the seductive part is that the compile error disappears. The concrete cost is slower builds and more generated code for work that probably belonged at runtime. Instead keep only proof, layout, and codegen at comptime.
+- NEVER mutate individual fields through a `*volatile packed struct` because field syntax becomes read-modify-write on bits and is not atomic for MMIO. Instead build a full register value and store it once through the volatile pointer.
+- NEVER keep `&param` or a borrowed view such as `ArrayList.items` beyond the immediate scope because Zig is free to pass aggregates by reference or copy, and container resizes invalidate borrowed slices. Instead return values, freeze mutation, or transfer ownership explicitly.
+- NEVER use `[:0]const u8` as your default internal string type because C interop makes it feel convenient. The non-obvious consequence is that you import sentinel invariants and runtime sentinel checks into code that only needed a byte slice. Instead keep `[]const u8` internally and convert at the boundary.
+- NEVER rewrite an aggregate with `x = .{ ... x ... }` unless you have reasoned about result-location semantics. The seductive part is that it looks like constructing a fresh value; the consequence is silent aliasing and wrong answers in swap-like code. Instead use a temporary or a typed initializer when you need separation.
+- NEVER normalize `.?` or `catch unreachable` during bring-up because it feels like a quick way to state intent. The hidden cost is that ordinary absence or failure turns into safety traps and a worse public API. Instead preserve `?T` and `error!T` until the invariant is genuinely local and proven.
+- NEVER assume "OOM cannot happen here" because Linux overcommit exists. The consequence is nondeterministic process death on some systems and unusable libraries on others. Instead propagate `error.OutOfMemory` and test that path.
+- NEVER reach for recursion on unbounded input because the seductive part is clean code. The concrete consequence is unbounded stack growth, and Zig does not magically rescue you from that today. Instead use an explicit stack or bounded arena when depth is data-dependent.
 
-### Error Handling
+## Fallbacks when the design is unclear
 
-```zig
-// Errors are values, not exceptions
-const FileError = error{
-    NotFound,
-    PermissionDenied,
-    Unexpected,
-};
+- If ownership is muddy, redesign the API to return a value or write into caller-provided storage. "Document it better" is not the first fix.
+- If packed or bit-cast code behaves strangely, replace reinterpretation with explicit encode or decode first. Reintroduce packed layout only after endian and MMIO behavior are proven.
+- If comptime and runtime are both viable, ship the runtime version first and add specialization only where it deletes real work or proves invariants.
+- If performance work is forcing `@setRuntimeSafety(false)`, first get the code correct in safety-enabled tests and name the invariant you are removing checks for. Kelley-style Zig turns safety off surgically, not preemptively.
 
-fn readFile(path: []const u8) FileError![]u8 {
-    // Return error or success
-    if (path.len == 0) {
-        return error.NotFound;
-    }
-    // ... read file
-    return data;
-}
+## Scope control
 
-// Caller must handle errors explicitly
-pub fn main() void {
-    const data = readFile("config.txt") catch |err| {
-        switch (err) {
-            error.NotFound => std.debug.print("File not found\n", .{}),
-            error.PermissionDenied => std.debug.print("Access denied\n", .{}),
-            else => std.debug.print("Unexpected error\n", .{}),
-        }
-        return;
-    };
-    
-    // Use data...
-}
-
-// try: shorthand for catch and return
-fn processFile(path: []const u8) !void {
-    const data = try readFile(path);  // Propagates error if any
-    // Process data...
-}
-
-// errdefer: cleanup only on error
-fn allocateAndProcess(allocator: Allocator) !*Resource {
-    const resource = try allocator.create(Resource);
-    errdefer allocator.destroy(resource);  // Only runs if error occurs
-    
-    try resource.init();  // If this fails, resource is freed
-    return resource;
-}
-```
-
-### Explicit Memory Management
-
-```zig
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-// Always pass allocator explicitly
-fn createBuffer(allocator: Allocator, size: usize) ![]u8 {
-    return allocator.alloc(u8, size);
-}
-
-fn processData(allocator: Allocator, input: []const u8) ![]u8 {
-    var result = try allocator.alloc(u8, input.len * 2);
-    errdefer allocator.free(result);
-    
-    // Process...
-    
-    return result;
-}
-
-pub fn main() !void {
-    // Choose your allocator
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    
-    const allocator = gpa.allocator();
-    
-    const buffer = try createBuffer(allocator, 1024);
-    defer allocator.free(buffer);
-    
-    // Use buffer...
-}
-```
-
-### Defer and Cleanup
-
-```zig
-fn processFile(path: []const u8) !void {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();  // Always closes, even on error
-    
-    var buffer: [4096]u8 = undefined;
-    const bytes_read = try file.read(&buffer);
-    
-    // Process buffer...
-}
-
-// Multiple defers execute in reverse order
-fn complexOperation() !void {
-    const a = try acquireResourceA();
-    defer releaseResourceA(a);
-    
-    const b = try acquireResourceB();
-    defer releaseResourceB(b);
-    
-    const c = try acquireResourceC();
-    defer releaseResourceC(c);
-    
-    // On exit (success or error):
-    // 1. releaseResourceC
-    // 2. releaseResourceB
-    // 3. releaseResourceA
-}
-```
-
-### Slices Over Pointers
-
-```zig
-// Slices: pointer + length, safer than raw pointers
-fn processBytes(data: []const u8) void {
-    for (data) |byte| {
-        // Safe iteration, bounds checked in debug
-        std.debug.print("{x}", .{byte});
-    }
-}
-
-// Slice operations
-fn example() void {
-    const array = [_]u8{ 1, 2, 3, 4, 5 };
-    
-    const slice = array[1..4];  // [2, 3, 4]
-    const from_start = array[0..3];  // [1, 2, 3]
-    const to_end = array[2..];  // [3, 4, 5]
-    
-    // Sentinel-terminated slices for C interop
-    const c_string: [:0]const u8 = "hello";
-}
-
-// Convert between pointer types explicitly
-fn pointerConversions(ptr: [*]u8, len: usize) void {
-    const slice = ptr[0..len];  // Many-pointer to slice
-    const single = &ptr[0];     // Many-pointer to single pointer
-}
-```
-
-### Structs and Methods
-
-```zig
-const Point = struct {
-    x: f32,
-    y: f32,
-    
-    // Methods are just namespaced functions
-    pub fn distance(self: Point, other: Point) f32 {
-        const dx = self.x - other.x;
-        const dy = self.y - other.y;
-        return @sqrt(dx * dx + dy * dy);
-    }
-    
-    pub fn zero() Point {
-        return .{ .x = 0, .y = 0 };
-    }
-};
-
-// Usage
-const p1 = Point{ .x = 0, .y = 0 };
-const p2 = Point{ .x = 3, .y = 4 };
-const dist = p1.distance(p2);  // 5.0
-const origin = Point.zero();
-```
-
-### Optionals and Null Safety
-
-```zig
-// Optional: T or null, explicit handling required
-fn findUser(id: u32) ?User {
-    if (id == 0) return null;
-    return users[id];
-}
-
-pub fn main() void {
-    // Must handle null case
-    if (findUser(42)) |user| {
-        std.debug.print("Found: {s}\n", .{user.name});
-    } else {
-        std.debug.print("User not found\n", .{});
-    }
-    
-    // orelse: provide default
-    const user = findUser(42) orelse User.anonymous();
-    
-    // .?: unwrap or undefined behavior (debug trap)
-    const user = findUser(42).?;  // Crashes if null in debug
-}
-```
-
-## Mental Model
-
-Kelley approaches systems programming by asking:
-
-1. **Can this run at compile time?** Use `comptime` to shift work
-2. **Is control flow visible?** No hidden jumps or allocations
-3. **Are errors handled?** Every error path must be addressed
-4. **Is memory explicit?** Allocators passed, lifetimes clear
-5. **Would a C programmer understand the output?** Zig maps to predictable machine code
-
-## Signature Kelley Moves
-
-- `comptime` for zero-cost generics
-- Explicit allocator parameters everywhere
-- `defer`/`errdefer` for cleanup
-- Error unions instead of exceptions
-- Slices instead of pointer arithmetic
-- No operator overloading, no hidden behavior
+- This skill is intentionally self-contained. Do not load extra material for normal Zig implementation or review work.
+- Leave this skill only when the task is primarily about Zig version migration, `std.Build` or package-manager churn, or target-specific ABI or linker behavior; those are toolchain problems, not philosophy problems.

@@ -1,119 +1,79 @@
 ---
 name: ritchie-c-mastery
-description: Write portable C in the style of Dennis Ritchie — abstraction with transparent cost, minimal language, trust-the-programmer discipline applied to the real standard, not to folklore. Use when writing C89/C99/C11/C17 systems code, designing C APIs and opaque handles, debugging "works at -O0, miscompiles at -O2" bugs, hunting strict-aliasing / integer-promotion / signed-overflow undefined behavior, porting code across gcc/clang/MSVC or x86/ARM/PPC, reviewing kernel-style C, or deciding between K&R idioms and modern safer replacements. Triggers on .c/.h files, "portable C", "systems programming", "undefined behavior", "strict aliasing", "opaque type", "errno", "restrict", "volatile", "type punning", "endianness", "K&R style", "goto cleanup", "kernel C", "malloc realloc", "short read short write", "memory-mapped I/O".
+description: >
+  Decision-heavy systems C guidance for code that sits on undefined-behavior,
+  ABI, allocator, signal, atomic, or wire-format fault lines. Use when writing
+  or reviewing C where optimizer assumptions, packed layouts, hostile inputs,
+  or portability can turn "works here" into production-only corruption.
+  Trigger on: strict aliasing, effective type, packed structs, reallocarray,
+  malloc(0), realloc(p,0), signal handlers, PIPE_BUF, lock-free atomics,
+  object-size, string_copying, sanitizer triage, and ABI boundaries.
 ---
 
-# Ritchie C Mastery
+# Ritchie Systems C
 
-## The Ritchie Worldview (from the C Rationale, not from memes)
+## Load only what applies
+- Before touching byte reinterprets, packed layouts, or `-O0`/`-O2` drift, READ `references/ub-and-aliasing.md`.
+- Before changing cleanup flow, syscall loops, fd lifetime, or public C APIs, READ `references/portable-idioms.md`.
+- Do NOT load `references/portable-idioms.md` for aliasing-only triage.
+- Do NOT load `references/ub-and-aliasing.md` for API-shape-only work.
 
-Three non-negotiables Ritchie and the committee stated explicitly in the Rationale:
+## Core stance
+- Ritchie-style C is not "close to assembly"; it is a contract with two judges: the abstract machine and the target ABI. If either can legally refute your assumption, the code is wrong even when the CPU currently "does what you meant".
+- The expensive bugs are proof bugs: the compiler can prove overflow cannot happen, the allocator can legally hand back a zero-sized sentinel, or the kernel can legally interleave a pipe write you thought was atomic.
+- Prefer representations that make illegal states hard to express at the edge: byte arrays on the wire, opaque structs at ABI boundaries, explicit `count,size` pairs, and one ownership sentence per resource.
 
-- **"Trust the programmer"** — meaning the language will not second-guess you with runtime checks or hidden allocations. It does NOT mean the programmer can be sloppy; it means every mistake is yours to pay for.
-- **"Don't prevent the programmer from doing what needs to be done."**
-- **"Keep the language small and simple."** The spec is smaller than the library on purpose.
+## Before doing X, ask yourself...
+- Before reading bytes as a wider type: **Am I relying on aliasing, alignment, and endianness staying friendly at the same time? If yes, I am already in debt.**
+- Before growing an allocation: **Is the risky operation the multiplication, the resize, or the caller's bookkeeping? Guard all three separately.**
+- Before marking anything `packed`: **Am I optimizing layout, or silently creating misaligned pointers the compiler will not reliably warn about?**
+- Before using a signal handler for control flow: **Can this be reduced to "store a flag / write one byte / return"? Anything more is usually a portability bug.**
+- Before picking warning levels: **Am I tuning CI noise, or am I trying to surface a specific UB class for one audit? The right knob depends on which goal I mean.**
 
-Ritchie's own public regret list (internalise these; they bite daily):
+## Decision trees
 
-- `&` / `|` / `^` precedence *below* `==` / `!=`. Artifact of pre-`&&` C where `a==b & c==d` meant logical AND. **Always parenthesise: `(x & MASK) == VAL`.** gcc and clang warn; it is the single most-cited "wrong precedence" in C.
-- Null-terminated strings — chosen because the PDP-11 `MOVB` instruction tested for zero in one cycle. Rob Pike called this "the most expensive one-byte mistake." You inherit O(n) `strlen`, no binary-safe strings, and a buffer-overflow design.
-- Array decay to pointers — makes `sizeof(arr)` lie the moment you pass it to a function.
+### 1) Bytes to typed values
+- Wire/file bytes plus unknown alignment: use byte assembly or fixed-size `memcpy`. Do not cast.
+- Native in-memory object plus need byte inspection: use `unsigned char *`; char-like access is the sanctioned escape hatch.
+- Need bit reinterpretation across types: default to `memcpy`, even if a union "works here". Union punning stops being trustworthy once addresses escape or LTO reasons across translation units.
 
-None of these is fixable. Your job is to code *around* them, not wish them away.
+### 2) Size calculations and resize paths
+- Any `count * size`: prefer `reallocarray` or `calloc`; if unavailable, use overflow intrinsics before the allocator call.
+- Any request that can exceed `PTRDIFF_MAX`: reject it before allocation. Modern glibc rejects sizes above that threshold, and other allocators fail less uniformly.
+- Need zero-length semantics: choose one project rule and document it. Linux man-pages permit a unique freeable pointer for `malloc(0)`; OpenBSD returns an access-protected zero-sized object that faults on use.
+- Need `realloc(p, 0)`: do not use it as `free` shorthand. glibc documents it as non-conforming and dangerous; branch explicitly on zero and call `free`.
 
-## Before You Write Any C, Ask Yourself
+### 3) Signals and wakeups
+- Need "tell the main loop something happened": self-pipe or `eventfd`, with handler writes no larger than `PIPE_BUF`.
+- Need shared state from a handler: use `volatile sig_atomic_t` or lock-free atomics only. POSIX.1-2024 allows `<stdatomic.h>` operations in handlers only when the atomic arguments are lock-free.
+- Need complex cleanup from a handler: do not. Save `errno`, record intent, restore `errno`, and let ordinary control flow do the unsafe work.
 
-1. **What does the abstract machine say?** — not "what does x86-64 do." The C abstract machine is stricter than any real CPU. Code that "works" on x86-64 at `-O0` routinely miscompiles at `-O2` or on ARM because the optimiser is reasoning about the abstract machine, not about your hardware.
-2. **What type is this expression *actually* evaluated in?** Integer promotion silently widens `unsigned char` / `unsigned short` to **signed** `int`. `(uint16_t)0xFFFF * (uint16_t)0xFFFF` is signed-int overflow (UB) on every 32-bit-`int` platform, which is nearly all of them.
-3. **Is this pointer the result of an operation the standard defines?** `(T*)(char_ptr + offset)` is UB the instant `offset` isn't aligned for `T` — *before* you dereference. The conversion itself is the UB (C11 6.3.2.3p7).
-4. **Who owns this memory, for how long, and who frees it?** Write the ownership rule in one sentence in the header comment. If you can't, the API is wrong, not the comment.
-5. **Will the optimiser assume this never happens?** Every UB is an optimiser assumption. A signed-overflow check `if (a + 1 < a)` will be *deleted* at `-O2` because signed overflow "can't happen."
+### 4) Diagnostics when the bug appears only under optimization
+- Suspect aliasing but `-Wstrict-aliasing` is quiet: try `-Wstrict-aliasing=1` for a one-off audit; `=3` is the default and trades fewer false negatives for far fewer false positives.
+- Suspect overflow reasoning: `-Wstrict-overflow=1` catches the easy landmines; levels `4-5` are audit settings and produce large amounts of noise.
+- Suspect subobject overruns in structs: `-Wstringop-overflow=3` surfaces smaller-member overruns that default level 2 can miss, but expect benign warnings.
+- Suspect uninitialized-state bugs: compile an optimized warning build. GCC only emits `-Wmaybe-uninitialized` with optimization, and optimization can also erase some evidence by exploiting UB.
+- Suspect provenance, alignment, or lifetime bugs: run `-fsanitize=alignment,object-size,undefined,address`. `object-size` is valuable precisely because it uses optimizer knowledge that `-O0` never forms.
+- Need the source of an MSan hit, not just the sink: use `-fsanitize-memory-track-origins=2`. If the slowdown is too high, drop to `=1`; Clang documents roughly `1.5x-2x` extra slowdown for origin tracking on top of normal MSan cost.
+- Using explicit atomic orders: keep GCC's default `-Winvalid-memory-model` active so nonsense like store plus `memory_order_consume` is rejected early.
 
-## Expert Decisions That Took The Industry Decades To Settle
+## NEVER paths experts learn the hard way
+- NEVER take the address of a `packed` member and treat compiler silence as validation because GCC's `-Wno-address-of-packed-member` behavior is enabled by default. Instead copy through bytes or `memcpy`, and turn on `-fsanitize=alignment` when auditing.
+- NEVER keep `size += delta; p = realloc(p, size);` because it feels linear and tidy; on failure your bookkeeping lies while the old object still exists, which is how leaks and stale bounds checks ship. Instead compute `new_size` separately and commit it only after success.
+- NEVER use `strncpy` as a "safer strcpy" because it is for null-padded fixed-size records, not strings; it may omit the terminator and it zero-fills the tail. Instead use explicit-length byte copies for records, or a real string API when the destination must be a string.
+- NEVER default to `strlcpy` or `strlcat` on attacker-controlled input because they feel modern and safe; Linux `string_copying(7)` notes they must read the entire source string, which turns very long hostile inputs into needless latency and DoS surface. Instead bound the read you are willing to inspect, then copy exactly that amount.
+- NEVER write more than `PIPE_BUF` bytes to a self-pipe and assume atomic wakeups because POSIX only guarantees atomicity up to `PIPE_BUF` (minimum 512 bytes; 4096 on Linux). Instead keep handler writes tiny and fixed-size.
+- NEVER use `realloc(p, 0)` or `reallocarray(p, 0, 0)` as portability tricks because glibc documents both as unsafe/non-conforming and C changed the semantics multiple times. Instead branch on zero before the call and make ownership explicit.
+- NEVER `siglongjmp` out of a handler because it masquerades as structured error handling while dropping you into code that may immediately touch unsafe library state. Instead set state and unwind in ordinary execution.
+- NEVER assume a clean `-Wstrict-aliasing=3` build proves cast-based punning is safe because GCC explicitly says the warning does not catch all cases. Instead treat cast-plus-dereference on non-character buffers as guilty until rewritten.
 
-### Type punning: `memcpy`, never a cast, rarely a union.
+## Hardening defaults by consequence
+- High freedom: API shape, module boundaries, representation choices. Optimize for explicit ownership and ABI evolution.
+- Low freedom: casts, packed layouts, signal handlers, overflow checks, atomics, wire-format loads. Here the cost of creativity is UB, so use the documented idiom rather than taste.
 
-`*(uint32_t*)float_ptr` is strict-aliasing UB. GCC `-O2` will reorder loads/stores across it and hand you values from the future (see `-fstrict-aliasing`; the Linux kernel builds with `-fno-strict-aliasing` for exactly this reason). Union punning is *defined* in C99 TC3 but breaks under LTO when the union escapes through a pointer. **Use `memcpy(&dst, &src, sizeof dst)` always**; every mainstream compiler lowers it to a register move at `-O1+`. This is the one case where `memcpy` is genuinely free. Before diving into any aliasing discussion, **READ `references/ub-and-aliasing.md`**.
-
-### `errno` is a three-rule minefield.
-
-1. `errno` is meaningful **only** after a function that documents setting it returns its documented failure sentinel. A successful call is permitted to leave `errno` nonzero. **Never test `errno` to detect that an error happened** — test the return value first.
-2. Any libc call between the failure and your check may clobber `errno` — including `printf`, `fprintf(stderr, ...)`, `strerror`, even `free` on some libcs. **Save immediately: `int e = errno;`.**
-3. For functions where `-1` is a legitimate success (`getpriority`, `strtol`, `readdir`), you **must** set `errno = 0;` *before* the call and test `errno != 0` after.
-
-### `read(2)` and `write(2)` can — and will — return short.
-
-A `write()` of 8192 bytes may return 4096. A `read()` from a pipe, socket, or terminal returns whatever's available now, not what you asked for. `fread`/`fwrite` loop for you; raw syscalls do not. **Every raw `read`/`write` must be in a loop that handles `EINTR` and partial transfer**, or you have a silent data-loss bug that only shows up under load. Template is in `references/portable-idioms.md`.
-
-### `volatile` is for MMIO and signal handlers. That is the whole list.
-
-`volatile` does **not** establish happens-before, does not emit memory barriers, does not prevent inter-thread reordering. The Linux kernel document `volatile-considered-harmful.rst` bans it from kernel code except for hardware registers. Use `_Atomic` / `<stdatomic.h>` (C11) for threads. The only legitimate uses: (1) reading a memory-mapped hardware register that changes without your code writing it, (2) writing a `sig_atomic_t` from a signal handler.
-
-### `restrict` helps in exactly one place.
-
-`restrict` almost never pays off *inside* a function the compiler can inline — after inlining, the compiler proves non-aliasing itself. Recent GCC/Clang versions even emit *runtime* alias checks for vectorisable loops (see `-fopt-info-vec-all`: `loop versioned for vectorization because of possible aliasing`). `restrict` pays off at **non-inlinable boundaries**: exported library functions, separate translation units, and inner loops the compiler can't version. Lying to `restrict` is silent UB with no diagnostic. Rule: add `restrict` *only* after profiling and reading the generated asm.
-
-### `goto cleanup` is idiomatic C, not a sin.
-
-Multi-acquisition functions (open fd → malloc buf → lock → ...) have *one* correct cleanup path. C has no RAII; the alternative is nested `if`s or a flag jungle that will leak under maintenance. Labels go in **reverse acquisition order**. Never `goto` *forward* past a VLA declaration — C99 6.8.6.1 makes that UB. Full template in `references/portable-idioms.md`.
-
-## NEVER list — every item has bitten real production code
-
-- **NEVER** detect signed overflow with `if (a + 1 < a)`. Signed overflow is UB; the optimiser *deletes* the check. CERT VU#162289 (GCC). Use `if (a > INT_MAX - 1)`, `-fwrapv`, or `__builtin_add_overflow(a, 1, &r)`.
-- **NEVER** cast `char*` / `uint8_t*` to `uint16_t*` / `uint32_t*` for "fast parsing." That is alignment-UB on ARMv5/SPARC/MIPS (SIGBUS) and strict-aliasing UB on everything. GCC will cheerfully emit `MOVDQA` against an odd address. Use `memcpy(&x, p, sizeof x)` — identical codegen at `-O1`, zero UB.
-- **NEVER** write `p = realloc(p, n)`. If `realloc` fails it returns NULL, you overwrite `p`, and you've leaked the original buffer. Always: `void *tmp = realloc(p, n); if (!tmp) { /* p still valid */ return -1; } p = tmp;`.
-- **NEVER** assume `char` is signed. On ARM and PowerPC it defaults to *unsigned*; on x86 it's signed. `char c = getc(f); if (c == EOF)` is silently broken on ARM (EOF is -1; `c` is 0..255). **Always `int c = getc(f);`.**
-- **NEVER** call non-async-signal-safe functions from a signal handler. That bans `malloc`, `printf`, `fprintf`, `exit`, almost all of libc. The permitted list is in `man 7 signal-safety` — about 40 functions (`write`, `_exit`, `sig_atomic_t` writes, some POSIX syscalls). Violating this causes deadlocks that hit once per 10⁸ signals and survive every code review.
-- **NEVER** use `scanf("%s", buf)` — no length limit, guaranteed overflow. `scanf("%1023s", buf)` is survivable but still mishandles whitespace, EOF, and matching failures. Use `fgets` + explicit parse.
-- **NEVER** use `strncpy` as a "safe `strcpy`." It was designed for fixed-width v7 Unix directory entries — if the source is longer than `n`, the result is **not** null-terminated. Use `snprintf(dst, size, "%s", src)` or a bounded copy helper.
-- **NEVER** mix signed and unsigned in a comparison: `for (int i = 0; i < v.len; i++)` where `v.len` is `size_t`. If `v.len > INT_MAX` the loop runs forever (or never), and the signed-to-unsigned conversion rule makes the mistake silent. Pick one type end-to-end: `for (size_t i = 0; i < v.len; i++)`.
-- **NEVER** rely on `malloc(0)`. Implementation-defined: may return NULL (not an error) or a unique non-null pointer. Either branch hides bugs. Clamp small sizes to a minimum, or check `n == 0` yourself.
-- **NEVER** ship `#pragma once` in headers used across build systems. Non-standard, handles symlinks / bind mounts / hardlinks inconsistently across compilers, silently fails when two files resolve to the same inode via different paths. Use `#ifndef MYPROJ_FOO_H` guards.
-- **NEVER** use `signal()` in new code; use `sigaction()`. `signal()` semantics (one-shot vs persistent, EINTR behaviour) differ between BSD, System V, and glibc. `sigaction` is portable and explicit.
-
-## Decision Trees
-
-**"I need to read a multi-byte integer from a byte buffer":**
-```
-Is the buffer guaranteed aligned for the target type?
-├── Yes → still use memcpy for strict-aliasing safety
-└── No  → memcpy into a local, OR byte-shift assemble:
-          v = (uint32_t)p[0]<<24 | (uint32_t)p[1]<<16 | (uint32_t)p[2]<<8 | p[3];
-          (byte-shift is endian-independent AND alignment-safe)
-```
-
-**"Compiler miscompiles at -O2, fine at -O0":**
-```
-99% of the time this is UB in YOUR code, not a compiler bug.
-1. Rebuild with: -fsanitize=undefined,address -fno-omit-frame-pointer
-2. Hunt for: signed overflow, uninitialised reads, strict aliasing,
-   misaligned loads, OOB, use-after-free, shifts ≥ type width.
-3. Only after UBSan+ASan are clean may you suspect the compiler.
-4. Before filing a compiler bug: build with -O2 -fno-strict-aliasing
-   and -O2 -fwrapv. If either "fixes" it, you had UB.
-```
-
-**"errno is 0 / stale after a failure":**
-```
-Did any libc call (including printf for logging!) run between the
-failure and the errno check?
-├── Yes → save errno at the failure site: int e = errno;
-└── No  → is the function one where -1 can be valid success
-          (strtol, getpriority, readdir)?
-          └── Yes → errno = 0; BEFORE the call; test errno != 0 after.
-```
-
-**"Do I need `volatile`?":**
-```
-Is it a memory-mapped hardware register?                  → YES, volatile.
-Is it a flag written from a signal handler (sig_atomic_t)? → YES, volatile.
-Anything else (threads, "force reload", "prevent opt")?   → NO. Use _Atomic
-                                                            or a proper barrier.
-```
-
-## References — load only when needed
-
-- **`references/ub-and-aliasing.md`** — Strict aliasing rules and the `char*` / `unsigned char*` exception, integer-promotion traps, signed-overflow optimiser behaviour, real-world miscompilation examples (CERT VU#162289, Linux kernel cases), `-fno-strict-aliasing` / `-fwrapv` / `-ftrapv` trade-offs, union-punning caveats. **READ before debugging any miscompilation or aliasing issue.**
-- **`references/portable-idioms.md`** — Full `goto cleanup` templates with reverse-order labels, endian-independent `read_be32` / `write_le64` helpers, short-read/short-write loop with EINTR handling, opaque handle pattern, flexible array members, header design checklist. **READ when designing a new C API or porting to a new platform.**
-
-Do NOT load both references for a single-file bug fix. Do NOT load either for trivial edits to existing code.
+## Exit checklist
+- Every pointer reinterpretation survives aliasing, alignment, and endianness scrutiny independently.
+- Every growth path has a checked multiplication, a checked resize, and bookkeeping that updates only after success.
+- Every handler path fits in one breath: save `errno`, set flag or tiny write, restore `errno`, return.
+- Every fixed-size copy states whether the destination is a string, a character sequence, or raw bytes.
+- Every "compiler bug" suspicion has already survived the warning and sanitizer ladder above.

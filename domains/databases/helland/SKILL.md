@@ -1,112 +1,149 @@
 ---
 name: helland-distributed-data
-description: >-
-  Design scalable data systems applying Pat Helland's patterns from "Life Beyond
-  Distributed Transactions," "Data on the Outside vs Inside," "Building on
-  Quicksand," and "Immutability Changes Everything." Use when building systems
-  that must scale beyond single-node ACID, designing entity boundaries for
-  partitioning, implementing idempotency and deduplication, choosing between
-  sagas and eventual completion, or deciding what data crosses service
-  boundaries. Triggers: distributed transactions, entity partitioning, cross-
-  service consistency, idempotent operations, outbox pattern, saga compensation,
-  inside vs outside data, at-least-once messaging, scale-agnostic design.
+description: Apply Pat Helland's distributed-data philosophy to cross-service state, retries, versioned facts, and low-tail-latency coordination. Use when designing entity boundaries, idempotency contracts, outside-data schemas, tentative workflows, reconciliation paths, or quorum behavior under jitter. Trigger keywords: helland, entities, activities, idempotency, outside data, inside data, tentative operations, versioned facts, reconciliation, repartitioning, at-least-once, stale reads, quorum, jitter, fuzzy visibility.
 ---
 
-# Pat Helland — Distributed Data Design
+# Helland Distributed Data
 
-## Thinking Framework
+Use this skill when the failure boundary matters more than the call graph.
 
-Before designing any cross-entity interaction, ask yourself:
+## Mandatory source reloads
 
-1. **"What is the entity?"** — The entity is whatever fits in one transactional scope. If two things must update atomically, they are ONE entity, not two. Stop fighting this.
-2. **"What if this message arrives twice? Three times? After a week?"** — If you can't answer, you haven't finished designing.
-3. **"Is this data inside or outside?"** — Inside data is mutable, rich, query-able. Outside data is immutable, versioned, simple. Mixing them up is the #1 source of distributed bugs.
-4. **"Am I managing uncertainty in the business logic or hiding it?"** — If hiding it, you're building a fragile system. Uncertainty (tentative holds, pending reservations, allocation against credit) must be explicit in your domain model.
+- Before designing cross-service message formats or reference data, reread `Data on the Outside versus Data on the Inside`, especially the sections on stable data, immutable schemas, and references.
+- Before claiming cross-entity atomicity, dedup, or workflow correctness, reread `Life Beyond Distributed Transactions`, especially entities, activities, and tentative operations.
+- Before using quorum to dodge slow nodes, reread `Decoupled Transactions`, especially fuzzy visibility, confluence, retirement, and the 3AZ examples.
+- Do NOT start with generic CAP, saga, or event-sourcing summaries. They usually blur the inside/outside split and hide the negative-space failure modes Helland is warning about.
 
-## Decision Tree: How to Handle Cross-Entity Operations
+## First classifier
 
-```
-Do both things NEED atomic consistency?
-├─ YES → They are one entity. Merge them. Stop here.
-└─ NO → Can the operation be naturally idempotent (read-only, or set-to-value)?
-    ├─ YES → No dedup infrastructure needed. Use it.
-    └─ NO → Is this a business-level decision that can be reversed?
-        ├─ YES → Saga with compensating actions (business errors only)
-        └─ NO → Eventual completion with retry + idempotency keys
-            └─ NEVER use saga compensation for technical failures.
-                Technical errors need retry-to-completion, not rollback.
-```
+Ask these in order before sketching an API or schema:
 
-## Expert Knowledge: What Takes Years to Learn
+1. **Is the invariant inside one entity-key?**
+   - Yes: keep it inside one transactional scope.
+   - No: stop talking about ACID across that boundary; you are designing a collaboration.
+2. **Is this data inside, outside, or activity state?**
+   - Inside data: mutable, optimized for local invariants.
+   - Outside data: immutable or versioned facts crossing time and trust.
+   - Activity state: what one entity remembers about one partner.
+3. **Are you proving "X happened" or "X did not happen"?**
+   - Positive existence can often ride on quorum/confluence.
+   - Negative claims are harder; live quorum can lie during transition.
+4. **Is the work naturally idempotent or only made idempotent by remembered identity?**
+   - If it changes substantive business state, assume you must remember it.
+5. **Can any side effect be canceled?**
+   - If not, it belongs after confirmation, not inside the tentative step.
 
-### Entity Sizing — The Hard Part Nobody Talks About
+## Hard-won lenses
 
-- Entities grow in **number**, not in **size**. Helland's key observation: almost-infinite scaling increases entity count while individual entities stay small enough for one machine.
-- **Alternate indices cannot be transactionally consistent** at scale. If you reference a customer by SSN, credit card number, AND email, those indices will live on different machines. Accept eventual consistency for lookups or unify under one canonical key.
-- Two objects that need transactional coupling must share a key prefix. If you're assigning them different keys but wrapping them in one transaction "just in case" — you've created a scaling time bomb that works today and explodes at 10x load.
+- The **entity-key is the atomicity boundary**. If two records "must" commit together but have different keys, either you have not found the real entity yet or you need an activity-based protocol.
+- **Repartitioning is the bug revealer.** Neighbor-based atomic assumptions appear to work in tests, then fail only after scale or rebalancing moves keys apart.
+- **Dedup memory must travel with the entity.** A transport-layer or cache-layer duplicate filter that does not move with partitioning is counterfeit exactly-once.
+- **Activity is per partner, not per workflow in the abstract.** Uncertainty is relational. If you cannot point to the partner whose state you are remembering, the model is too vague to recover.
+- **Idempotence is about substantive behavior, not all side effects.** Extra logs, heap churn, counters, or monitoring noise are often acceptable; duplicate reservation, charge, or entitlement grant is not.
+- **Outside data has no shared "now."** Anything published as `current_*` is unstable unless versioned with an as-of meaning consumers can preserve.
+- **Stable data requires never-reused names.** If an outside copy may outlive your internal record lifecycle, recycling customer IDs, seat IDs, or document numbers turns old facts ambiguous.
+- **Extensibility fights shredding.** If you eagerly flatten outside messages into inside tables, the first unplanned field or schema drift gets silently discarded.
+- **Replay-safe messages need exact schema identity.** A message that says "parse me with the current schema" is not immutable enough to survive time.
+- **Compensation is not restoration.** Lower layers keep side effects: cache churn, queue load, staffing triggers, block splits, downstream reservations. Undo at the business layer does not rewind the universe.
+- **Quorum visibility is fuzzy during transition.** Incomplete quorum operations can be intermittently included; they can flutter into and out of visibility.
+- **Negative proofs need extra machinery.** "Does exist" and "does not exist" are different problems. Exact absence needs sealing, windowing, retirement, or a more ordered authority.
 
-### Activities — The Concept Most Teams Miss
+## Design procedure
 
-Helland's **activities** are per-partner state within an entity. Each entity tracks what it knows about each partner entity (messages received, messages sent, current protocol state). This is NOT just a dedup table — it's a fine-grained workflow state machine per relationship.
+### 1. Name the entity before naming the endpoint
 
-- Structure idempotency state per-partner, not as a global flat table. At scale, a single `processed_requests` table becomes a bottleneck. Partition dedup state by the *partner entity key*.
-- Activities encode the protocol: "I sent an offer, they accepted, I confirmed." This makes debugging distributed interactions possible because each entity holds its complete view of each relationship.
+- Write the entity-key for every stateful operation.
+- If an operation needs two keys, choose one:
+  - Re-key so the invariant lives inside one entity.
+  - Or split into messages and accept uncertainty explicitly.
 
-### Idempotency — Where Teams Actually Fail
+### 2. Classify every datum by temporal contract
 
-- **The dedup-check-then-process race condition**: Two identical messages arrive simultaneously. Both check the dedup table, both find nothing, both process. Fix: the dedup record and the business effect MUST be in the same atomic transaction. Not "check then do" — "do with unique constraint".
-- **Idempotency keys in Redis with TTL will lose guarantees**. The second Redis evicts the key or a node fails, you lose dedup state. For anything financial, idempotency belongs in the source-of-truth database with a unique constraint, not in a cache.
-- **Return the stored result, not just "already processed"**. The original caller may not have received the first response. Returning the same result on retry is what makes the operation truly idempotent from the caller's perspective.
-- **Natural idempotency is underused**. Helland distinguishes "naturally idempotent" (reads, set-to-value) from "substantively changing" messages. Before building dedup infrastructure, ask if you can restructure the operation to be naturally idempotent (e.g., "set balance to X" instead of "decrement by Y").
+- **Inside:** mutable state whose meaning is local and current.
+- **Outside:** immutable or versioned fact whose meaning survives copying, delay, and replay.
+- **Activity:** partner-specific memory such as last accepted request, pending reservation, or reneging status.
 
-### Sagas — The Critical Distinction Teams Get Wrong
+If a datum crosses a service boundary and can be retried later, publish it as outside data, not a pointer to mutable inside state.
 
-Sagas handle **business errors** (credit limit exceeded, inventory unavailable). They CANNOT handle **technical errors** (database timeout, network partition, service crash).
+### 3. Define idempotence at the business layer
 
-- When a compensating action fails due to a technical error, you cannot "compensate the compensation." This is an infinite regress. Technical errors in distributed systems are non-deterministic — a one-shot deterministic approach like saga compensation will eventually leave you with corrupted data.
-- The correct architecture: build a **reliable technical layer** that retries operations to eventual completion, then run sagas on TOP of that layer for business-level rollback.
-- **If you need sagas everywhere, your service boundaries are wrong.** Pervasive saga usage is a design smell. Services organized around entities (Order Service, Customer Service, Inventory Service) inherently require cross-service transactions. Reorganize around use cases instead.
-- Non-compensatable operations exist: sent emails, printed documents, fired missiles. Design your saga step ordering so non-compensatable steps execute LAST, after all fallible steps.
+Before saying "this is idempotent," ask:
 
-### Inside vs Outside Data — Practical Consequences
+- What counts as the **substantive effect**?
+- What identity proves "same work" across crash, retry, and new session?
+- How long can legitimate retries or replays occur?
+- What exact prior response must be replayed on duplicate acceptance?
 
-- **Outside data lives in the past**. The moment data leaves a service boundary, it's a snapshot from a prior point in time. Design for staleness: include version identifiers, timestamps, and explicit "as-of" semantics.
-- **"Anything called 'current' is not stable"** (Helland's rule). `current_inventory`, `current_price` — these are not safe to pass across boundaries. Pass `inventory_as_of_2024_03_15T10:00:00Z` instead.
-- **Don't recycle identifiers**. `customer_id = 42` must mean the same customer forever. Reusing IDs after deletion creates semantic corruption across every system that cached that reference.
-- Outside data forms a DAG (Directed Acyclic Graph) of immutable items generated independently by different services. New data references old data but never mutates it. Schema must travel with the data (self-describing messages).
+Use an operation identity tied to intent, not transport:
 
-### Immutability — The Operational Insight
+- Good: check number, payment instruction ID, client-generated command ID, `(partner, business object, operation kind, sequence)`.
+- Bad: TCP connection, request timestamp alone, worker-local counter, cache entry keyed only by payload hash.
 
-Helland: "The truth is the log. The database is a cache of a subset of the log."
+Retention rule:
 
-- **Immutable data eliminates eventual-consistency anomalies in distributed storage.** When storing immutable blocks in a consistent-hashing ring, you cannot get stale versions — each block has the only version it will ever have. This is why append-only designs tolerate weaker storage guarantees.
-- **You can know WHERE you are writing or WHEN the write will complete, but not both.** By preallocating immutable file IDs from a strongly consistent catalog, writes to weakly consistent storage become predictable.
-- **Immutability enables idempotent retry of computation**, not just storage. MapReduce, Dryad, and modern batch jobs work because functional computation over immutable inputs is inherently idempotent. Apply this to your own data pipelines.
-- Dark side: denormalization consumes storage, copy-on-write layers compound, and you must still solve garbage collection ("DOES NOT EXIST" queries require knowing all references are gone — a coordination problem immutability doesn't solve).
+- Keep dedup state for at least the full business replay horizon. Helland's banking example works because check numbers are stable and checks expire within a bounded window; a `24h` TTL on a `90d` retry horizon is a duplicate-payment bug, not an optimization.
 
-## NEVER
+### 4. Model tentative work as explicit uncertainty
 
-- **NEVER use saga compensation to recover from technical errors** — it will eventually corrupt your data. Technical errors need retry-to-completion on a reliable lower layer. Sagas are for business rule violations only.
-- **NEVER store idempotency keys only in a cache (Redis/Memcached)** — TTL expiry or node failure silently destroys your exactly-once guarantees. Use a durable store with a unique constraint.
-- **NEVER design two entities that must coordinate for basic operations** — if they must be atomic, they are one entity. If you're adding distributed locking between entities, you're rebuilding 2PC without admitting it.
-- **NEVER pass mutable or "current" references across service boundaries** — outside data must be immutable and timestamped. "Current price" is meaningless to a receiver who processes it 200ms later.
-- **NEVER assume exactly-once message delivery exists** — at-least-once with idempotent processing is the only practical guarantee. Building on exactly-once is building on quicksand.
-- **NEVER implement check-then-act idempotency outside a transaction** — the race window between "check if processed" and "mark as processed" is exactly where duplicate processing hides.
+For every tentative operation, write down:
 
-## Fallbacks When Things Go Wrong
+- Who is allowed to confirm.
+- Who is allowed to cancel.
+- What timeout means.
+- Whether reneging is allowed after timeout.
+- Which side effect is irreversible.
 
-| Situation | Primary approach | Fallback |
-|---|---|---|
-| Saga compensation fails | Retry compensation with backoff | Escalate to dead-letter + human review queue |
-| Outbox publisher falls behind | Increase polling frequency / batch size | Switch to CDC (Change Data Capture) from the outbox table |
-| Entity too large for one node | Identify sub-entities with independent lifecycle | Split into parent + child entities connected by messages |
-| Idempotency table growing unbounded | TTL-based cleanup of old entries | Archive to cold storage; keep last N days in hot path |
-| Stale reference data causing bad decisions | Increase refresh frequency | Add version-check callback before committing ("is offer still valid?") |
+If you cannot express cancel and confirm rights, you do not have a tentative step. You have already committed.
 
-## Key Helland Papers (Read These)
+### 5. Be precise about quorum semantics
 
-- **"Life Beyond Distributed Transactions"** (2007/2016) — entities, activities, idempotency
-- **"Data on the Outside vs Data on the Inside"** (2005) — inside/outside, temporal domains, stable data
-- **"Building on Quicksand"** (2009) — memories, guesses, apologies; accept uncertainty
-- **"Immutability Changes Everything"** (2015) — append-only at every layer
-- **"Decoupled Transactions"** (2022) — quorum-based snapshot isolation on jittery servers
+When quorum is used to avoid jitter, classify the question:
+
+- **Existence query:** quorum/confluence may be enough.
+- **Non-existence query:** require sealing, windowing, retirement, or a single ordered authority.
+
+Operational numbers from Helland's 3AZ thought experiment:
+
+- Catalogs: `9` replicas, wait for `5`, tolerate `4` jittery (`AZ+1`).
+- Log durability example: `6` replicas, durable after `4` acknowledgements, so `2` slow replicas do not stall progress.
+
+Use these as reasoning shapes, not cargo-cult constants. The point is to size `N` and `Q` around bounded jitter and explicit failure assumptions.
+
+## Decision tree
+
+| Situation | Primary move | Fallback when it fails |
+| --- | --- | --- |
+| Need invariant across two keys | Re-key into one entity | Use activity state plus reconciliation and pending business states |
+| Need low latency despite slow replicas | Quorum over bounded jitter | Drop to ordered authority for negative claims or retirement decisions |
+| Need duplicate-safe side effects | Durable business-layer idempotency identity | Manual reconciliation queue with exact replay token and original intent |
+| Need external consumers to reason about past facts | Publish immutable/versioned outside data | Publish as-of snapshots plus explicit staleness contract |
+| Need to ingest flexible partner payloads | Preserve immutable envelope, then project | Store raw envelope and late-bind new fields instead of lossy reparse |
+
+## NEVERs that matter
+
+- NEVER depend on two different entity-keys staying colocated because the seductive "it works in test and usually hashes nearby" assumption turns into a production-only atomicity bug after repartitioning; instead unify the invariant under one key or make the collaboration explicit.
+- NEVER answer a business-critical "does not exist" question from live quorum reads because incomplete operations are intermittently included and can later disappear from visibility; instead seal or window the input, retire old items monotonically, or route the claim through an ordered authority.
+- NEVER use session identity, socket identity, or worker-local counters for idempotency because crash-retry from a new session replays the same intent as new work; instead assign the identity at business ingress and retain it for the entire replay horizon.
+- NEVER publish references to mutable outside facts such as `current_inventory` or `latest_price` because consumers read them under different clocks and derive contradictory truths; instead publish versioned or as-of facts whose identifiers are stable.
+- NEVER recycle identifiers or rely on a floating "latest schema" label because outside copies live longer than your rename cycle and later replays become semantically ambiguous; instead mint never-reused identifiers and stamp each message with the exact schema version it was authored against.
+- NEVER shred a partner message before preserving the immutable envelope because extensibility fights shredding and the first unplanned field becomes unrecoverable data loss; instead keep the original envelope and project inside views from it.
+- NEVER fire irreversible effects during a tentative step because cancel/confirm races leave payments, notices, or entitlements attached to uncertain state; instead persist the tentative agreement first and schedule irreversible effects only after confirmation.
+- NEVER promise "exactly once" across a failure boundary because lower layers may repeat work, reorder deliveries, or preserve side effects after compensation; instead promise at-least-once delivery plus substantive idempotence and reconciliation.
+- NEVER let compensation loops flap on every oscillation because lower layers keep TMI side effects and repeated cancel/reapply cycles amplify load; instead add hysteresis, thresholds, or manual review to unstable workflows.
+
+## Freedom calibration
+
+- **Low freedom:** money, inventory, seat allocation, legal commitments, entitlement issuance. Require explicit entity-key, operation identity, replay horizon, activity state, and irreversible-step ordering.
+- **Medium freedom:** schema boundaries, projection shapes, reconciliation UX, staleness contracts. Preserve the Helland invariants, but design can vary.
+- **High freedom:** educational diagrams, prose explanations, naming, and comparison material. Keep the inside/outside/activity split intact.
+
+## Sanity checks before shipping
+
+- Can every cross-entity operation point to durable activity state on both sides?
+- Is every duplicate-prone command tied to a stable business identity?
+- Does every outside reference name an immutable or versioned fact?
+- Are negative claims backed by more than "I asked a quorum and didn't see it"?
+- Do irreversible effects happen only after uncertainty is resolved?
+- If a retry arrives months later from a different session, is the answer still correct?
+
+If any answer is "no," the design is not yet Helland-safe.

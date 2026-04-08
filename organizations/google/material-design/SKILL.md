@@ -1,124 +1,128 @@
 ---
 name: google-material-design
-description: Apply Material Design 3 / Material 3 Expressive (M3E) the way Google's design team actually uses it in 2025 — surface-container roles instead of elevation tints, tonal vs. shadow elevation tradeoffs, HCT/dynamic-color pitfalls, motion-physics springs, canonical adaptive layouts, and the M3E "containment + emphasis" tactics that beat flat design 4× in eye-tracking. Use when building or reviewing Android, Flutter, Compose, or web UIs that target M3/M3E; when migrating from M2 or pre-2023 M3; when wiring dynamic color, theme builders, or wallpaper extraction; when picking navigation patterns across window size classes; when an interface "feels Material but looks wrong"; or when keywords like material design, material 3, material you, m3 expressive, dynamic color, tonal palette, surface tint, surface container, navigation rail, FAB, canonical layout, shared element transition, container transform, or jetpack compose theming appear.
+description: Apply modern Material Design 3 and Material 3 Expressive using current spec behavior, not M2 or early-M3 folklore. Use when designing or reviewing Android, Compose, Flutter, or web UIs that rely on Material tokens, dynamic color, adaptive navigation, window size classes, or M3 Expressive motion; when upgrading compose-material3 and visuals change unexpectedly; or when requests mention material design, material 3, material you, m3 expressive, dynamic color, surface container, primaryFixed, navigation suite, wide navigation rail, list-detail scaffold, supporting pane, shared element, tonal elevation, or HCT.
 ---
 
-# Google Material Design (M3 / M3 Expressive)
+# Google Material Design
 
-Material is no longer "flat with shadows." Two structural shifts since 2023 invalidate most pre-2024 tutorials and most things you "remember" about Material:
+Most Material failures are not "bad taste." They are contract mistakes:
 
-1. **Tone-based surfaces (Mar 2023)** replaced elevation-tied `surface-tint` overlays. `surfaceTint` is **deprecated**. Use the five `surfaceContainer*` roles.
-2. **Material 3 Expressive (May 2025)** reverses flat-design minimalism with containment, stronger color, emphasized type, and a spring-physics motion system. Eye-tracking shows users find primary actions **4× faster** and the elderly/young performance gap collapses. M3E is additive — *not* M4, *not* a deprecation of M3.
+- **Spec drift**: using M2 or 2021-era advice against post-2023 M3.
+- **Library-default drift**: Compose upgraded a component default and your screenshots changed.
+- **Role misuse**: treating color roles as arbitrary swatches instead of behavioral tokens.
 
-If a tutorial still says "increase elevation to tint a card" or "use surfaceTint with elevationOverlay," it predates the 2023 update. Reject it.
+Before changing anything, ask:
 
-## Before you touch the design system, ask
+1. **Did the UI change after a dependency bump?** If yes, suspect component defaults before you "fix" the palette.
+2. **Is the problem about containment, not depth?** If yes, choose a different `surfaceContainer*` role, not more dp.
+3. **Does the accent need to stay visually stable across light/dark or wallpaper changes?** If yes, use fixed roles or selective dynamic theming, not a blanket dynamic scheme.
+4. **Is the layout bug caused by resize/posture changes?** If yes, stop writing raw width checks and switch to the adaptive scaffolds.
 
-1. **Is this a brand-first product (banking, medical, brand-led commerce)?** → Disable wallpaper-derived dynamic color for `primary`/`onPrimary`. Use *selective dynamic theming*: dynamic surfaces, static brand accents. (Pattern: copy a `dynamicLightColorScheme` and overwrite `primary`/`onPrimary` only.)
-2. **Is the UI sitting on photos, gradients, or busy backgrounds?** → Tonal elevation alone will disappear. Add a *small* `Modifier.shadow` or a 32%-opacity scrim. Default M3 tonal is calibrated for solid surfaces.
-3. **Am I targeting Android < 12?** → `dynamicLightColorScheme` returns null below API 31. You **must** ship a baseline `lightColorScheme`/`darkColorScheme` fallback or your app will crash on >50% of in-market devices.
-4. **Am I about to write a `width < 600` media query?** → Stop. Use the five window size classes (Compact 0–599, Medium 600–839, Expanded 840–1199, Large 1200–1599, Extra-Large 1600+). They handle split-screen, foldables, and landscape phones — bare width queries don't.
-5. **Is this an M3E component (FAB menu, button group, split button, toolbar, loading indicator)?** → As of late 2025 these are **alpha** in `androidx.compose.material3`. Don't ship them in production-critical paths without a fallback.
+## What changed that still trips up senior teams
 
-## Decisions experts get right and beginners get wrong
+### Surface containers replaced most manual elevation styling
 
-### Tonal vs. shadow elevation (the choice that ruins dark mode)
+Post-2023 M3 moved components toward explicit surface roles and away from "surface plus tint math." In Compose Material 3, many defaults now encode the role directly:
 
-| Situation | Use | Why |
-|---|---|---|
-| Default Material card on a solid surface | **Tonal only** | Adapts to light/dark and dynamic color automatically |
-| Card over a photo, gradient, video, or map | **Tonal + small shadow** | Shadows give the only reliable separation against busy backgrounds |
-| Anything in dark theme that needs to "lift" | **Tonal** | Shadows on dark backgrounds vanish into the noise; tonal *brightens* the surface as it rises |
-| Dialogs, menus, FAB at rest | **Tonal + shadow** | These need unambiguous separation in both themes |
-| "It looks flat in dark mode" | You're using shadow only | Switch to tonal (M3 default), shadows are a *selective* tool now |
+- `ElevatedCard` and `ElevatedButton` use `SurfaceContainerLow`
+- `FilledCard`, `SearchBar`, and `TextField` use `SurfaceContainerHighest`
+- `AlertDialog` and `DatePicker` use `SurfaceContainerHigh`
+- menus and modal drawers moved to new container roles, and several previous tonal elevations were reduced to `0.dp`
 
-### `surfaceContainer*` is not a synonym for elevation
+The practical consequence: if a component looks "too lifted" after you customize it, check whether the library already applied a container role before you add your own tonal elevation on top. In current Compose releases, restoring old drawer or menu elevation values is usually reintroducing pre-migration behavior, not fixing a bug.
 
-The five surface container roles are **not** ordered by z-distance. They are ordered by *emphasis against the base surface*. Use them for containment, not for "this card is higher than that one." Migration:
+### Constructors without fixed roles or surface containers are already legacy
 
-| Pre-2023 M3 | After Mar 2023 |
-|---|---|
-| `surface` + tint at elev +1 | `surfaceContainerLow` |
-| `surface` + tint at elev +2 | `surfaceContainer` *(default for cards)* |
-| `surface` + tint at elev +3 | `surfaceContainerHigh` |
-| `surface` + tint at elev +4 / +5 | `surfaceContainerHighest` *(elev +4/+5 deprecated as resting states)* |
-| `surfaceVariant` | `surfaceContainerHighest` |
+Compose deprecated `ColorScheme` constructors that omit fixed roles and the new surface-container roles. If you hand-build a scheme and ignore `primaryFixed`, `secondaryFixed`, `surfaceContainerHigh`, and friends, you are freezing an older spec snapshot into your app.
 
-M3 elevation is now **6 levels (0 → +5)**, but only **0 → +3 are valid resting states**. Levels +4 and +5 are reserved for hover and dragged states. If a designer asks for "elev +5 cards," they're using M2 mental models.
+Use fixed roles when the accent must keep roughly the same perceived tone in light and dark themes. Use normal `primary` roles when you want Material's dynamic behavior.
 
-### Dynamic color: the three things the docs bury
+### Adaptive navigation defaults are more conservative than most teams assume
 
-1. **HCT is sRGB-only.** The Material Color Utilities quantizer converts images through an sRGB canvas context. Wide-gamut (P3, Rec2020) source pixels collapse to their sRGB nearest. If you're extracting from HDR/P3 photography, expect color shifts. Don't use HCT/MCU as a general color library.
-2. **Default extraction desaturates your brand.** The color algorithm maps any input to a tonal palette and then picks tone 40 (light) / 80 (dark) for `primary`. A vibrant `#E91E63` becomes a muted desaturated pink. **Enable `fidelity`** (or use `SchemeFidelity`/`SchemeContent` variants) to keep tones close to the source. The price: slightly less consistent contrast — re-verify on/role pairings.
-3. **`harmonize()` is for non-scheme colors only.** Use it to nudge status colors (custom red/green/yellow indicators) toward your `primary` hue so they don't visually clash, *without* losing semantic meaning (red stays red-ish). **Never harmonize true brand colors** — that's exactly what they should never do.
+For Compose adaptive navigation, the default suite is:
 
-### Dynamic scheme variants — pick by intent, not vibe
+- **Navigation bar** when width is compact, height is compact, or the device is in tabletop posture
+- **Navigation rail** otherwise
 
-`TonalSpot` (default, conservative) · `Vibrant` (more chroma, brand-friendly) · `Expressive` (variable hues, playful) · `Fidelity` / `Content` (preserve source tone) · `Monochrome` · `Neutral` · `Rainbow` · `FruitSalad`. The novice mistake is shipping `TonalSpot` for a brand that needs `Vibrant`/`Fidelity`, then complaining "Material made my colors boring."
+Drawer is not the default "because the screen is wide." If you want a drawer on expanded desktop/tablet layouts, make that an explicit information-architecture decision, not an automatic breakpoint reflex.
 
-### The medium-width (600–839dp) trap
+### Default window classes are three-tier unless you opt into five
 
-The official guidance is *recommended single-pane* in medium, not two-pane. Most teams reflexively split panes at 600dp because that's where "tablets" begin in their head. At 600–839dp the panes are too cramped, both panes lose breathing room, and touch targets crowd. Use two-pane in medium **only** for information-dense list-detail with quick scanning (mail, files). For everything else, single-pane until 840dp.
+Material 3's current window size APIs return `Compact`, `Medium`, and `Expanded` by default. Large and extra-large width classes exist only when you explicitly opt in. Do not build a five-breakpoint system unless the product truly behaves differently on desktop vs. tablet-large. Most apps only need three.
 
-### Navigation pattern by window size — the right table
+## Decision rules experts actually use
 
-| Width | Primary nav | Note |
-|---|---|---|
-| 0–599 (Compact) | Bottom `NavigationBar` (3–5 items) | Never put a drawer here; rail is too wide |
-| 600–839 (Medium) | `NavigationRail` (3–7 items) | "Extended rail" is **not in the M3 spec** — that's a Flutter custom and a known anti-pattern |
-| 840+ (Expanded/Large/XL) | `PermanentNavigationDrawer` (full labels) | Switch to drawer; rail loses information value |
+### Choosing surface roles
 
-## When implementing, use these exact numbers
+- `surfaceContainerLow` means "slightly separated from the base surface"
+- `surfaceContainer` means "default contained surface"
+- `surfaceContainerHigh/Highest` mean "needs stronger containment"
 
-- **State layer opacities (M3 spec, not your taste):** hover **0.08**, focus **0.12**, pressed **0.12**, dragged **0.16**. Disabled is **not** a state layer — set element opacity to **0.38** and container/surface to **0.12**.
-- **Scrim:** color role `scrim` at **32%** opacity. Not 50%, not "rgba(0,0,0,0.5)".
-- **Touch target:** **48dp minimum** on Android. iOS HIG is 44pt — they are not interchangeable; if your team copies iOS specs you'll fail Material a11y review.
-- **Animation budget on handhelds:** stay in **200–400ms** for transitions; never exceed 500ms unless choreographing a hero moment. Long-running transitions feel broken, not premium.
-- **Spring physics tokens (M3E motion):** `spatial*` springs animate position/size; `effects*` springs animate color/opacity. **Never mix** — using a spatial spring on opacity produces visible overshoot artifacts.
+These are **containment** signals, not a z-axis. Resting elevation should usually stay at levels `0` through `+3`; `+4` and `+5` are interaction states such as hover and dragged, not steady-state cards.
+
+If the background is photographic, mapped, or gradient-heavy, tonal separation will disappear. Keep the container role, then add a small shadow or a 32% scrim. On busy backgrounds, shadow is a contrast tool, not a style choice.
+
+### Choosing dynamic color strategy
+
+- **Brand must stay recognizable**: start from the dynamic scheme, then overwrite the brand-critical family or fixed roles.
+- **Photo- or content-derived theme**: use `SchemeContent` or `SchemeFidelity`, not the default `TonalSpot`.
+- **Accessibility request**: use `contrastLevel` for user preference only. The range is `-1` to `1`; treating `1.0` as a design flourish flattens hierarchy and makes everything feel equally loud.
+
+Two non-obvious MCU behaviors matter in production:
+
+1. Image quantization and HCT extraction are effectively sRGB-oriented. Wide-gamut source colors can collapse in ways brand teams interpret as "wrong."
+2. MCU contains a `DislikeAnalyzer` that lightens dark yellow-greens considered broadly unpleasant. The current heuristic targets hues roughly `90..111`, chroma above `16`, and tone below `65`, then lifts them toward tone `70`. If themes extracted from foliage or food imagery skew away from the source, that may be intentional library behavior, not a bug.
+
+### Choosing navigation and pane scaffolds
+
+- Use `NavigationSuiteScaffold` first. Override the type only when labels add more value than reclaimed content width.
+- Use `ListDetailPaneScaffold` and `SupportingPaneScaffold` before inventing your own two-pane rules.
+- Keep list-detail single-pane through compact and usually medium. Split views that trigger at `600dp` by habit almost always feel cramped.
+- If you truly need a labeled rail, prefer the platform's `WideNavigationRail` over a homemade "extended rail" pattern.
+
+### Choosing motion
+
+In M3 Expressive, spring families are semantically split:
+
+- `spatial*` springs are for position, size, and geometry
+- `effects*` springs are for color and opacity
+
+Do not mix them. Overshoot on opacity reads as flicker. This is exactly why Material 3 moved bottom-sheet motion away from a spring in one of the Compose updates: visible overshoot looked broken.
 
 ## Anti-patterns
 
-**NEVER use `surfaceTint` with elevation overlays.** It's seductive because Material Theme Builder *still* emits the `--md-sys-color-surface-tint` token for legacy compatibility, and old Stack Overflow answers tell you to multiply it by elevation. **Consequence:** double-tinting against the new `surfaceContainer*` roles, wrong contrast in dark mode, and a UI that subtly drifts off-spec on every component. **Instead:** delete `surfaceTint` from custom themes and assign components to `surfaceContainerLow/Container/High/Highest` based on *containment emphasis*, not depth.
+**NEVER treat a post-upgrade visual diff as proof your palette is wrong** because the seductive path is to tweak tokens until screenshots match old builds. The concrete consequence is weeks of fighting upstream defaults when the real change was a library migration to new `surfaceContainer*` roles or fixed-role constructors. Instead diff the component defaults for your `compose-material3` version first.
 
-**NEVER let a surface "pop in" or fade in from nothing.** It looks fine in isolation and reads as "snappy." **Consequence:** breaks the material metaphor — physical paper cannot teleport — and users perceive the screen as glitching, not as fast. Eye-tracking studies attribute click hesitation to this. **Instead:** surfaces enter via *container transform* (an existing element expands into the new surface), *shared axis* (slide for sibling navigation), or *fade through* (only for unrelated content swaps with no spatial relationship).
+**NEVER hand-paint `surfaceTint` overlays** because old blog posts, generated CSS, and Stack Overflow snippets make it look like "how tonal elevation works." The non-obvious problem is that modern M3 components already resolve containment through container roles and built-in tonal elevation behavior; adding your own tint creates double-elevation and dark-theme drift. Instead assign the correct `surfaceContainer*` role or use `Surface(tonalElevation = ...)` and let the library resolve it.
 
-**NEVER blindly enable `dynamicColor = true` for a brand product.** Personalization sounds great. **Consequence:** your bank app's logo color disappears, error states clash with someone's lavender wallpaper, and Compliance asks why the "send money" button is now mauve. **Instead:** enable dynamic color for `surface*`/`background` roles only, and overwrite `primary`/`onPrimary`/`error` from your brand baseline (`dynamicLightColorScheme(ctx).copy(primary = Brand.Primary, ...)`).
+**NEVER use a permanent drawer just because the window is wide** because labels feel safer than icons and wide layouts tempt teams to spend width on navigation chrome. The consequence is lost content area, awkward medium-width behavior, and divergence from the adaptive suite's bar-or-rail default. Instead start with `NavigationSuiteScaffold`, then override to drawer only when the IA truly benefits from always-visible labels and sections.
 
-**NEVER design buttons with whitespace as the only signifier.** Flat-design dogma says "remove what's not needed." **Consequence:** NN/g, Burmistrov, Lücken, *and* Google's own M3E research all show measurable click hesitation, hesitancy time roughly doubling, and a stark age-related performance gap. M3E redesigns improved *send-button discovery* 4× by adding container, contrast, and color. **Instead:** apply M3E **containment** (rounded backgrounds, common-region grouping, contrasted fills) on every primary action. Whitespace alone is not a signifier.
+**NEVER split list-detail at `600dp` by reflex** because "tablet starts at 600" is an old Android heuristic that still sounds pragmatic. The consequence is a cramped medium layout where neither pane has enough breathing room and touch targets compete with content. Instead use the adaptive pane scaffolds and keep medium single-pane unless dense scanning is measurably better.
 
-**NEVER use shadow elevation as the primary depth cue in dark theme.** It's the M2 reflex. **Consequence:** shadows blend into dark backgrounds and the hierarchy collapses. **Instead:** rely on *tonal* elevation (which brightens the surface) and add shadow only where you also need separation against a busy/photographic background.
+**NEVER crank `contrastLevel` or choose `Fidelity` just to make the UI feel punchier** because the result looks vivid in isolated mocks. The consequence is flattened hierarchy, role pairs that need re-verification, and a theme that stops behaving like Material's accessibility model. Instead use fidelity for source preservation and contrast for user need.
 
-**NEVER hardcode `if (width < 600)` style breakpoints.** They feel pragmatic. **Consequence:** breaks split-screen multitasking, breaks foldables in book posture, treats landscape phones as "tablets," and produces the exact hardcoded-magic-number bugs adaptive layouts exist to prevent. **Instead:** use `WindowSizeClass.calculateFromSize(...)` (Compose) / `currentWindowAdaptiveInfo()` and switch on the official five classes.
+**NEVER shrink hit targets to "undo" minimum interactive sizing** because large fonts, desktop windows, and icon-only actions make the padded version look visually off. The consequence is misaligned visuals and unreliable tap regions. Instead keep the 48dp hit area and align with `MinimumInteractiveTopAlignmentLine` and `MinimumInteractiveLeftAlignmentLine` when the visual edge must line up cleanly.
 
-**NEVER use Material Theme Builder's generated CSS verbatim.** It still emits `--md-sys-color-surface-tint` and pre-deprecation overlay variables. **Consequence:** drift from current spec. **Instead:** generate, then strip `surface-tint*` and add the `surfaceContainer{Lowest,Low,,High,Highest}` roles by hand.
+## Recovery playbook
 
-**NEVER ship M3E alpha components on a critical user path.** They look slick in demos. **Consequence:** alpha API surface, breaking changes between releases, missing accessibility wiring. **Instead:** use the stable `androidx.compose.material3` components and reserve M3E (button groups, FAB menu, split buttons, toolbars, loading indicator, motion-physics springs) for hero moments behind a feature flag.
+- **"Dark theme looks flat."** Check whether you are stacking the same surface role inside itself. Change the inner role before adding more elevation.
+- **"The brand color became muddy."** Verify the scheme variant first. `TonalSpot` is the usual culprit; switch to `Fidelity` or selective dynamic theming.
+- **"Large-screen nav feels wrong."** Re-test with the default adaptive suite. If bar/rail suddenly feels fine, your custom drawer rule was the bug.
+- **"Wallpaper extraction picked a gross olive."** Confirm whether `DislikeAnalyzer` or source-image dominance is affecting the seed before overriding the whole palette.
+- **"Buttons look misaligned after enforcing 48dp."** Use `MinimumInteractiveTopAlignmentLine` / `MinimumInteractiveLeftAlignmentLine`; do not remove the padding.
 
-**NEVER ship more than 1–2 hero moments per product.** Every "delight" feels like a win. **Consequence:** when everything is a hero, nothing is — emphasis becomes noise and the screen reads as visually loud. **Instead:** identify the single emotionally pivotal interaction (compose-send, complete-purchase, capture, share) and concentrate shape/motion/color emphasis there.
+## Load deeper references only when needed
 
-## Decision trees and failure recovery
+- Before building or debugging custom dynamic schemes, READ `references/dynamic-color-cookbook.md`
+- Before implementing shared elements, container transforms, or motion choreography, READ `references/motion-recipes.md`
+- Before exporting or auditing tokens, READ `references/token-tables.md`
+- Before designing list-detail, supporting-pane, foldable, or desktop layouts, READ `references/adaptive-layouts.md`
 
-- **"My dark theme card is invisible."** → You're using shadow elevation. Switch to tonal: `Surface(tonalElevation = 3.dp)` (Compose) or `surfaceContainerHigh` token. If still invisible, you're nesting same-role surfaces — give the inner surface a *different* container role, not a higher elevation.
-- **"Dynamic colors look muddy / desaturated."** → You're on `TonalSpot` with default fidelity. Switch scheme variant to `Vibrant` or enable color fidelity. If you control the source (logo upload), enrich the input chroma before extracting.
-- **"Container transforms look janky in RecyclerView/list-to-detail."** → Build `transitionName` *dynamically per item* (use the domain id, not XML), call `postponeEnterTransition()` from the **parent** fragment when nested, disable Glide's image transformations on the shared image, and call `startPostponedEnterTransition()` from `doOnPreDraw` on both success and error. (Full code: see `references/shared-element-transitions.md`.)
-- **"Two-pane layout feels cramped on a tablet in portrait."** → Tablet portrait is usually Medium (600–839dp), where single-pane is *recommended*. Reserve two-pane for Expanded+ (840dp+) or for genuinely list-detail mail/files use cases.
-- **"My app passes a11y on Pixel and fails on Samsung."** → Touch targets are 48dp on Android *regardless* of OEM. Check that the visual icon (24dp) is centered inside a 48dp tap container. Don't shrink the container to fit the icon.
+Do NOT load the reference files for routine "make this more Material" work. This file should be enough for most review, migration, and component-level decisions.
 
-## Loading more context
+## Verify against current sources when stakes are high
 
-Most of the time this file is enough. Load deeper references **only** when the task matches:
-
-- **Building a custom dynamic scheme, mapping logos to schemes, or debugging desaturated colors** → READ `references/dynamic-color-cookbook.md`
-- **Wiring container transforms, shared element transitions, or fade-through across fragments/screens** → READ `references/motion-recipes.md`
-- **Implementing the full M3 token table (color, type, shape, elevation, motion springs) in CSS or Compose** → READ `references/token-tables.md`
-- **Designing for foldables, large screens, or canonical layouts (list-detail, supporting pane, feed)** → READ `references/adaptive-layouts.md`
-
-Do NOT load these for general "make this look Material" tasks — the SKILL.md alone covers 90% of cases and the deeper files are dense.
-
-## Authoritative sources (for verification, not skim-reading)
-
-- m3.material.io/styles/color (current scheme & roles)
-- m3.material.io/blog/tone-based-surface-color-m3 (the 2023 deprecation)
-- m3.material.io/blog/building-with-m3-expressive (the 2025 M3E shift)
-- m3.material.io/foundations/layout/canonical-layouts (window size classes & layouts)
-- github.com/material-foundation/material-color-utilities (HCT, MCU, scheme variants)
+- `developer.android.com/jetpack/androidx/releases/compose-material3`
+- `developer.android.com/develop/ui/compose/layouts/adaptive/build-adaptive-navigation`
+- `developer.android.com/codelabs/build-adaptive-apps`
+- `github.com/material-foundation/material-color-utilities`

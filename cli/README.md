@@ -1,6 +1,13 @@
-# sk1llz CLI⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​‌​​‌‌​‍​​​​‌‌‌‌‍‌‌​‌‌​​​‍‌‌‌‌‌‌​​‍​​​​‌​‌​‍‌‌‌‌​​‌‌⁠‍⁠
+# sk1llz CLI
 
-A package manager for AI coding skills. Like Homebrew, but for skills.
+`sk1llz` is a small package manager for AI coding skills with an agent-first command contract.
+
+The current CLI is intentionally narrow:
+- read the catalog
+- preview and apply installs/removals
+- recommend skills from text or a repo path
+- inspect the local environment
+- expose machine-readable command metadata
 
 ## Installation
 
@@ -25,124 +32,142 @@ sk1llz completions zsh > ~/.zfunc/_sk1llz
 sk1llz completions fish > ~/.config/fish/completions/sk1llz.fish
 ```
 
-## Usage
+## Command tree
 
-```bash
-# List all available skills
-sk1llz list
-
-# List skills by category
-sk1llz list --category languages
-sk1llz list --category paradigms
-sk1llz list --category domains
-
-# Search skills (fuzzy matching)
-sk1llz search distributed
-sk1llz search "rust safety"
-
-# Get detailed info about a skill
-sk1llz info lamport
-sk1llz info stroustrup
-
-# Show where skills would be installed
-sk1llz where
-
-# Install a skill (project-local if .claude/ exists, otherwise global)
-sk1llz install lamport
-
-# Force install to global ~/.claude/skills/
-sk1llz install lamport --global
-
-# Install to a custom location
-sk1llz install lamport --target ./my-skills/
-
-# Update the skill index
-sk1llz update
+```text
+sk1llz
+  catalog list
+  catalog search <query>
+  catalog show <skill>
+  catalog refresh
+  install plan <skill>
+  install apply <skill>
+  remove plan <skill>
+  remove apply <skill>
+  recommend from-text [description]
+  recommend from-path [path]
+  env where
+  env init
+  env doctor
+  describe [command...]
+  completions <shell>
 ```
 
-## Skill Location Resolution
+## Output contract
 
-The CLI automatically detects the best installation location:
+- `--format text|json` is available on every command.
+- `--json` is a shortcut for `--format json`.
+- Text is the default when stdout is a TTY.
+- JSON is the default when stdout is piped.
+- Primary output goes to stdout.
+- Progress, prompts, and warnings go to stderr.
 
-1. **Project-local** (`./.claude/skills/`): Used if a `.claude/` directory exists in the current working directory
-2. **Global** (`~/.claude/skills/`): Fallback when no project-local config exists
+### Exit codes
 
-This allows you to:
-- Install skills globally for use across all projects
-- Install skills locally to a specific project (version-controlled, team-shared)
+| Code | Meaning |
+| --- | --- |
+| `0` | Success |
+| `1` | Local usage or runtime error |
+| `3` | Requested item not found |
+| `4` | Remote network or catalog error |
+
+## Scope rules
+
+- Repo-local installs live at `<repo-root>/.claude/skills/` when that directory already exists.
+- Otherwise the default install scope is `~/.claude/skills/`.
+- `sk1llz env init` creates `<repo-root>/.claude/skills/`.
+- `--global` forces `~/.claude/skills/`.
+- `--target` is allowed only as a relative path under the current directory.
+
+## Agent-first surfaces
+
+### 1. `describe`
+
+Use `describe` to inspect the live command contract without scraping help text:
 
 ```bash
-# Check which location is active
-sk1llz where
-
-# Initialize project-local skills
-mkdir -p .claude/skills
-
-# Force global even when .claude/ exists locally
-sk1llz install lamport --global
+sk1llz describe
+sk1llz describe install apply
+sk1llz describe --json
 ```
 
-## How It Works
+### 2. Raw request bodies
 
-1. **Index**: The CLI fetches `skills.json` from the repository, which contains metadata about all available skills.
+Mutating install/remove commands accept either positional arguments or a raw JSON request:
 
-2. **Cache**: The index is cached locally at `~/.cache/sk1llz/skills.json` for fast lookups.
+```bash
+sk1llz install plan hashimoto-cli-ux
+sk1llz install apply --request '{"skill":"hashimoto-cli-ux","global":true}' --dry-run
+printf '%s\n' '{"skill":"hashimoto-cli-ux"}' | sk1llz remove plan --request @-
+```
 
-3. **Install**: When you install a skill, the CLI downloads the skill files from GitHub and places them in your Claude skills directory (`~/.claude/skills/` by default).
+### 3. Field masks
 
-## Skill Categories
+Read commands support `--fields` to trim response size:
 
-| Category | Description |
-|----------|-------------|
-| `languages` | Language-specific skills (Python, Rust, Go, etc.) |
-| `paradigms` | Programming paradigm skills (functional, distributed, systems) |
-| `domains` | Domain-specific skills (security, systems-architecture) |
-| `organizations` | Organization methodology skills (Google SRE, Netflix Chaos) |
+```bash
+sk1llz catalog list --limit 5 --fields id,name --json
+sk1llz recommend from-text "rust cli ux" --fields score,reasons --json
+```
 
 ## Examples
 
-### Find Python skills
+### Read the catalog
 
 ```bash
-$ sk1llz list --category languages | grep python
-  vanrossum [python] Write Python code in the style of Guido van Rossum...
-  hettinger [python] Write Python code in the style of Raymond Hettinger...
-  beazley [python] Write Python code in the style of David Beazley...
+sk1llz catalog list
+sk1llz catalog search distributed --json
+sk1llz catalog show hashimoto-cli-ux
+sk1llz catalog refresh --dry-run
 ```
 
-### Search for distributed systems expertise
+### Preview and apply installs
 
 ```bash
-$ sk1llz search distributed
-32 results for 'distributed':
-  lamport [distributed] Design distributed systems...
-  dean [distributed] Design distributed systems...
-  vogels [systems-architecture] Design cloud-native systems...
+sk1llz install plan hashimoto-cli-ux
+sk1llz install apply hashimoto-cli-ux --yes
+sk1llz install apply hashimoto-cli-ux --global --dry-run --json
 ```
 
-### Install a skill
+### Preview and apply removals
 
 ```bash
-$ sk1llz install lamport
-✓ Installed lamport to /home/user/.claude/skills/lamport
+sk1llz remove plan hashimoto-cli-ux
+sk1llz remove apply hashimoto-cli-ux --yes
+```
+
+### Ask for recommendations
+
+```bash
+sk1llz recommend from-text "distributed systems in Go"
+sk1llz recommend from-path .
+```
+
+### Inspect the environment
+
+```bash
+sk1llz env where
+sk1llz env init --dry-run
+sk1llz env doctor --json
 ```
 
 ## Development
 
 ```bash
-# Build debug
-cargo build
+# Format
+cargo fmt
 
-# Build release (optimized, stripped)
-cargo build --release
-
-# Run tests
+# Test
 cargo test
 
-# Regenerate skills.json manifest
-python3 ../scripts/generate_manifest.py
+# Try the schema surface
+cargo run -- describe install apply
+
+# Refresh the manifest cache
+cargo run -- catalog refresh
 ```
 
-## License
+## Notes
 
-Apache 2.0
+- The catalog cache lives at `~/.cache/sk1llz/skills.json`.
+- The CLI now uses `reqwest` with `rustls`, so it builds without the system OpenSSL development package.

@@ -1,266 +1,148 @@
 ---
 name: griesemer-precise-go
-description: Write Go code in the style of Robert Griesemer, co-creator of Go. Emphasizes clean syntax, precise semantics, and well-defined type system behavior. Use when designing APIs, type hierarchies, or code that requires precise specification.
-tags: generics, type-parameters, interfaces, compiler, language-design, type-system, constraints
+description: Design and review Go code in the Robert Griesemer style: spec-first semantics, tight constraints, named-type preservation, and compatibility-safe API evolution. Use when writing or reviewing generics, interfaces, method sets, comparison logic, zero-value behavior, or exported APIs where exact language rules matter. Triggers: Go generics, constraints, comparable, type sets, underlying type, method sets, pointer receivers, zero value, public API compatibility.
+tags: go, generics, constraints, comparable, interfaces, method-sets, api-design, compatibility
 ---
 
-# Robert Griesemer Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​​​‌​‌‍​​​‌‌‌‌​‍‌‌​‌‌​​‌‍​​‌​​‌​‌‍​​​​‌​‌​‍​​​​‌​‌‌⁠‍⁠
+# Griesemer Precise Go
 
-## Overview
+This skill is for Go work where the hard part is semantic precision, not style polish.
 
-Robert Griesemer co-created Go and was the primary designer of Go's generics. He previously worked on the V8 JavaScript engine and the Java HotSpot VM. His focus: precise semantics, clean syntax, and type system clarity.
+This skill is self-contained. Do NOT load other Go style skills for pure type-system or public-API work unless the user explicitly asks for concurrency tuning, CLI UX, or low-level performance work after semantics are settled.
 
-## Core Philosophy
+## Core stance
 
-> "The language should help you think clearly."
+Griesemer-style Go starts from the spec, not from folklore, compiler accidents, or what "usually works on gc".
 
-> "Every feature adds complexity. Is the complexity worth it?"
+Every abstraction must survive these questions:
+- What exact operations does the type set permit?
+- Which part of the API is constrained, and which part stays maximally reusable?
+- Does this preserve named types, zero values, and future compatibility?
+- If a reader only knows the spec, will they predict the behavior correctly?
 
-Griesemer values **precision and clarity**. Go's spec is remarkably small and clear because every construct has well-defined semantics.
+On Go 1.25+, reason about generic operands directly from the type set rules. Do not keep using "core type" as a design crutch. The right question is "is this operation valid for every type in the set?"
 
-## Design Principles
+## Before you write code, ask yourself
 
-1. **Precise Semantics**: Every language construct has exactly one meaning.
+Before introducing a type parameter, ask yourself:
+- Does the algorithm truly ignore the concrete type except for a few operations? If not, use an interface or concrete code.
+- Am I modeling a reusable family of types, or am I just avoiding two small copies of code? If it is the latter, duplication is often clearer.
+- Will the signature preserve user-defined named types, or silently erase them to a built-in type?
 
-2. **Orthogonal Features**: Features should combine predictably.
+Before constraining with `comparable`, ask yourself:
+- Do I need equality everywhere, or only in one map-backed implementation?
+- Could another implementation work for non-comparable types if I left the interface unconstrained?
+- Am I banning valid future use cases just to make today's implementation convenient?
 
-3. **No Surprises**: Behavior should be obvious from reading the code.
+Before using pointer receivers in a generic API, ask yourself:
+- Does the function need to allocate a fresh zero value itself, or can the caller pass a ready instance?
+- Am I forcing an extra type parameter only because the API shape is wrong?
+- Would a plain interface value make ownership and initialization clearer?
 
-4. **Spec-Driven**: If it's not in the spec, it's not guaranteed.
+Before exporting an API, ask yourself:
+- If I need one more option later, can I add it without changing the function signature?
+- Am I returning an interface that I may want to grow later, when a concrete type would age better?
+- Do I want values of this struct to remain comparable forever, or should I block comparison now with a zero-size non-comparable sentinel like `[0]func()`?
 
-## When Writing Code
+## Decision rules that matter
 
-### Always
+### Interface vs generic vs comparator
 
-- Understand the exact semantics of operations
-- Use types to express constraints
-- Make nil behavior explicit and safe
-- Write code that matches Go's spec, not implementation details
-- Use generics when type safety improves clarity
-- Define clear type constraints
+Use an interface when the algorithm only calls behavior already expressed as methods. If all you do is call `Read`, `Write`, `Compare`, or `All`, a type parameter usually adds noise.
 
-### Never
+Use a type parameter when the implementation is structurally identical across element types and the value should be stored directly, not boxed behind an interface.
 
-- Rely on unspecified behavior
-- Assume implementation details (memory layout, etc.)
-- Create ambiguous APIs
-- Use empty interface when a constraint works
-- Ignore the distinction between value and pointer receivers
+For ordered containers, pick the narrowest contract that matches the job:
+- `cmp.Ordered` is right when numbers and strings are the whole domain.
+- A comparator function is the most general surface and keeps the shared implementation unconstrained.
+- A self-referential generic interface such as `Comparer[E]` is the zero-value-friendly variant when element types already own comparison logic.
 
-### Prefer
+If you need all three, keep the shared core unconstrained and pass the comparator as a parameter. Wrap it with ordered and method-based entry points. Passing a comparator argument is easier for the compiler to analyze than storing a function in a struct field.
 
-- Explicit type constraints over `any`
-- Named types for domain concepts
-- Method receivers that match semantics (value vs pointer)
-- Clear zero values
+### Fast chooser
 
-## Code Patterns
+| If the real need is... | Prefer | Because |
+| --- | --- | --- |
+| Many implementations with different internal trade-offs | `interface{ ... }` with `any` | The abstraction should not pre-commit all implementations to one constraint set. |
+| One algorithm reused over many concrete element types | A generic type or function | The code shape is truly identical and values stay unboxed. |
+| Ordering only for numbers and strings | `cmp.Ordered` | It is the smallest honest contract. |
+| Ordering for arbitrary domain types | Comparator function first | It is the most general surface and keeps the shared core reusable. |
+| Zero-value container plus type-owned ordering | `Comparer[E]` wrapper over the shared core | You recover zero-value ergonomics without constraining the common implementation. |
+| Pointer-receiver methods plus internal allocation | Caller-supplied interface value first; `PtrTo...` only if allocation is essential | Extra type parameters are a cost, not a badge of sophistication. |
 
-### Generics Done Right (Go 1.18+)
+### Constraint placement
+
+Push strong constraints to the last responsible layer.
+
+Good:
+- `type Set[E any] interface { ... }`
+- `type OrderedSet[E interface { comparable; Comparer[E] }] struct { ... }`
+
+Bad:
+- `type Set[E comparable] interface { ... }`
+
+The interface should preserve implementation freedom. The concrete type or function that truly needs map keys should pay the `comparable` cost.
+
+### Preserve named types intentionally
+
+If a helper accepts a slice, map, or channel-like shape and should return the same named type it received, deconstruct the type:
 
 ```go
-// BAD: Empty interface loses type safety
-func Max(a, b interface{}) interface{} {
-    // runtime type assertion needed
-    switch v := a.(type) {
-    case int:
-        if v > b.(int) { return v }
-        return b
-    // ... repeat for every type
-    }
-    panic("unsupported type")
-}
-
-// GOOD: Type constraints preserve safety
-type Ordered interface {
-    ~int | ~int8 | ~int16 | ~int32 | ~int64 |
-    ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
-    ~float32 | ~float64 | ~string
-}
-
-func Max[T Ordered](a, b T) T {
-    if a > b {
-        return a
-    }
-    return b
-}
-
-// Usage: type-safe, no assertions
-result := Max(3, 5)        // int
-result := Max(3.14, 2.71)  // float64
+func Clone[S ~[]E, E any](s S) S
+func CopyMap[M ~map[K]V, K comparable, V any](m M) M
 ```
 
-### Precise Type Constraints
+Using `[]E` or `map[K]V` directly is a semantic choice: it erases named types and their methods on return.
+
+### Pointer-receiver generic escape hatch
+
+If a generic function must allocate a value internally and then call pointer-receiver methods, the standard escape hatch is:
 
 ```go
-// Constraint: any type with these methods
-type Stringer interface {
-    String() string
-}
-
-// Constraint: underlying type is int
-type Integer interface {
-    ~int | ~int64
-}
-
-// Constraint: must be pointer to struct with Name field
-type Named[T any] interface {
-    *T
-    GetName() string
-}
-
-// Combining constraints
-type OrderedStringer interface {
-    Ordered
-    Stringer
-}
-
-// Generic data structure with constraint
-type Set[T comparable] struct {
-    items map[T]struct{}
-}
-
-func (s *Set[T]) Add(item T) {
-    if s.items == nil {
-        s.items = make(map[T]struct{})
-    }
-    s.items[item] = struct{}{}
-}
-
-func (s *Set[T]) Contains(item T) bool {
-    _, ok := s.items[item]
-    return ok
+type PtrToSet[S, E any] interface {
+	*S
+	Set[E]
 }
 ```
 
-### Value vs Pointer Semantics
+Then use `new(S)` and convert to the pointer type parameter. This works, and the trailing pointer type can usually be inferred by callers.
 
-```go
-// Value receiver: method doesn't modify, type is small
-type Point struct {
-    X, Y float64
-}
+If this makes the public signature look clever, stop and redesign. In practice, accepting a concrete `Set[E]` value from the caller is often simpler and more flexible.
 
-func (p Point) Distance(q Point) float64 {
-    dx := p.X - q.X
-    dy := p.Y - q.Y
-    return math.Sqrt(dx*dx + dy*dy)
-}
+### Fallbacks when the first design gets too clever
 
-// Pointer receiver: method modifies, or type is large
-func (p *Point) Scale(factor float64) {
-    p.X *= factor
-    p.Y *= factor
-}
+- If the constraint literal grows past a short screenful, name it or push it down to the concrete type that truly needs it.
+- If you need two extra type parameters only to connect value and pointer method sets, try an interface value API before shipping the generic signature.
+- If you cannot preserve named types without making the API unreadable, decide explicitly whether preserving the outer type matters. Erasing it is sometimes correct, but it must be a deliberate semantic choice.
+- If the only argument for a generic abstraction is "the compiler will probably optimize it", keep the concrete version and benchmark first.
 
-// IMPORTANT: Be consistent within a type
-// If ANY method needs pointer receiver, use pointer for ALL
-type Buffer struct {
-    data []byte
-}
+## Non-obvious edge cases
 
-func (b *Buffer) Write(p []byte) (int, error) {
-    b.data = append(b.data, p...)
-    return len(p), nil
-}
+- `any` supports `==` syntactically as an interface type, but it is not a safe stand-in for `comparable` in type arguments. Interface comparison can still panic at run time when the dynamic value is uncomparable.
+- Method sets are asymmetric for a reason: an interface holding `T` cannot safely fabricate `*T`. If a method mutates state, a value receiver in an interface would silently mutate a copy.
+- Map iteration order is unspecified, not "random enough". Never treat it as a shuffle primitive or a stable bias source.
+- Generic operations are the intersection of what every member of the type set supports. If one member breaks the operation, the operation is invalid no matter how natural it feels for the others.
+- If you must support code before Go 1.22, slice-delete helpers need an explicit tail-clearing audit for pointer-bearing elements. On Go 1.22+, `slices.Delete`, `Compact`, `DeleteFunc`, `CompactFunc`, and `Replace` clear obsolete elements, but ignoring the returned slice is still a logic bug.
 
-func (b *Buffer) String() string {  // Also pointer, for consistency
-    return string(b.data)
-}
-```
+## NEVER rules
 
-### Safe Nil Handling
+- NEVER put `comparable` on a generic interface just because the first implementation uses a map, because that convenience quietly forbids tree-, list-, or comparator-based implementations for non-comparable types. Instead constrain only the concrete type or function that actually needs map keys.
+- NEVER write `func F[E any]([]E) []E` for helpers meant to round-trip named slice types, because the short signature is seductive and compiles, but it strips methods and aliases on return. Instead preserve the outer type with `S ~[]E`.
+- NEVER design an exported API around hypothetical generic methods, because the symmetry looks attractive but Go does not plan to support methods with type parameters. Instead use top-level generic functions or put the type parameters on the receiver type.
+- NEVER assume Go generics guarantee C++-style per-type specialization, because gc commonly shares one instantiation per shape and future compilers may make different trade-offs. Instead benchmark the real hot path and add concrete fast paths only when measurement proves they matter.
+- NEVER keep a comparator as a long-lived struct field merely to simplify recursion, because it destroys zero-value usability and makes inlining harder. Instead pass the comparator through the unconstrained core and offer thin wrappers for ergonomic surfaces.
+- NEVER change an exported function signature to add options, context, or variadics "compatibly", because call sites may still compile while function values, interface satisfaction, and assignments break. Instead add a sibling function or an options struct with meaningful zero values.
+- NEVER return an exported interface unless you want third parties implementing it forever, because every future method becomes a compatibility event. Instead return a concrete type unless outside implementation is an explicit goal.
 
-```go
-// Make nil receiver safe
-type Stack[T any] struct {
-    items []T
-}
+## Practical review procedure
 
-func (s *Stack[T]) Push(item T) {
-    if s == nil {
-        panic("nil stack")  // Or return error
-    }
-    s.items = append(s.items, item)
-}
+When reviewing or writing code in this style, run this sequence:
 
-func (s *Stack[T]) Len() int {
-    if s == nil {
-        return 0  // Safe: nil stack has zero length
-    }
-    return len(s.items)
-}
+1. List every operation performed on each type parameter.
+2. For each operation, prove it is valid for every type in the constraint's type set.
+3. Check whether the signature preserves named types or erases them.
+4. Check whether the zero value is useful, or whether a function field / constructor requirement made it unusable.
+5. Check whether `comparable` or pointer-receiver constraints were pushed higher than necessary.
+6. For exported APIs, ask how you would add one new option, one new method, and one new field without breaking users.
 
-// Named types for clarity
-type UserID int64
-type OrderID int64
-
-// Now these can't be accidentally swapped
-func GetOrder(uid UserID, oid OrderID) (*Order, error) {
-    // ...
-}
-```
-
-### Precise Interface Design
-
-```go
-// Small, precise interfaces
-type Reader interface {
-    Read(p []byte) (n int, err error)
-}
-
-type Writer interface {
-    Write(p []byte) (n int, err error)
-}
-
-type Closer interface {
-    Close() error
-}
-
-// Compose precisely
-type ReadCloser interface {
-    Reader
-    Closer
-}
-
-type WriteCloser interface {
-    Writer
-    Closer
-}
-
-type ReadWriteCloser interface {
-    Reader
-    Writer
-    Closer
-}
-
-// Generic interface with type parameter
-type Container[T any] interface {
-    Add(T)
-    Remove(T) bool
-    Contains(T) bool
-    Len() int
-}
-```
-
-## Mental Model
-
-Griesemer designs by asking:
-
-1. **What does the spec say?** Not the implementation—the specification.
-2. **Is this unambiguous?** Can two people read this differently?
-3. **What are the edge cases?** nil, zero values, overflow?
-4. **Is the type constraint minimal?** Don't over-constrain.
-
-## Spec-Level Thinking
-
-| Feature | Spec Guarantee |
-|---------|----------------|
-| Map iteration | Random order |
-| Goroutine scheduling | Unspecified |
-| Struct layout | Unspecified |
-| String indexing | Bytes, not runes |
-| Interface nil | nil interface ≠ interface holding nil |
-
-Write code that works regardless of implementation details.
-
+If any answer depends on "the compiler probably optimizes this" or "users probably will not do that", the API is not precise enough yet.

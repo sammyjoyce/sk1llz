@@ -1,627 +1,107 @@
 ---
 name: gremlin-enterprise-chaos
-description: Apply Gremlin's enterprise chaos engineering methodology. Emphasizes categorized failure injection, safety controls, and structured experimentation. Use when implementing chaos engineering in enterprise environments with compliance requirements.
-tags: chaos-engineering, fault-injection, resilience, gameday, blast-radius, reliability, failure-modes, testing
+description: Design and review Gremlin chaos experiments, Scenarios, Reliability Tests, and Failure Flags for enterprise systems. Use when choosing between latency, packet loss, blackhole, DNS, shutdown, time travel, certificate expiry, or application-layer failure injection; when defining Health Checks and halt logic; when growing blast radius safely; or when interpreting reliability score changes and GameDay outcomes. Triggers: gremlin, chaos engineering, scenario, health check, reliability test, reliability score, failure flags, gameday, latency, packet loss, blackhole, dns, time travel, certificate expiry.
+tags: chaos-engineering, gremlin, reliability, fault-injection, failure-flags, gameday, resiliency, health-checks
 ---
 
-# Gremlin Enterprise Chaos Engineering⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​‌‌‌‌​‍‌‌​​​‌‌‌‍​‌​‌​‌​​‍‌​​‌​​‌‌‍​​​​‌​‌​‍‌​‌‌​‌‌​⁠‍⁠
+# Gremlin Enterprise Chaos
 
-## Overview
+This skill is for high-signal experiment design and review, not for explaining chaos engineering basics.
 
-Gremlin, founded by Kolton Andrus (former Amazon/Netflix reliability engineer), productized chaos engineering for enterprise adoption. Their approach emphasizes safety, categorization, and measurable outcomes—making chaos engineering accessible to organizations that can't afford to "move fast and break things."
+## Load Only What You Need
 
-## The Pioneer
+- Before writing exact experiment syntax or YAML, READ `references/attack_catalog.md`.
+- Before AWS ASG, Lambda, or Failure Flags rollout work, verify the live Gremlin docs for that feature; those surfaces change faster than this skill.
+- Do NOT load `references/attack_catalog.md` when the task is only "which failure mode should I test?" It is a syntax aid, not a strategy guide.
 
-### Kolton Andrus
+## Operating Stance
 
-Built chaos engineering infrastructure at Amazon (Game Days) and Netflix before founding Gremlin. His insight: chaos engineering needs to be **safe, repeatable, and auditable** for enterprise adoption.
+- Treat every experiment as a test of a specific resiliency mechanism. If you cannot name the mechanism, you are not ready to run the experiment.
+- Test the caller's ability to survive a dependency failure, not the dependency owner's reliability. For dependency experiments, target the service making the call.
+- Prefer one clean failure signature over a "realistic" bundle of failures. Diagnosis quality matters more than theatrical realism on early runs.
+- Count any experiment that requires manual repair after halt as a failure, even if the user-facing path recovered during the blast.
+- Read score changes together with coverage. A higher reliability score with fewer weekly runs is often a blind spot, not an improvement.
 
-> "We basically inject a little harm in order to find weak spots and build an immunity. We proactively break things."
+## Before Choosing an Experiment, Ask Yourself
 
-## References
+- What exact user-visible symptom am I trying to prove safe: slower success, partial correctness, total dependency loss, bad name resolution, state restart, clock drift, or bad application data?
+- Which mechanism is supposed to catch it: timeout, retry with jitter, circuit breaker, cache, load balancer drain, autoscaler, quorum, restart controller, TTL handling, certificate rotation, or feature-flag isolation?
+- Am I testing steady-state degradation or recovery after the fault is removed? Gremlin can show the first while still exposing that recovery is broken.
+- Will the platform "help" me and hide the real behavior? Autoscaling, Kubernetes reaping, sidecar proxying, and local caches all distort interpretation if not accounted for up front.
 
-- **Tutorials**: https://www.gremlin.com/community/tutorials/
-- **Documentation**: https://www.gremlin.com/docs/
-- **Talks**: QCon, Velocity, SRECon presentations
+## Experiment Selection Heuristics
 
-## Core Philosophy
+### Dependency path
 
-> "Thoughtful, planned experiments that teach us something about the system."
+- Use `latency` when you want to surface timeout budgets, serial fan-out, queue growth, and connection-pool behavior. Gremlin latency is per packet, not per request; 100 ms can multiply across round trips and serial calls, and even 20 ms has produced multi-x request inflation in real systems.
+- Use `packet loss` when you care about retransmits, retry storms, idempotency, and noisy-network behavior. Gremlin packet loss is outbound-only; if you need to test a hard disconnect, do not simulate it with 100% loss.
+- Use `blackhole` for a true partition or complete dependency cut. It drops inbound and outbound L4 traffic, but leaves DNS alone by default, so it is the wrong tool for resolver failures.
+- Use `dns` when the failure mode is lookup failure, stale resolution assumptions, or overly optimistic DNS caching. Teams often think a blackhole covers DNS; in Gremlin it does not.
 
-> "The goal is not to break things—it's to build confidence."
+### Time and expiry path
 
-Gremlin's approach differs from early chaos engineering by emphasizing **safety controls**, **categorized attacks**, and **enterprise readiness** (audit trails, RBAC, compliance).
+- Use `time travel` for JWT expiry, lease timeouts, scheduled jobs, and clock-skew logic. Decide deliberately whether to disable NTP; if you do not, time correction can erase the fault before the code path is exercised.
+- Use certificate-expiry testing when you need to validate the whole certificate chain from a specific caller's vantage point. Gremlin's default window is 720 hours (30 days), which is good for operations hygiene but often too coarse for application-path debugging.
 
-## Attack Categories
+### State and restart path
 
-Gremlin organizes chaos attacks into three categories:
+- Use `shutdown` for host or node loss, but remember the semantics change by target type. On hosts it is graceful enough to deliver `SIGTERM`; on containers it behaves more like immediate process death.
+- Use process-level attacks when you want supervision and restart-controller behavior without conflating it with node lifecycle or platform replacement.
 
-### 1. Resource Attacks
+### Application-layer path
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ Resource Attacks - Stress system resources              │
-├─────────────────────────────────────────────────────────┤
-│ CPU         │ Consume CPU cycles                        │
-│ Memory      │ Allocate memory, cause pressure           │
-│ Disk        │ Fill disk, stress I/O                     │
-│ IO          │ Stress disk I/O subsystem                 │
-└─────────────────────────────────────────────────────────┘
-```
+- Use Failure Flags by proxy first when the problem is request/response shaping in managed or serverless environments and you want minimal code change. The proxy path automatically creates flags like `dependency-<hostname>`, `ingress`, `egress`, and `response`.
+- Switch to Failure Flags SDK instrumentation only when the failure is inside application logic or data shape: corrupt payloads, double delivery, hot-row lock contention, customer-specific failures, or ordering bugs that network faults cannot express.
 
-### 2. Network Attacks
+## Blast Radius and Halt Design
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ Network Attacks - Disrupt network connectivity          │
-├─────────────────────────────────────────────────────────┤
-│ Latency     │ Add delay to network calls                │
-│ Packet Loss │ Drop percentage of packets                │
-│ Blackhole   │ Drop all traffic to targets               │
-│ DNS         │ Fail DNS resolution                       │
-└─────────────────────────────────────────────────────────┘
-```
+- Start with one stable target set and one dependency selector. In Scenarios, Gremlin requires tag-style targeting; exact host picks are intentionally unavailable there.
+- Build reusable Scenarios from stable identities only. Ephemeral selectors like hostnames, instance IDs, local IPs, and recycled pod identifiers make Scenarios rot and can block service creation.
+- Use existing alerts, SLIs, or monitors as Health Checks whenever possible. A bespoke "chaos passed" check is almost always less strict than the alarm your on-call team actually trusts.
+- Continuous Health Checks in Scenarios run every 10 seconds. Thresholds tighter than one poll interval tend to reward scrape timing, not resilience.
+- If you configure a Scenario to treat fired monitors as a valid outcome, remember that Gremlin still halts the run when a Health Check triggers. "Pass" does not mean "keep going."
+- In AWS, disable ASG autoscaling before blackhole or zone-redundancy work when you want to test fault tolerance rather than replacement logic. If rollback fails, inspect which ASG processes Gremlin suspended and resume those exact ones.
+- Do not stack concurrent network experiments on the same network interface or the same pod. Gremlin does not support that cleanly; split targets or test the failure modes sequentially.
 
-### 3. State Attacks
+## Reading the Result Correctly
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ State Attacks - Modify system state                     │
-├─────────────────────────────────────────────────────────┤
-│ Shutdown    │ Terminate process/container               │
-│ Time Travel │ Skew system clock                         │
-│ Process Kill│ Kill specific processes                   │
-└─────────────────────────────────────────────────────────┘
-```
+- A "DNS outage" on one node is often not DNS. Gremlin has seen single-node dependency failures caused by local runtime state after reboot, while the rest of the fleet was healthy. Re-check whether the blast is local before blaming the provider.
+- If aborting a blackhole restores traffic but one service still needs a restart, the experiment exposed broken recovery, not a clean pass.
+- If latency experiments explode far beyond the configured milliseconds, suspect repeated round trips, connection churn, or serial dependency calls before assuming the tool over-injected.
+- If packet-loss results look mild, verify whether the code path is dominated by inbound traffic or buffered asynchronous work; Gremlin packet loss primarily disturbs outbound traffic.
+- If a Time Travel run appears to do nothing, the first suspects are NTP correction, clock reads delegated to another service, or a TTL path using monotonic time instead of wall clock.
 
-## When Implementing
+## Numbers That Matter
 
-### Always
+- `latency` defaults to 100 ms for 60 s; this is a product default, not an experimental recommendation.
+- `packet loss` defaults to 1% outbound loss; that is enough to reveal brittle retry logic without making everything look broken.
+- `time travel` defaults to an offset of 86,400 s for 60 s. That default is huge; narrow the offset to one expiry boundary unless you explicitly want system-wide time havoc.
+- Recommended Scenarios support up to 99 nodes, which means large trees are possible; resist the temptation unless you can explain each branch's diagnostic value.
+- Reliability reporting treats scores above 70 as healthy, 50-70 as caution, and below 50 as poor. Use those bands for portfolio triage, not for declaring a single service "done."
+- Mature Gremlin programs run standard reliability tests weekly per service. If the cadence drops, your confidence should drop with it.
 
-- Start with read-only observation (no injection)
-- Use built-in safety controls (halt conditions)
-- Define rollback procedures before starting
-- Communicate experiments to stakeholders
-- Document findings and remediation
-- Maintain audit trail for compliance
+## Anti-Patterns
 
-### Never
+- NEVER start from product defaults because they are safe generic values, not workload-aware values. This is seductive because it feels objective. The consequence is a test that proves nothing about your actual timeout ladder or queue depth. Instead anchor magnitude to one SLO boundary, one retry interval, or one expiry threshold.
+- NEVER use 100% packet loss to represent a total outage because it feels like the "maximum" version of the same test. The consequence is a noisy mix of retransmits and retry behavior that is different from a true partition. Instead switch to `blackhole` once you mean "no traffic gets through."
+- NEVER blackhole all outbound traffic just because targeting `egress` is faster than finding the real dependency. The consequence is an attribution mess where telemetry, side effects, and unrelated dependencies fail together. Instead target one hostname, port, provider, or dependency flag.
+- NEVER trust a custom green-only Health Check because it is easier to make pass than the monitors your operators already use. The consequence is false confidence and surprise incidents. Instead bind Gremlin to the same alerting surfaces that would page humans.
+- NEVER forget autoscaler and scheduler behavior because infrastructure help is seductive to count as resilience. The consequence is that you test replacement speed instead of failover logic. Instead freeze or account for the helper before you run the blast.
+- NEVER assume `shutdown + reboot` on a container proves restart safety because the option name sounds symmetric across platforms. The consequence is that Kubernetes may reap the container and never return the exact target you think you rebooted. Instead test host or node shutdown for reboot semantics, or use process-level attacks for restart policy validation.
+- NEVER run Time Travel without deciding whether NTP should be blocked because leaving defaults alone feels safer. The consequence is a false negative when the clock snaps back before the application path observes drift. Instead choose the NTP posture deliberately and keep the window tightly bounded.
+- NEVER keep exact or ephemeral target identifiers in reusable Scenarios because they work perfectly during authoring. The consequence is silent scenario decay as pods and instances churn. Instead build around stable service tags, namespaces, deployments, or Failure Flags selectors.
 
-- Run chaos without abort mechanisms
-- Skip stakeholder communication
-- Experiment without monitoring
-- Start with complex, multi-failure scenarios
-- Ignore compliance requirements
-- Chaos in production without staging validation
+## Fallbacks
 
-### Prefer
+- If infrastructure targeting is impossible because the platform is managed, move to Failure Flags and keep the infrastructure hypothesis separate from the application hypothesis.
+- If the result is ambiguous, shrink the blast radius before changing the fault type. A smaller clean signal is more valuable than a broader noisy one.
+- If you cannot explain the result from first principles, rerun with one variable removed: one dependency, one target, one check, one recovery mechanism.
+- If the Reliability Report shows a dip with flat weekly coverage, prioritize regression analysis. If it shows a rise with falling coverage, prioritize restoring test cadence.
 
-- Categorized attacks over ad-hoc failures
-- Automated safety controls over manual monitoring
-- Graduated complexity over big-bang tests
-- Business hours for initial experiments
-- Team-wide involvement over siloed testing
+## Exit Criteria
 
-## Implementation Patterns
-
-### Attack Definition Framework
-
-```python
-# attack_framework.py
-# Gremlin-style categorized attack definitions
-
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Callable
-from enum import Enum
-from abc import ABC, abstractmethod
-
-class AttackCategory(Enum):
-    RESOURCE = "resource"
-    NETWORK = "network"
-    STATE = "state"
-
-class AttackType(Enum):
-    # Resource
-    CPU = "cpu"
-    MEMORY = "memory"
-    DISK = "disk"
-    IO = "io"
-    # Network
-    LATENCY = "latency"
-    PACKET_LOSS = "packet_loss"
-    BLACKHOLE = "blackhole"
-    DNS = "dns"
-    # State
-    SHUTDOWN = "shutdown"
-    TIME_TRAVEL = "time_travel"
-    PROCESS_KILL = "process_kill"
-
-@dataclass
-class SafetyControls:
-    """Built-in safety mechanisms"""
-    max_duration_seconds: int = 300
-    halt_on_error_rate: float = 0.05      # 5% error rate
-    halt_on_latency_p99_ms: int = 5000    # 5 second p99
-    excluded_hosts: List[str] = field(default_factory=list)
-    require_healthy_baseline: bool = True
-    business_hours_only: bool = True
-    
-    def check_halt_conditions(self, metrics: dict) -> bool:
-        """Return True if experiment should halt"""
-        if metrics.get('error_rate', 0) > self.halt_on_error_rate:
-            return True
-        if metrics.get('latency_p99_ms', 0) > self.halt_on_latency_p99_ms:
-            return True
-        return False
-
-@dataclass
-class Attack:
-    """Base attack definition"""
-    name: str
-    category: AttackCategory
-    attack_type: AttackType
-    description: str
-    
-    # Targeting
-    targets: List[str]                    # Host/container/service IDs
-    target_percentage: float = 1.0        # Percentage of targets to affect
-    
-    # Timing
-    duration_seconds: int = 60
-    ramp_up_seconds: int = 0              # Gradual increase
-    
-    # Safety
-    safety: SafetyControls = field(default_factory=SafetyControls)
-    
-    # Attack-specific parameters
-    parameters: Dict = field(default_factory=dict)
-
-
-class AttackExecutor(ABC):
-    """Execute attacks safely"""
-    
-    @abstractmethod
-    def execute(self, attack: Attack) -> dict:
-        pass
-    
-    @abstractmethod
-    def halt(self, attack_id: str) -> bool:
-        pass
-
-
-# Specific attack implementations
-@dataclass
-class CPUAttack(Attack):
-    """Consume CPU resources"""
-    category: AttackCategory = AttackCategory.RESOURCE
-    attack_type: AttackType = AttackType.CPU
-    
-    def __post_init__(self):
-        # CPU-specific defaults
-        self.parameters.setdefault('cores', 1)
-        self.parameters.setdefault('percentage', 100)
-
-
-@dataclass 
-class LatencyAttack(Attack):
-    """Add network latency"""
-    category: AttackCategory = AttackCategory.NETWORK
-    attack_type: AttackType = AttackType.LATENCY
-    
-    def __post_init__(self):
-        # Latency-specific defaults
-        self.parameters.setdefault('latency_ms', 100)
-        self.parameters.setdefault('jitter_ms', 0)
-        self.parameters.setdefault('target_hosts', [])
-        self.parameters.setdefault('target_ports', [])
-
-
-@dataclass
-class ShutdownAttack(Attack):
-    """Terminate process or container"""
-    category: AttackCategory = AttackCategory.STATE
-    attack_type: AttackType = AttackType.SHUTDOWN
-    
-    def __post_init__(self):
-        # Shutdown-specific defaults
-        self.parameters.setdefault('delay_seconds', 0)
-        self.parameters.setdefault('reboot', False)
-```
-
-### Safety-First Execution
-
-```python
-# safe_executor.py
-# Execute chaos attacks with safety controls
-
-import time
-import threading
-from typing import Optional
-from datetime import datetime, timedelta
-
-class SafeChaosExecutor:
-    """
-    Gremlin's key insight: chaos must be SAFE for enterprise adoption.
-    Built-in halt conditions, audit trails, and rollback.
-    """
-    
-    def __init__(self, metrics_client, notification_client):
-        self.metrics = metrics_client
-        self.notify = notification_client
-        self.active_attacks = {}
-        self.audit_log = []
-    
-    def execute(self, attack: Attack) -> dict:
-        """Execute attack with safety controls"""
-        attack_id = self._generate_id()
-        
-        # Pre-flight checks
-        preflight = self._preflight_checks(attack)
-        if not preflight['passed']:
-            self._audit("BLOCKED", attack, preflight['reason'])
-            return {'status': 'blocked', 'reason': preflight['reason']}
-        
-        # Notify stakeholders
-        self.notify.send(
-            f"🔬 Starting chaos experiment: {attack.name}",
-            f"Duration: {attack.duration_seconds}s, "
-            f"Targets: {len(attack.targets)}"
-        )
-        
-        # Start attack in background with monitoring
-        self.active_attacks[attack_id] = {
-            'attack': attack,
-            'started_at': datetime.now(),
-            'status': 'running'
-        }
-        
-        monitor_thread = threading.Thread(
-            target=self._monitored_execution,
-            args=(attack_id, attack)
-        )
-        monitor_thread.start()
-        
-        self._audit("STARTED", attack)
-        
-        return {
-            'status': 'started',
-            'attack_id': attack_id,
-            'halt_url': f'/attacks/{attack_id}/halt'
-        }
-    
-    def _preflight_checks(self, attack: Attack) -> dict:
-        """Verify it's safe to proceed"""
-        
-        # Check business hours
-        if attack.safety.business_hours_only:
-            hour = datetime.now().hour
-            if not (9 <= hour < 17):
-                return {'passed': False, 'reason': 'Outside business hours'}
-        
-        # Check baseline health
-        if attack.safety.require_healthy_baseline:
-            current_metrics = self.metrics.get_current()
-            if current_metrics.get('error_rate', 0) > 0.01:
-                return {'passed': False, 'reason': 'Baseline unhealthy'}
-        
-        # Check excluded hosts
-        for target in attack.targets:
-            if target in attack.safety.excluded_hosts:
-                return {'passed': False, 'reason': f'Target {target} is excluded'}
-        
-        return {'passed': True}
-    
-    def _monitored_execution(self, attack_id: str, attack: Attack):
-        """Execute with continuous safety monitoring"""
-        start_time = time.time()
-        
-        try:
-            # Actually inject the failure
-            self._inject_failure(attack)
-            
-            # Monitor until duration elapsed or halt triggered
-            while time.time() - start_time < attack.duration_seconds:
-                # Check halt conditions
-                current = self.metrics.get_current()
-                if attack.safety.check_halt_conditions(current):
-                    self._emergency_halt(attack_id, "Safety threshold exceeded")
-                    return
-                
-                # Check manual halt
-                if self.active_attacks[attack_id]['status'] == 'halting':
-                    self._emergency_halt(attack_id, "Manual halt requested")
-                    return
-                
-                time.sleep(1)
-            
-            # Normal completion
-            self._complete_attack(attack_id)
-            
-        except Exception as e:
-            self._emergency_halt(attack_id, f"Error: {str(e)}")
-    
-    def _emergency_halt(self, attack_id: str, reason: str):
-        """Immediately stop attack and rollback"""
-        attack = self.active_attacks[attack_id]['attack']
-        
-        # Rollback the failure injection
-        self._rollback_failure(attack)
-        
-        # Update status
-        self.active_attacks[attack_id]['status'] = 'halted'
-        self.active_attacks[attack_id]['halt_reason'] = reason
-        
-        # Notify
-        self.notify.send(
-            f"🛑 Chaos experiment HALTED: {attack.name}",
-            f"Reason: {reason}"
-        )
-        
-        self._audit("HALTED", attack, reason)
-    
-    def halt(self, attack_id: str) -> bool:
-        """Manual halt trigger"""
-        if attack_id in self.active_attacks:
-            self.active_attacks[attack_id]['status'] = 'halting'
-            return True
-        return False
-    
-    def _audit(self, action: str, attack: Attack, details: str = ""):
-        """Maintain audit trail for compliance"""
-        self.audit_log.append({
-            'timestamp': datetime.now().isoformat(),
-            'action': action,
-            'attack_name': attack.name,
-            'attack_type': attack.attack_type.value,
-            'targets': attack.targets,
-            'details': details,
-            'user': self._get_current_user()
-        })
-```
-
-### Graduated Complexity
-
-```python
-# graduation.py
-# Progress through attack complexity safely
-
-from dataclasses import dataclass
-from typing import List
-from enum import Enum
-
-class MaturityLevel(Enum):
-    """Chaos engineering maturity levels"""
-    LEVEL_1 = "Exploring"      # Simple attacks, single service
-    LEVEL_2 = "Practicing"     # Multiple attack types, automation
-    LEVEL_3 = "Operating"      # Cross-service, game days
-    LEVEL_4 = "Optimizing"     # Continuous, production chaos
-
-@dataclass
-class ChaosMaturityAssessment:
-    """Assess and guide chaos engineering maturity"""
-    
-    level: MaturityLevel
-    
-    def recommended_attacks(self) -> List[str]:
-        """What attacks are appropriate for this level"""
-        if self.level == MaturityLevel.LEVEL_1:
-            return [
-                "CPU stress (single host)",
-                "Memory pressure (single host)",
-                "Network latency (internal)",
-                "Process restart"
-            ]
-        elif self.level == MaturityLevel.LEVEL_2:
-            return [
-                "Multi-host resource attacks",
-                "Network partition (AZ simulation)",
-                "Dependency latency injection",
-                "Automated scheduled chaos"
-            ]
-        elif self.level == MaturityLevel.LEVEL_3:
-            return [
-                "Cross-service failure scenarios",
-                "Game days with multiple teams",
-                "Region failover testing",
-                "Data plane chaos"
-            ]
-        elif self.level == MaturityLevel.LEVEL_4:
-            return [
-                "Continuous production chaos",
-                "Chaos as code in CI/CD",
-                "Automated hypothesis validation",
-                "Chaos-driven architecture decisions"
-            ]
-    
-    def prerequisites_for_next_level(self) -> List[str]:
-        """What's needed to advance"""
-        if self.level == MaturityLevel.LEVEL_1:
-            return [
-                "Basic monitoring in place",
-                "On-call rotation established",
-                "Runbooks for common failures",
-                "5+ successful experiments completed"
-            ]
-        elif self.level == MaturityLevel.LEVEL_2:
-            return [
-                "Automated experiment execution",
-                "Cross-team communication plan",
-                "Defined steady-state metrics",
-                "Incident response tested via chaos"
-            ]
-        elif self.level == MaturityLevel.LEVEL_3:
-            return [
-                "Chaos experiments in CI/CD pipeline",
-                "Production chaos (limited blast radius)",
-                "Chaos-informed architecture decisions",
-                "Executive sponsorship"
-            ]
-        else:
-            return ["You've achieved chaos mastery! 🎉"]
-
-
-class GraduatedChaosProgram:
-    """Guide organizations through chaos maturity"""
-    
-    def __init__(self):
-        self.experiments_completed = []
-        self.current_level = MaturityLevel.LEVEL_1
-    
-    def suggest_next_experiment(self) -> dict:
-        """Recommend next experiment based on maturity"""
-        assessment = ChaosMaturityAssessment(self.current_level)
-        attacks = assessment.recommended_attacks()
-        
-        # Find attacks not yet completed
-        completed_types = {e['type'] for e in self.experiments_completed}
-        available = [a for a in attacks if a not in completed_types]
-        
-        if not available:
-            return {
-                'recommendation': 'Consider advancing to next level',
-                'prerequisites': assessment.prerequisites_for_next_level()
-            }
-        
-        return {
-            'recommendation': available[0],
-            'rationale': f"Appropriate for {self.current_level.value} maturity",
-            'safety_notes': self._safety_notes_for_level()
-        }
-    
-    def _safety_notes_for_level(self) -> List[str]:
-        if self.current_level == MaturityLevel.LEVEL_1:
-            return [
-                "Start in non-production environment",
-                "Single host only",
-                "Business hours with team present",
-                "Manual halt button ready"
-            ]
-        elif self.current_level == MaturityLevel.LEVEL_2:
-            return [
-                "Staging environment recommended",
-                "Notify dependent teams",
-                "Automated halt conditions required"
-            ]
-        else:
-            return [
-                "Production-ready with safeguards",
-                "Stakeholder communication plan",
-                "Rollback procedures documented"
-            ]
-```
-
-### Game Day Framework
-
-```python
-# game_day.py
-# Structured chaos game day execution
-
-from dataclasses import dataclass
-from typing import List, Optional
-from datetime import datetime, timedelta
-
-@dataclass
-class GameDayScenario:
-    """A specific failure scenario to test"""
-    name: str
-    description: str
-    attacks: List['Attack']
-    expected_behavior: str
-    success_criteria: List[str]
-    rollback_procedure: str
-
-@dataclass
-class GameDay:
-    """
-    Structured chaos game day - Gremlin/Amazon style.
-    Planned, communicated, and educational.
-    """
-    name: str
-    date: datetime
-    duration_hours: int
-    scenarios: List[GameDayScenario]
-    
-    # Participants
-    facilitator: str
-    observers: List[str]
-    responders: List[str]  # Teams expected to respond
-    
-    # Communication
-    slack_channel: str
-    video_call_link: str
-    
-    def generate_runbook(self) -> str:
-        """Generate game day runbook"""
-        runbook = f"""
-# Game Day: {self.name}
-Date: {self.date.strftime('%Y-%m-%d %H:%M')}
-Duration: {self.duration_hours} hours
-
-## Facilitator
-{self.facilitator}
-
-## Communication
-- Slack: {self.slack_channel}
-- Video: {self.video_call_link}
-
-## Participants
-**Observers**: {', '.join(self.observers)}
-**Responders**: {', '.join(self.responders)}
-
-## Timeline
-
-### Pre-Game (30 min before)
-- [ ] Verify monitoring dashboards are accessible
-- [ ] Confirm all participants have joined
-- [ ] Review halt procedures
-- [ ] Capture baseline metrics
-
-### Scenarios
-
-"""
-        for i, scenario in enumerate(self.scenarios, 1):
-            runbook += f"""
-#### Scenario {i}: {scenario.name}
-**Description**: {scenario.description}
-
-**Expected Behavior**: {scenario.expected_behavior}
-
-**Success Criteria**:
-{chr(10).join(f'- [ ] {c}' for c in scenario.success_criteria)}
-
-**Rollback**: {scenario.rollback_procedure}
-
----
-"""
-        
-        runbook += """
-### Post-Game
-- [ ] Restore all systems to normal
-- [ ] Capture final metrics
-- [ ] Conduct immediate debrief
-- [ ] Schedule follow-up to review findings
-
-## Emergency Halt
-If anything goes wrong: **ANNOUNCE IN SLACK AND EXECUTE ROLLBACK**
-"""
-        return runbook
-```
-
-## Mental Model
-
-Gremlin/Enterprise chaos engineering asks:
-
-1. **Is this safe?** Built-in safeguards, halt conditions, audit trail
-2. **What category of failure?** Resource, network, or state
-3. **What's our maturity level?** Match experiments to capability
-4. **Who needs to know?** Communication is not optional
-5. **What did we learn?** Document and share findings
-
-## Signature Gremlin Moves
-
-- Categorized attack library (resource, network, state)
-- Built-in safety controls and halt conditions
-- Graduated maturity model
-- Game day framework
-- Enterprise features (RBAC, audit, compliance)
-- Failure as a Service
+- The experiment maps to one named resiliency mechanism.
+- The target set is stable and intentionally scoped.
+- Halt logic uses real operational signals.
+- The chosen attack matches the failure signature you care about.
+- You know how you will interpret manual recovery, partial recovery, and false-negative cases before you run anything.

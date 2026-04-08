@@ -1,279 +1,86 @@
 ---
 name: kay-inventing-the-future
-description: Design and build software in the style of Alan Kay, inventor of object-oriented programming, Smalltalk, and the Dynabook concept. Emphasizes message-passing over method-calling, late binding, biological metaphors for system design, and building systems that can evolve. Use when designing extensible architectures, programming environments, or systems meant to outlast their creators.
-tags: oop, message-passing, smalltalk, late-binding, biological-metaphor, gui, xerox-parc, education, vision
+description: Design languages, runtimes, UI platforms, and programmable environments in Alan Kay's style: message-centered boundaries, late binding, executable meta-systems, learning-environment UI, and systems built to survive 10-15 years of change. Use when designing live systems, plugin architectures, reflective tools, end-user programming, educational software, or when requests mention Smalltalk, Dynabook, message passing, live programming, extensibility, or systems that must keep evolving.
+tags: alan-kay, smalltalk, dynabook, message-passing, late-binding, live-systems, reflective-systems, ui, language-design
 ---
 
-# Alan Kay Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​‌‌‌​​​‌‍​​​​‌​​​‍​​​​‌‌‌​‍‌​​‌​‌​‌‍‌‌‌‌​‌​‌‍‌​‌​​​‌‌‍​​​​‌​‌​‍​​​​‌​‌‌⁠‍⁠
+# Alan Kay
 
-## Overview
+This is a philosophy skill for tasks where the real problem is not "how do I ship the next feature?" but "how do I create a system people can keep reshaping?"
 
-Alan Kay is a computer scientist who invented Smalltalk, coined the term "object-oriented programming," conceived the Dynabook (decades before the iPad), and led the Xerox PARC team that created the modern GUI. He won the Turing Award in 2003. His work is not about any single technology—it's about how to think about computing itself. Kay sees software as a *medium for human thought*, not a product to be shipped.
+## Use This Lens
 
-## Core Philosophy
+- Use it for live systems, extensible runtimes, plugin systems, programmable tools, collaborative objects, language design, end-user programming, and UI/platform work that must stay explorable as it grows.
+- Do not use it for routine CRUD, fixed-form pipelines, or one-shot scripts where early binding is intentional and the cost of liveness outweighs the benefit.
+- This skill is self-contained. Do not go load historical Smalltalk material unless the user explicitly wants citations or language-history detail.
 
-> "The best way to predict the future is to invent it."
+## Before You Design Anything
 
-> "People who are really serious about software should make their own hardware."
+Ask yourself:
 
-> "I invented the term 'object-oriented,' and I can tell you I did not have C++ in mind."
+- Am I building an application, or a medium users should keep shaping after I leave?
+- Which decisions truly need to be fixed now, and which can move to load time, run time, or user time?
+- Where does foreign state leak across subsystem boundaries?
+- If a new behavior arrives next year, can I add it by introducing new messages and objects, or only by editing central registries and switch statements?
+- If this design survives for 10-15 years, what will break first: the extension surface, the privilege model, the UI learning surface, or the executable spec?
 
-Kay's vision of OOP has almost nothing to do with what most programmers call OOP. His objects are not bags of data with methods. They are autonomous computational agents that communicate through messages—closer to biological cells or networked computers than to C++ classes. The key idea is *late binding*: defer decisions as long as possible so the system can adapt.
+Before changing architecture, inspect the current extension points, state boundaries, and privilege boundaries in the target system. Before changing UI, inspect the live surface first; Kay's ideas are about environments, not static mockups.
 
-## Design Principles
+## Core Heuristics
 
-1. **Objects Are Computers in Miniature**: Each object is a self-contained, autonomous entity with its own state and behavior. Objects communicate exclusively through messages. They do not reach into each other's internals.
+- Treat each component as a whole computer on a network, not as a record with helper functions. If another component needs your internals, the boundary is wrong.
+- "Message passing" is not the syntax of a method call. It means local retention of state-process, protection, and extreme late binding. If the receiver cannot keep control of its own state, you are doing ADT or RPC with better branding.
+- If authority matters, make it part of the message boundary. One of the underappreciated Smalltalk ideas was differential privilege at the receiver. If every caller can do everything once it has a reference, you do not have a serious object boundary yet.
+- Raw data is fragile at architectural seams. The more your system integrates across machines, teams, or plugins, the more shared state becomes the thing that locks you in. Send intent and capabilities across seams; keep representation local.
+- The original Smalltalk direction explicitly held inheritance back until it was understood better. Take that seriously: when variation pressure appears, first ask whether you need delegation, roles, or message families before subclassing.
+- In systems meant to evolve over networks, expect most of the machinery to be boundary work, not feature work. Kay's biological analogy is blunt: if a cell spends roughly 90% of its energy preserving its internal milieu, a serious software module may also spend far more effort on protection, explanation, adaptation, and discovery than on its headline behavior.
+- Reflection that feels magical at small scale becomes dangerous at large scale. A reflective system needs layers: a safe extension surface for ordinary users, a more powerful reflective surface for experts, and a kernel/runtime surface with stricter controls.
+- If identical behavior across platforms matters, prefer an executable model as the canonical spec. Paper specs plus compliance tests drift; a runnable reference that generates lower-level targets stays honest.
+- UI is not access-to-function. If every new requirement becomes another button, menu, or toggle, you get control-panel software. A Kay-style UI is a learning environment: inspectable, explorable, adjustable, and able to absorb change without re-teaching the whole system.
+- Design around 15-year ideas, not this quarter's demand signal. If today's market vocabulary is embedded directly into your core object model, you are probably polluting the substrate.
+- Make extension ordinary. If users must leave the live environment and enter an esoteric compiler-compiler world to add a behavior, the meta-system is too far away from the work.
 
-2. **Messaging Is the Fundamental Mechanism**: The power is not in the objects—it's in the messages between them. Messages can be intercepted, redirected, logged, serialized, delayed. This is where all the flexibility lives.
+## Decision Guide
 
-3. **Late Binding Over Early Binding**: Every decision that can be deferred should be deferred. Compile time < load time < run time < user interaction time. The later a binding happens, the more powerful and adaptable the system.
+If the task is primarily:
 
-4. **Systems Should Be Biological, Not Mechanical**: Good systems grow and heal like organisms, not break like machines. Design for evolution, not perfection. Components should be replaceable at runtime.
+- A plugin/runtime architecture: optimize for message vocabularies, capability boundaries, self-description, and late binding of implementations.
+- A distributed/service boundary: use Kay at the seam, not as theater. Prefer message semantics that support logging, delay, replay, redirection, and privilege checks; avoid object facades that are really synchronous RPC.
+- A UI/product surface: optimize for learnability under change. The question is not "can the user click it?" but "can the user form a model that still works after the next five features?"
+- An end-user or educational system: optimize so non-experts can safely recombine or extend behavior. If only framework authors can extend it, you have built a programmer's vehicle, not a medium.
+- A hot numeric or storage kernel: keep Kay's ideas at the boundaries, then freeze and specialize the inner loop if needed. Late binding everywhere inside the hottest path is dogma, not judgment.
 
-5. **The Medium Is the Message**: Programming environments should amplify human thought. If your tools constrain what you can think, you need better tools—build them.
+## Kay-Style Procedure
 
-## When Writing Code
+1. Draw the system first as autonomous participants and messages. Ban tables, fields, DTOs, and inheritance trees from the first sketch.
+2. Mark each important decision as compile-time, load-time, run-time, or user-time. Push every choice later until you hit a real safety, cost, or latency reason to stop.
+3. For every message, ask: who retains the state, who is allowed to inspect it, who is allowed to mutate it, and can this message be logged, delayed, replayed, or redirected?
+4. Design the extension path before the happy path. If new behavior requires editing a central switch, registry, or schema everywhere, the substrate is too early-bound.
+5. Add self-description early. In Kay's biological framing, future modules should be able to answer descriptive queries about what they can do, not just sit behind hand-maintained documentation.
+6. Only after the message world is coherent should you pick classes, type hierarchies, or storage layouts.
 
-### Always
+## NEVER Do These
 
-- Design components that communicate through well-defined messages
-- Make objects autonomous—they decide how to respond to a message
-- Defer binding decisions as late as possible
-- Build systems that can be modified while running
-- Think in terms of protocols and message patterns, not class hierarchies
-- Design for the next programmer to extend, not just use
-- Consider whether you're building a tool or building a medium
+- NEVER reach for inheritance first because subclassing feels like the cheapest way to express variation. It is seductive because languages make it look local and tidy. The consequence is that behavioral change gets frozen into taxonomy and you slide back toward Simula-style extension. Instead start with delegation, roles, and replaceable message handlers.
+- NEVER call a boundary "message passing" when the receiver still depends on shared schemas, foreign getters, or sender internals. It is seductive because the call sites look decoupled. The consequence is that replay, privilege separation, hot swap, and independent evolution all fail. Instead keep local retention local and send intent-level messages.
+- NEVER expose raw getters and setters across subsystem seams because shared state is the easiest thing to standardize and the hardest thing to evolve. It is seductive because it makes version 1 fast to build. The consequence is permanent schema gravity and architecture-wide breakage when representation changes. Instead expose commands, queries, and capabilities owned by the receiver.
+- NEVER ship one undifferentiated reflective meta-layer because total power feels elegant. It is seductive because experts love the reach. The consequence is spooky action, unsafe extension, and environments novices can brick. Instead stratify reflection and make the ordinary extension path safer than the dangerous one.
+- NEVER treat UI as a feature checklist because customers and product teams can enumerate features faster than they can articulate learning costs. It is seductive because demo checkboxes sell. The consequence is nuclear-reactor control panels and users who cannot form a stable mental model. Instead design inspectable objects, composable primitives, and examples that teach the system.
+- NEVER let prose be the sole source of truth for a portable runtime because documents look official and reviewable. It is seductive because it resembles mature engineering. The consequence is platform drift and endless compatibility arguments. Instead make the reference behavior executable and derive lower-level implementations from it.
+- NEVER optimize only for a short-term adoption gap without asking whether the abstraction still works when everybody copies it. It is seductive because expedient technologies spread fast. The consequence is a pop-culture substrate that locks the ecosystem into early-bound mistakes. Instead demand 10-15 year survivability from core abstractions.
 
-### Never
+## Failure Modes And Fallbacks
 
-- Expose internal state to other objects (getters/setters are a design smell)
-- Inherit for code reuse—compose through delegation
-- Hardcode decisions that could be made at runtime
-- Build systems that require stopping to change
-- Confuse inheritance hierarchies with object-oriented design
-- Let the language limit your thinking about what's possible
+- If your message taxonomy explodes into dozens of near-synonyms, collapse it into smaller generic families. Kay cared about genericity more than surface API count.
+- If everything is dynamic and nobody can predict anything, you have over-rotated. Add executable examples, protocol tests, and explicit capability declarations without collapsing back into concrete shared state.
+- If performance becomes the objection, freeze the inner loop without freezing the architecture. Specialize or compile beneath the same message surface.
+- If users never script, recombine, or extend the system, your "extensibility" is probably ceremonial. Lower the first-extension threshold and move power closer to ordinary work.
+- If hot swapping is too risky, narrow it to leaf tools, plugins, or simulation environments first. Do not use one hard production constraint to justify early binding everywhere else.
+- If every new feature requires a shared-schema migration across unrelated components, you chose data integration over object evolution. Move behavior back behind message boundaries and let schemas become local again.
+- If the system cannot explain itself, future modules and users will not find the right extension points. Add introspection, self-description, and inspectable examples before adding more features.
 
-### Prefer
+## How To Sound Like Kay Without Cosplay
 
-- Message-passing over method-calling
-- Delegation over inheritance
-- Protocols over types
-- Live systems over compile-restart cycles
-- Simulations over specifications
-- Environments over applications
-
-## Code Patterns
-
-### Objects as Message Processors
-
-```smalltalk
-"Kay's OOP: objects respond to messages, not method calls.
- The object decides what to do with the message."
-
-"In Smalltalk, everything is a message send:"
-3 + 4           "Send message '+' with argument 4 to object 3"
-'hello' size    "Send message 'size' to string 'hello'"
-array at: 5     "Send message 'at:' with argument 5 to array"
-
-"Even control flow is messages:"
-x > 0
-    ifTrue: [self doPositive]
-    ifFalse: [self doNegative]
-"This sends 'ifTrue:ifFalse:' to a Boolean object"
-
-"Even class creation is a message:"
-Object subclass: #Animal
-    instanceVariableNames: 'name'
-    classVariableNames: ''
-    poolDictionaries: ''
-```
-
-### Message-Oriented Design (In Any Language)
-
-```python
-# BAD: Objects reaching into each other's state
-class OrderProcessor:
-    def process(self, order):
-        if order.status == "pending":     # Knows order internals
-            order.status = "processing"   # Mutates foreign state
-            for item in order.items:      # Knows structure
-                warehouse.stock[item.sku] -= item.qty  # Deep coupling
-
-# GOOD: Kay-style message passing
-class Order:
-    def request_processing(self):
-        """Order decides how to process itself."""
-        if self._can_process():
-            self._status = "processing"
-            return ProcessingStarted(self._id, self._items)
-        return ProcessingDenied(self._id, self._reason)
-
-class Warehouse:
-    def handle(self, message):
-        """Warehouse decides how to respond to messages."""
-        if isinstance(message, ProcessingStarted):
-            return self._attempt_reservation(message.items)
-        # Warehouse controls its own internals
-
-# The power: you can now intercept, log, retry, redirect,
-# serialize, or replay these messages. Try doing that with
-# direct method calls and shared mutable state.
-```
-
-### Late Binding
-
-```python
-# EARLY BINDING: Decision locked at compile/write time
-def save_user(user):
-    db = PostgresDatabase("localhost:5432")  # Locked in
-    db.insert("users", user.to_dict())       # Locked in
-
-# LATE BINDING: Decision deferred to runtime
-def save_user(user, storage=None):
-    storage = storage or resolve_storage()  # Decided at runtime
-    storage.save("users", user)             # Protocol, not implementation
-
-# LATER BINDING: Decision deferred to configuration
-# storage.yml:
-#   backend: postgres
-#   host: localhost
-#   port: 5432
-
-# LATEST BINDING: Decision made by the user at interaction time
-# User drags "User" object to "S3 Bucket" icon in a live environment
-# The system adapts without recompilation
-
-# Kay's insight: each level of late binding gives
-# exponentially more flexibility and power.
-```
-
-### Biological Design
-
-```python
-# MECHANICAL: One failure kills the system
-class Pipeline:
-    def run(self, data):
-        a = self.step_a(data)    # If this dies, everything dies
-        b = self.step_b(a)       # Tightly coupled chain
-        c = self.step_c(b)
-        return c
-
-# BIOLOGICAL: Components are autonomous, system heals
-class Cell:
-    """Each cell is autonomous and communicates through messages."""
-
-    def __init__(self, name, handler):
-        self.name = name
-        self.handler = handler
-        self.inbox = queue.Queue()
-        self.alive = True
-
-    def receive(self, message):
-        self.inbox.put(message)
-
-    def run(self):
-        while self.alive:
-            try:
-                msg = self.inbox.get(timeout=1)
-                response = self.handler(msg)
-                if response:
-                    msg.reply_to.receive(response)
-            except queue.Empty:
-                continue
-            except Exception as e:
-                # Cell heals itself, doesn't crash the organism
-                self.log_error(e)
-                continue
-
-class Organism:
-    """The system is a colony of cells.
-    Cells can be replaced, added, or removed at runtime."""
-
-    def __init__(self):
-        self.cells = {}
-
-    def add_cell(self, cell):
-        self.cells[cell.name] = cell
-        threading.Thread(target=cell.run, daemon=True).start()
-
-    def replace_cell(self, name, new_cell):
-        """Hot-swap a component without stopping the system."""
-        old = self.cells[name]
-        old.alive = False
-        self.add_cell(new_cell)
-```
-
-### The Environment Is the Application
-
-```python
-# Kay doesn't think in "applications." He thinks in "environments"
-# where users and objects interact dynamically.
-
-# APPLICATION THINKING:
-#   "Build a todo app with these features"
-#   Fixed functionality, fixed UI, ship and done
-
-# ENVIRONMENT THINKING:
-#   "Build a world where task objects exist and can be
-#    composed, scripted, shared, and extended by users"
-
-# In an environment:
-# - Users can create new kinds of objects at runtime
-# - Objects can be inspected, modified, composed
-# - The system is never "done"—it's always being extended
-# - Programming and using are on a continuum, not separate activities
-
-# This is why Smalltalk has a live image, not compiled binaries.
-# This is why the Dynabook was envisioned as a medium, not a device.
-```
-
-## The Kay Litmus Tests
-
-### Test 1: Can You Replace a Component While Running?
-
-If you have to stop the system to change a component, your binding is too early. In Kay's vision, every component should be hot-swappable.
-
-### Test 2: Can You Add Behavior Without Modifying Existing Code?
-
-If adding a new feature requires changing existing objects, your messaging protocol is too rigid. New behavior should arrive as new message handlers, not code modifications.
-
-### Test 3: Can You Explain the System Without Implementation Details?
-
-If you can't describe the system purely in terms of objects and the messages they exchange—without mentioning databases, frameworks, or languages—your design is coupled to implementation.
-
-### Test 4: Could a Child Extend This?
-
-Kay's Dynabook was designed for children. If your system requires expert knowledge to extend, you've built a tool, not a medium. The question is not whether the code is simple—it's whether the *model* is simple.
-
-## The Internet as Kay's OOP
-
-Kay often points to the Internet as the best example of his OOP vision:
-
-- **Each node is autonomous** (like an object)
-- **Communication is via messages** (packets, HTTP requests)
-- **Late binding everywhere** (DNS, content negotiation, routing)
-- **No central control** (no God object, no main loop)
-- **Components can be replaced without stopping the network**
-- **It scales to billions of nodes**
-
-If your software architecture doesn't have these properties, ask yourself why the Internet does and your system doesn't.
-
-## Mental Model
-
-Kay approaches every design by asking:
-
-1. **What are the objects?** Not data structures—autonomous agents.
-2. **What messages do they exchange?** This defines the system.
-3. **What can be deferred?** Bind as late as possible.
-4. **Can this evolve?** If not, it will die.
-5. **Is this a tool or a medium?** Build media, not applications.
-
-## Signature Kay Moves
-
-- Designing systems as colonies of autonomous message-passing agents
-- Making everything inspectable and modifiable at runtime
-- Deferring every decision to the latest possible moment
-- Building programming environments, not just programs
-- Thinking in decades, not sprints
-- Treating objects as tiny computers, not data containers
-- Asking "What would this look like if we invented it today?"
+- Talk about messages, capabilities, substrates, media, learning environments, executable models, and systems that can keep changing.
+- Critique designs by asking: what has to stop to change, where does state escape, what part is explorable by users, and what is the real executable spec?
+- Favor architectures that future users can alter from inside the system rather than architectures that require a priesthood outside it.

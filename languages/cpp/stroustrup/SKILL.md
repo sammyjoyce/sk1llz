@@ -1,130 +1,129 @@
 ---
 name: stroustrup-cpp-style
-description: Write modern C++ in Bjarne Stroustrup's idiom — RAII-first ownership, invariant-bearing classes, zero-overhead abstractions, and C++ Core Guidelines discipline. Use when writing or reviewing C++17/20/23 code, designing APIs or class hierarchies, choosing parameter-passing or ownership strategies, debugging move-semantics or lifetime bugs, deciding between exceptions and std::expected, writing concepts, fixing Pimpl compile errors, or enforcing Core Guidelines. Triggers include C++, Stroustrup, Core Guidelines, RAII, smart pointers, unique_ptr, shared_ptr, move semantics, rule of zero, rule of five, std::expected, concepts, ADL, hidden friends, noexcept, constexpr, string_view, span, GSL, not_null, pimpl.
+description: Apply Stroustrup's 21st-century ISO C++ style: subset-of-superset design, tool-enforceable safety rules, semantic concepts, RAII ownership, and zero-overhead interface choices. Use when designing or repairing modern C++17/20/23 APIs, signatures, templates, move/noexcept behavior, raw-pointer migrations, virtual-base contracts, or C/ABI boundaries. Triggers: RAII, rule of zero, owner<T*>, not_null, span, string_view, concepts, enable_if, virtual destructor, noexcept move, pimpl, lifetime, invalidation, shared_ptr, unique_ptr.
 ---
 
-# Stroustrup-Style Modern C++
+# Stroustrup-Style C++
 
-## Before you type, ask yourself
+## Load protocol
 
-1. **What invariant does this class enforce?** A class without an invariant should be a `struct`. If you cannot name the invariant in one sentence, you have not designed the class — you have grouped variables.
-2. **Who owns every allocation, and when is it released?** The answer must be structural (a `unique_ptr` member, a container, a stack object), never "the caller remembers".
-3. **Can the compiler reject misuse?** If "don't call `close()` twice" is a documented rule, the type is wrong. Make the illegal state unrepresentable.
-4. **What does this cost when I'm wrong about it being cheap?** Zero-overhead means "no cost vs. hand-written C", not "free". Know the cost.
+- Before touching special members, raw handles, or Pimpl seams, MUST READ `move-and-raii.md`.
+- Before changing a public signature or arguing about `T` vs `const T&` vs `T&&`, MUST READ `parameter-passing.md`.
+- Before exposing a concept, public template, or overload set, MUST READ `generic-programming.md`.
+- Load `philosophy.md` only for teaching material, design docs, or policy debates. Do NOT load it for routine implementation work.
+- Do NOT load `references.md` during coding. It is a bibliography, not an execution guide.
 
-If you can't answer (1) and (2) before typing, stop and redesign.
+## Operating model
 
-## Expert heuristics (hard-won, non-obvious)
+Stroustrup's modern style is not "use newer syntax." It is a subset-of-superset strategy: first add a better abstraction (`span`, RAII handle, hardened container, semantic concept), then ban the lower-level escape hatch that made bugs normal. If you try to ban raw techniques before introducing the replacement abstraction, engineers route around the rule and the codebase gets worse, not safer.
 
-### Rule of Zero is the default; a hand-written destructor is a smell
-Delegate every resource to a member that already owns it (`unique_ptr`, `vector`, `string`, `jthread`, `scoped_lock`). The compiler then generates correct copy/move/destroy for free. **If you catch yourself writing `~Foo()`, ask "what resource is leaking through the cracks?"** — the fix is almost always "wrap this raw pointer" or "use a container." Rule of Five is the escape hatch, not the goal.
+Treat guidelines as targets for tools, not as taste. If a rule cannot be checked locally by compiler, static analysis, or a narrow review protocol, it will not scale past a small team. Recent Stroustrup profile work explicitly prefers rejecting hard-to-analyze code over pretending whole-program lifetime reasoning is affordable.
 
-### `{}` initialization is about narrowing, not style
-`int x{3.14};` is a compile error (good). `int x(3.14);` silently truncates to `3`. Prefer `{}` EXCEPT two traps:
-- `std::vector<int> v{10, 20};` makes a 2-element vector — `initializer_list<int>` wins overload resolution. Use `(10, 20)` for "10 copies of 20".
-- `auto x{1};` gave `initializer_list<int>` in C++11–14; C++17 fixed single-brace to `int`. Never `auto x{a, b};`.
+Optimize for semantic coherence, not minimal syntax. The seductive mistake in mature C++ code is making every interface reflect the current implementation detail. Stroustrup's guidance is the opposite: choose the contract that stays correct after the implementation gets faster, safer, or more instrumented.
 
-### `std::move` is a cast; `std::move` on `const` is a silent copy
-`std::move(x)` yields an rvalue reference; whether a move actually happens depends on the destination. `std::move` of a `const T` produces `const T&&`, which cannot bind to a move constructor — the copy constructor is chosen with no diagnostic. **Never `const`-qualify a local you intend to move from.**
+## Before you edit, ask yourself
 
-### Never `return std::move(local);`
-NRVO already constructs the result directly in the caller's slot — zero moves. Writing `return std::move(x);` turns the return expression into an rvalue reference, which is not an NRVO candidate, so you get a mandatory move. The only correct uses of `std::move` in `return`: returning a by-value *parameter*, or returning a *member* — neither is NRVO-eligible.
+- What invariant becomes mechanically checkable after this change?
+- After one `push_back`, `erase`, `sort`, reallocation, or thread handoff, which aliases, iterators, references, or views become invalid?
+- Am I introducing a shape-only concept because it is easy to type, even though I cannot state the semantics in one sentence?
+- Is this really a low-level exception, or did I fail to first build the abstraction that would let me forbid the low-level trick?
+- If I am adding `noexcept`, can I prove it under logging, allocation, and future member changes, or am I just silencing a performance discussion?
 
-### A moved-from object is "valid but unspecified" — not "empty"
-After `std::move(x)`, only these are safe on `x`: destruction, assignment *to* `x`, and reset methods (`x.clear()`, `x = {}`). Do **not** read state: `x.size()`, `x.empty()`, `x.front()` may return anything. `std::unique_ptr` is a special case (spec guarantees `nullptr`); `vector`/`string` are **not**.
+If any answer depends on "the current implementation happens to...", redesign before editing.
 
-### `noexcept` on the move constructor doubles `vector` growth speed
-`std::vector<T>` checks `std::is_nothrow_move_constructible_v<T>` at reallocation. If false, it **copies** every element to preserve the strong exception guarantee. One non-`noexcept` member poisons the entire defaulted move. Protect your classes with `static_assert(std::is_nothrow_move_constructible_v<MyClass>);` — silent pessimization is the worst kind.
+## High-value heuristics
 
-### Thread-safe `const` requires a `mutable` mutex
-A `const` method must be safe for concurrent callers. If it needs a lock, the `std::mutex` member is `mutable`. This is idiomatic, not a hack — `mutable` exists precisely for memoization caches and internal synchronization.
+### Ownership and invalidation
 
-### `std::string_view` is not a free `const std::string&`
-- Dangles if built from a `string` temporary held across statements. Microsoft classifies ~23% of C++ security bugs as lifetime-related; `string_view` misuse is the leading new source.
-- Not null-terminated — `.data()` is **not** a C string; passing to C APIs is UB.
-- `sizeof(string_view) == 16` on 64-bit; for very short strings, `const string&` can be faster.
-- **Never** store `string_view` (or any range `view`) as a class member unless the owning data's lifetime is externally guaranteed. Store `string`, take `string_view` in parameters.
+- Non-owning types are edge types. `T&`, `T*`, iterators, `string_view`, and `span` are strongest at call boundaries and weakest as stored state.
+- Any non-const container operation after taking an alias to an element should be treated as invalidating until proved otherwise. The safe default is: copy out what you need, mutate, reacquire the alias.
+- Do not try to be clever with flow-sensitive lifetime proofs in ordinary code. Stroustrup's invalidation work explicitly narrows the initial safe subset to straight-line, locally checkable cases because "smart" non-local analysis becomes unaffordable fast.
+- `owner<T*>` is not a smart pointer lite. It is a quarantine marker for code you cannot yet convert because of ABI, migration cost, or handle implementation details. If you introduce `owner<T*>`, also isolate the delete site.
+- References are never owners, and they dangle in more ways than most code reviews catch: `vector` growth, storing a reference to an element before mutation, binding to a temporary result such as `std::max(x, y + 1)`, and escaping a local through a longer-lived object.
 
-### Pimpl with `unique_ptr<Impl>` requires an out-of-line destructor
-`unique_ptr<Impl>`'s implicit destructor needs `Impl` complete at the point of instantiation. Forward-declare in the header, then in the `.cpp`:
-```cpp
-// widget.h
-class Widget { public: Widget(); ~Widget();  // declared
-private: struct Impl; std::unique_ptr<Impl> p_; };
-// widget.cpp — where Impl is complete
-Widget::~Widget() = default;
-```
-Skipping the out-of-line `= default` gives cryptic "`sizeof` of incomplete type" errors in every TU that destroys a `Widget`. Same applies to move operations if you declare them.
+### Interfaces and performance
 
-### Concepts express *semantics*, not syntax
-A concept that merely checks "has `operator+`" is worse than no constraint — it lies about intent (string concatenation? integer addition? pointer arithmetic?). A good concept names a property with an axiom you can state in one sentence (`Monoid`, `RandomAccessRange`, `TotallyOrdered`). If you can't write the axiom, keep the template unconstrained with a comment — don't name a shape check.
+- "Cheap to copy" is a machine-word rule, not a vibes rule. Stroustrup/Sutter guidance says two or three machine words is the usual break-even point; beyond that, the extra indirection of `const T&` often wins.
+- `string_view` and `span` are meant to be passed by value. `shared_ptr` is the counterexample: it may fit in two machine words, but copying it still performs refcount work, often atomic.
+- Do not put smart pointers in a signature unless the function is expressing lifetime semantics. A function that only uses a `widget` should accept a `widget`, not force the caller into `shared_ptr<widget>`.
+- `noexcept` on move is a semantic performance knob. Standard containers and algorithms use it to decide whether relocation can use move while preserving guarantees. One throwing move can turn a container-growth path from cheap move into copy fallback or make a move-only type unusable in practice.
+- Base destruction is an interface choice, not boilerplate. If destruction through `Base*` is allowed, the destructor must be public and virtual. If it is not allowed, make it protected and non-virtual so accidental `unique_ptr<Base>` deletion cannot compile into UB.
 
-### `reinterpret_cast` is almost never what you want
-For type punning use `std::bit_cast<T>(x)` (C++20, constexpr, zero cost). For raw byte copy use `std::memcpy`. `reinterpret_cast` between unrelated pointer types violates strict aliasing and is UB in most cases. Well-defined uses are narrow: to/from `std::byte*`/`char*`/`unsigned char*`, to/from `std::uintptr_t`, and platform-specific function/object pointer conversions.
+### Generic programming
 
-### Exceptions for *exceptional*; `std::expected` for *expected*
-Throw on: resource-acquisition failure, broken invariant, out-of-memory. Return `std::expected<T, E>` (C++23) or `std::optional<T>` for: parse failure, lookup miss, user-input validation — anywhere the caller is expected to handle it on the normal path. **Never mix both for the same category of failure** — callers can't reason about two error paths. Error codes are a C-ABI boundary tool only; they fight RAII because cleanup becomes manual.
+- Avoid single-property public concepts. `Addable` looks elegant and quietly accepts `std::string` concatenation and pointer arithmetic. That is how generic libraries become semantically incoherent.
+- Do not minimize concept requirements to the current body of one algorithm. Stroustrup's warning is that this freezes interface requirements to today's implementation details, so a future optimization becomes an API break.
+- Public concepts should correspond to a domain idea with semantics or axioms. If you cannot state the meaning, keep the requirement local as a private constraint or `static_assert`, not as part of the public vocabulary.
+- Prefer concept-based overload selection over handcrafted `enable_if` hierarchies when the semantics are real. If the compiler can compute strictness, do not encode the dispatch lattice yourself.
 
-### Strong types belong where two units share a representation
-Replace a primitive with a strong type **when two units share the same representation and confusing them compiles silently**: `Milliseconds` vs `Seconds`, `UserId` vs `OrderId`, `Celsius` vs `Fahrenheit`. Don't wrap a primitive with no confusable sibling — that's bureaucracy. `std::chrono::duration` and `enum class` are the cheapest implementations; a 3-line wrapper class is the next step up.
+### Errors and boundaries
 
-## NEVER (seductive reason → concrete consequence → correct path)
-
-- **NEVER use `new`/`delete` in application code.** Feels direct and explicit. *Consequence:* any exception between `new` and `delete` leaks, and the leak is invisible in review. *Do:* `std::make_unique<T>(...)` and let RAII handle unwinding.
-- **NEVER expose a raw owning pointer in an API.** "It's just a pointer." *Consequence:* reviewers cannot tell ownership from observation, grep cannot find leaks, callers can't reason about lifetimes. *Do:* `std::unique_ptr<T>` for transfer; `T&` for required non-owning; `T*` only for nullable non-owning, and annotate `gsl::not_null<T*>` when it must not be null.
-- **NEVER default to `std::shared_ptr`.** Feels "safe". *Consequence:* atomic refcount traffic on every copy, cycles that silently leak, and obscured ownership that makes refactoring impossible. *Do:* default to `unique_ptr`; promote to `shared_ptr` only when multiple owners genuinely coexist in time.
-- **NEVER inherit publicly to reuse code.** Avoids duplication with one keyword. *Consequence:* Liskov violations, tight coupling, virtual-dispatch cost, slicing on by-value copy. *Do:* composition by default; inherit publicly only to model "is-a" polymorphism, and make the base destructor either `virtual` or `protected` non-virtual.
-- **NEVER throw from a destructor.** Cleanup can legitimately fail (flush, close). *Consequence:* during stack unwinding from another exception, throwing calls `std::terminate` with no cleanup. *Do:* log/set a flag in the destructor; expose an explicit `close()` users call before destruction when they care about the outcome.
-- **NEVER capture by reference (`[&]`) in a lambda that outlives the enclosing scope.** Works perfectly in the demo. *Consequence:* UB when the lambda runs after the frame is gone — async callbacks, `std::thread`, coroutines, event loops. *Do:* capture by value, or by `shared_ptr` copy when you need shared mutable state.
-- **NEVER leave a single-argument constructor implicit.** `f(42)` reads nicely. *Consequence:* silent conversions cause overload ambiguities and surprise temporaries that bind to `const T&` parameters. *Do:* mark it `explicit`. For templates, `explicit(condition)`.
-- **NEVER mark every function `noexcept`.** Feels like "free optimization". *Consequence:* a single thrown exception from inside calls `std::terminate` with no unwind — worse than crashing. *Do:* `noexcept` on moves, swaps, destructors, and functions whose specification guarantees no throw. Leave the rest silent.
-- **NEVER use a macro where `constexpr`, `consteval`, `inline`, or a template works.** Brevity. *Consequence:* no scoping, no types, textual-substitution bugs, diagnostics that point into expanded code. *Do:* in 2024 C++ the only legitimate macros are include guards and platform feature detection.
-- **NEVER store `string_view` or a range view as a class member.** It's cheap and non-owning. *Consequence:* dangling references that survive code review because they manifest weeks later under different memory layouts. *Do:* store the owning type; take views only in parameters.
-- **NEVER return `auto&&` from a non-forwarding function.** Reads like "perfect return forwarding". *Consequence:* it forwards a reference to a local — dangling. *Do:* return `auto` (by value) or `decltype(auto)` only in forwarding wrapper templates.
+- Inside ordinary C++ domains, pair RAII with exceptions so failure unwinds complete invariants instead of leaking partial state.
+- At C, hard-real-time, or fixed-latency boundaries, translate once at the edge. Do not spread "error-code style everywhere" because one subsystem cannot tolerate exceptions or general free store.
+- Resource safety is not just "no leaks." Holding locks, memory, or handles twice as long as necessary directly increases contention and can force more hardware/energy for the same work.
 
 ## Decision trees
 
-### Error handling
+### Choosing the ownership form
+
 ```
-Can the caller meaningfully handle it?
-├── No (bug, broken invariant) ............ assert / contract; no return path
-├── Yes, rare and exceptional ............. throw a typed exception
-├── Yes, routine and expected ............. std::expected<T, E> or std::optional<T>
-└── Crossing a C ABI boundary ............. error code; document; wrap in C++ immediately
+Need shared lifetime after this call?
+|- No -> use value, T&, T*, span, or string_view as a borrow
+|- Yes, but only one owner at a time -> value or unique_ptr
+`- Yes, multiple owners truly outlive one another
+   |- Can you name the cycle breaker now? -> shared_ptr + weak_ptr
+   `- No -> redesign; hidden shared ownership is architecture debt
 ```
 
-### Smart-pointer choice
-```
-Who owns this resource?
-├── Single owner, clear lifetime .......... std::unique_ptr<T>   ← the default (~99% of cases)
-├── Genuinely shared ownership ............ std::shared_ptr<T>
-├── Observer of a shared_ptr .............. std::weak_ptr<T>
-└── Non-owning reference .................. T& or gsl::not_null<T*>
-```
-If your first instinct is `shared_ptr`, pause. Ask: "could a `unique_ptr` at the right layer serve everyone else by reference?" — 9 times out of 10, yes.
+### Deciding whether a view may be stored
 
-### Class vs struct
 ```
-Is there an invariant between members?
-├── Yes ................ class, private data, constructors establish it
-└── No ................. struct, public data, no constructors beyond aggregate
+Need to keep data after the call returns?
+|- No -> pass span/string_view by value
+|- Yes, and this object owns the storage -> store the owner, derive the view on demand
+`- Yes, but ownership is external
+   |- Can the lifetime contract be stated and enforced locally? -> store a borrow with proof
+   `- No -> copy the data or redesign the boundary
 ```
 
-### Parameter passing (full table in `parameter-passing.md`)
+### Designing a public template contract
+
 ```
-Size ≤ 2 words and trivially copyable?  → pass by value
-Large, read-only input?                 → pass by `const T&`
-Sink (function will store/move it)?     → pass by value + `std::move` inside
-In-out, must exist?                     → pass by `T&`
-Optional in-out?                        → pass by `T*`, document the null contract
+Is the requirement part of the public API?
+|- No -> local requires/static_assert is enough
+`- Yes
+   |- Can you state semantics or an axiom? -> define/reuse a concept
+   `- No -> do not publish a concept; keep it as a private constraint
 ```
 
-## Progressive loading
+### Migrating legacy raw-pointer code
 
-This file is enough for day-to-day writing and review.
+```
+Can the seam be wrapped without breaking ABI?
+|- Yes -> add RAII/value wrapper first, then ban raw ownership internally
+`- No
+   |- Is the pointer owning? -> mark owner<T*>, isolate delete, use not_null/span around it
+   `- Borrow only -> keep raw borrow form but tighten lifetime scope and invalidation points
+```
 
-- **Load `parameter-passing.md`** when: designing a new function signature, reviewing an API, arguing `const T&` vs `T` vs `T&&`, or chasing a call-site regression. Contains the full F.15–F.18 decision matrix and sink-parameter trade-offs.
-- **Load `move-and-raii.md`** when: defining or debugging special member functions, Rule of Zero/Five questions, Pimpl compile errors, `noexcept` decisions, move-elision surprises, or "why did my `vector` copy instead of move?".
-- **Load `generic-programming.md`** when: writing a template, designing a concept, seeing cryptic template errors, hidden-friend or CPO/ADL questions, or deciding between `if constexpr`, SFINAE, and concepts.
-- **Load `philosophy.md`** only when you need the *why* — justifying an architectural decision, writing a team style guide, onboarding. Do **not** load for day-to-day coding.
-- **Do NOT load `references.md`** for implementation tasks. It is an index of external resources (books, talks, papers), not a guide.
+## NEVER rules
+
+- NEVER use `owner<T*>` as the final design because it is seductive "partial modernization" that preserves manual delete and lifetime ambiguity. Instead quarantine it at ABI or migration seams and convert the interior to RAII handles.
+- NEVER store `string_view`, `span`, iterators, or references as members just because they are cheap, because their failure mode is delayed invalidation after unrelated container growth, reassignment, or background work. Instead store ownership or recompute the view at the edge.
+- NEVER declare one special member in isolation because the language quietly changes which copy/move operations are generated, and a "tiny destructor" can silently turn moves into copies. Instead use the rule of zero or spell out all five deliberately.
+- NEVER publish a one-operator concept because the easy syntax hides accidental matches and locks clients to a fake abstraction. Instead constrain with a semantic domain concept or keep the check private.
+- NEVER take `shared_ptr<T>` or `const shared_ptr<T>&` for read-only access because it couples callers to one lifetime policy and adds refcount traffic for no semantic gain. Instead take `T&`, `T*`, `span`, or `string_view`, and use smart pointers only when ownership is the contract.
+- NEVER add `std::move(local)` on return from a normal function because it is seductive cargo-cult optimization that can block elision and obscures the ownership story. Instead return the local directly and let copy elision do its job.
+- NEVER promise broad `noexcept` on public operations because the reward is often speculative while the failure mode is `std::terminate` after a later member or logging change. Instead reserve `noexcept` for moves, swaps, destructors, and other paths you can actually prove.
+- NEVER rely on comments such as "this iterator remains valid" after mutation because the next refactor will not read the comment, only the code. Instead structure the code so aliases are reacquired after invalidating operations.
+- NEVER make a base destructor public and non-virtual because it feels cheaper than deciding the abstraction boundary, but it leaves deletion through `Base*` as a latent UB trap. Instead choose explicitly: public virtual or protected non-virtual.
+
+## Fallbacks and edge cases
+
+- If invalidation is difficult to prove, replace alias-based logic with index/key-based logic, perform the mutation, then reacquire references.
+- If concepts are unavailable on the toolchain, keep the semantic contract in a named comment and add `static_assert` checks at the type or call boundary rather than rebuilding an `enable_if` maze.
+- If a move cannot honestly be `noexcept`, do not fake it for container performance. Consider a stable indirection strategy instead of lying to the type system.
+- If a real-time or firmware profile bans exceptions or general free store, confine that ban to the profile boundary. Do not downgrade the whole codebase to C-with-classes.
+- If a C interface forces raw pointers, pair them with `not_null`, `span`, `zstring`, or explicit size/lifetime comments at the seam and keep the unsafeness from spreading inward.
+
+The Stroustrup target is not "code that looks modern." It is code whose safety and performance story survives tooling, refactoring, and scale.

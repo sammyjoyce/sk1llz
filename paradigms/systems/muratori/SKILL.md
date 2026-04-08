@@ -1,399 +1,168 @@
 ---
 name: muratori-performance-aware
-description: Write performance-aware code in the style of Casey Muratori, creator of Handmade Hero and performance optimization educator. Emphasizes understanding what the hardware actually does, rejecting unnecessary abstraction, and measuring everything. Use when writing performance-critical code or when you need to understand what's really happening on the machine.
-tags: performance, profiling, cache, simd, optimization, hardware-sympathy, benchmarking, low-level, data-oriented, systems
+description: >-
+  Apply Casey Muratori-style performance reasoning to CPU hot paths by
+  separating wasted work from machine limits, triaging front-end vs bad
+  speculation vs memory stalls, and choosing data-oriented rewrites only when
+  counters justify them. Use when optimizing tight loops, devirtualizing hot
+  dispatch, diagnosing cache/TLB/store-forwarding/4K-aliasing issues, fixing
+  false sharing, or deciding whether branchless, SIMD, or threading changes
+  will really help; triggers: muratori, performance-aware, hotspot, top-down,
+  cmov, branch mispredict, hot/cold split, false sharing, store forwarding, 4k
+  aliasing, memory wall, data-oriented.
+tags: performance, profiling, cache, false-sharing, optimization, low-level, systems, data-oriented
 ---
 
-# Casey Muratori Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌​​‌​​‍​‌‌‌​‌‌​‍‌​​​​‌​​‍​‌​‌​​‌‌‍​​​​‌​‌​‍​​​‌‌​‌‌⁠‍⁠
+Use this skill only when the bottleneck is plausibly CPU or memory-system behavior. If the problem is network latency, I/O waits, allocator churn outside the hot path, or API shape, use a different skill.
 
-## Overview
+# Muratori Performance-Aware
 
-Casey Muratori is a game developer, performance optimization expert, and educator who created Handmade Hero—a project to write a complete game from scratch with no libraries. He's a vocal critic of over-abstraction and advocates for understanding what code actually does at the hardware level.
+This skill is intentionally self-contained. Do not go hunting for generic profiling or clean-code guidance first; the value here is fast triage on the failure modes people usually learn only after months of counter work.
 
-## Core Philosophy
+## Core stance
 
-> "The computer is not an abstraction. It's a real machine doing real things."
+Muratori-style optimization starts by separating two questions that teams blur together:
 
-> "Clean code is not the same as good code."
+1. Are you doing work that never needed to exist?
+2. For the work that must exist, what exact hardware limit is stopping it?
 
-> "If you don't know what the code does, you don't know if it's fast."
+If you cannot answer both with measurements, you are not optimizing yet.
 
-Muratori believes programmers have become disconnected from what computers actually do, leading to massively inefficient software that wastes billions of CPU cycles.
+## Before touching code, ask yourself
 
-## Design Principles
+- What is the governing metric: frame time, throughput, tail latency, queue depth, or core-seconds per unit of work?
+- Is the program slow because of extra instructions, a long dependency chain, or bytes moving farther than they should?
+- If I remove this abstraction, am I deleting real work or just making the source look more "manual"?
+- What would silently get worse if I win the benchmark: p99, frequency scaling, code locality, cache footprint, NUMA behavior, or correctness assumptions?
+- Am I about to "improve" the wrong layer because the profiler only showed time, not the reason for the time?
 
-1. **Know Your Hardware**: Understand the actual machine, not abstractions.
+## Fast triage tree
 
-2. **Measure Everything**: Never guess about performance.
+1. First ask whether the hot path is dominated by needless work.
+   If yes, delete the abstraction before micro-tuning. Muratori's biggest wins come from removing pointer chasing, type erasure, redundant passes, and dynamic dispatch that should never have existed in the hot loop.
+2. If the work is necessary, classify the bottleneck.
+   Use top-down style buckets: Front-End, Bad Speculation, Back-End Memory, Back-End Core, or Contention.
+3. Only then choose a rewrite shape.
+   Data layout fixes do not repair branch entropy. SIMD does not repair memory stalls. Branchless code does not repair front-end fetch starvation.
+4. Stop when the governing metric stops moving.
+   Do not keep a "cleaner" low-level rewrite just because it feels more serious.
 
-3. **Question Dogma**: "Best practices" often aren't.
+## Decision heuristics practitioners actually use
 
-4. **Simple Over "Clean"**: Clarity about what happens beats elegant patterns.
-
-## When Writing Code
-
-### Always
-
-- Know what assembly your code generates
-- Profile before optimizing
-- Question every abstraction's cost
-- Understand memory layout and access patterns
-- Write the simplest code that does the job
-- Keep the hot path obvious and tight
-
-### Never
-
-- Use patterns because they're "clean" without measuring
-- Trust that the compiler will optimize it
-- Add abstraction layers without justification
-- Hide what the code actually does
-- Optimize without profiling first
-- Assume standard library implementations are fast
-
-### Prefer
-
-- Arrays over linked structures
-- Data-oriented design over object-oriented
-- Explicit code over implicit conventions
-- Simple loops over iterators
-- Direct computation over indirection
-- Platform-specific code when it matters
-
-## Code Patterns
-
-### Data-Oriented Design
-
-```cpp
-// Object-Oriented: scattered memory, cache misses
-class Entity {
-    Vector3 position;
-    Vector3 velocity;
-    Quaternion rotation;
-    Mesh* mesh;
-    Material* material;
-    AI* ai;
-    Physics* physics;
-    // ... methods
-};
-
-std::vector<Entity*> entities;  // Pointer chasing nightmare
-
-// Update all positions: cache miss per entity
-for (Entity* e : entities) {
-    e->position += e->velocity * dt;  // Cache miss, cache miss
-}
-
-
-// Data-Oriented: contiguous memory, cache friendly
-struct Positions { float *x, *y, *z; };
-struct Velocities { float *vx, *vy, *vz; };
-
-// Update all positions: sequential memory access
-void update_positions(Positions* pos, Velocities* vel, 
-                      float dt, int count) {
-    for (int i = 0; i < count; i++) {
-        pos->x[i] += vel->vx[i] * dt;
-        pos->y[i] += vel->vy[i] * dt;
-        pos->z[i] += vel->vz[i] * dt;
-    }
-    // CPU prefetcher loves this
-    // SIMD vectorization possible
-}
-```
-
-### Rejecting Premature Abstraction
-
-```cpp
-// Over-abstracted "clean" code
-class IRenderer {
-    virtual void Render(IDrawable* drawable) = 0;
-};
-
-class OpenGLRenderer : public IRenderer {
-    void Render(IDrawable* drawable) override {
-        auto vertices = drawable->GetVertices();
-        auto material = drawable->GetMaterial();
-        // Virtual call, virtual call, virtual call...
-    }
-};
-
-// What actually needs to happen
-void render_meshes(Mesh* meshes, int count, RenderState* state) {
-    // Sort by material to minimize state changes
-    sort_by_material(meshes, count);
-    
-    Material* current_material = NULL;
-    for (int i = 0; i < count; i++) {
-        if (meshes[i].material != current_material) {
-            current_material = meshes[i].material;
-            bind_material(current_material);
-        }
-        draw_mesh(&meshes[i]);
-    }
-}
-
-// The "clean" version has:
-// - Virtual dispatch overhead
-// - Memory scattered across heap
-// - No ability to batch or sort
-// - Hidden costs everywhere
-```
-
-### Understanding What Code Actually Does
-
-```cpp
-// "Simple" C++ string concatenation
-std::string build_path(const std::string& dir, const std::string& file) {
-    return dir + "/" + file;  // What does this do?
-}
-
-// What actually happens:
-// 1. Allocate temporary for dir + "/"
-// 2. Copy dir into temporary
-// 3. Append "/" 
-// 4. Allocate result string
-// 5. Copy temporary into result
-// 6. Append file
-// 7. Destroy temporary
-// Multiple allocations, copies, for one string!
-
-
-// Direct version: you know exactly what happens
-void build_path(char* out, size_t out_size,
-                const char* dir, const char* file) {
-    size_t dir_len = strlen(dir);
-    size_t file_len = strlen(file);
-    
-    if (dir_len + 1 + file_len + 1 > out_size) {
-        out[0] = 0;
-        return;
-    }
-    
-    memcpy(out, dir, dir_len);
-    out[dir_len] = '/';
-    memcpy(out + dir_len + 1, file, file_len + 1);
-}
-
-// One buffer, no allocations, obvious behavior
-```
-
-### SIMD When It Matters
-
-```cpp
-// Scalar version
-void add_arrays_scalar(float* a, float* b, float* out, int count) {
-    for (int i = 0; i < count; i++) {
-        out[i] = a[i] + b[i];
-    }
-}
-
-// SIMD version: 4x or 8x throughput
-void add_arrays_simd(float* a, float* b, float* out, int count) {
-    int simd_count = count & ~7;  // Round down to multiple of 8
-    
-    for (int i = 0; i < simd_count; i += 8) {
-        __m256 va = _mm256_loadu_ps(a + i);
-        __m256 vb = _mm256_loadu_ps(b + i);
-        __m256 vr = _mm256_add_ps(va, vb);
-        _mm256_storeu_ps(out + i, vr);
-    }
-    
-    // Handle remainder
-    for (int i = simd_count; i < count; i++) {
-        out[i] = a[i] + b[i];
-    }
-}
-
-// But measure! SIMD only wins for:
-// - Large enough data (amortize setup)
-// - Aligned access (or accept penalty)
-// - Operations that vectorize well
-```
-
-### Profiling-Driven Development
-
-```cpp
-// Built-in profiling for hot code
-struct ProfileBlock {
-    const char* name;
-    uint64_t start_tsc;
-    uint64_t* accumulator;
-    
-    ProfileBlock(const char* n, uint64_t* acc) : name(n), accumulator(acc) {
-        start_tsc = __rdtsc();
-    }
-    ~ProfileBlock() {
-        *accumulator += __rdtsc() - start_tsc;
-    }
-};
-
-#define PROFILE_BLOCK(name) \
-    static uint64_t prof_##name = 0; \
-    ProfileBlock _pb_##name(#name, &prof_##name)
-
-void game_update() {
-    {
-        PROFILE_BLOCK(physics);
-        update_physics();
-    }
-    {
-        PROFILE_BLOCK(ai);
-        update_ai();
-    }
-    {
-        PROFILE_BLOCK(render);
-        render_frame();
-    }
-}
-
-// Know where time actually goes
-// Not where you think it goes
-```
-
-### Memory Layout Awareness
-
-```cpp
-// Array of Structures (AoS) - typical OOP
-struct Particle_AoS {
-    float x, y, z;      // Position
-    float vx, vy, vz;   // Velocity
-    float r, g, b, a;   // Color
-    float size;
-    float life;
-};
-Particle_AoS particles_aos[10000];
-
-// Updating positions touches: x, y, z, vx, vy, vz
-// But cache line also loads: r, g, b, a, size, life
-// 50% of loaded data is wasted!
-
-
-// Structure of Arrays (SoA) - data-oriented
-struct Particles_SoA {
-    float x[10000], y[10000], z[10000];
-    float vx[10000], vy[10000], vz[10000];
-    float r[10000], g[10000], b[10000], a[10000];
-    float size[10000];
-    float life[10000];
-};
-Particles_SoA particles_soa;
-
-// Updating positions touches: x, y, z, vx, vy, vz
-// Cache lines contain only what we need
-// SIMD can process 4/8 particles at once
-```
-
-### Reject Unnecessary Indirection
-
-```cpp
-// Java-brain C++: indirection everywhere
-class GameObjectManager {
-    std::unique_ptr<IAllocator> allocator;
-    std::unordered_map<ObjectId, std::unique_ptr<GameObject>> objects;
-    
-    void Update() {
-        for (auto& [id, obj] : objects) {
-            obj->Update();  // Virtual call, pointer chase
-        }
-    }
-};
-
-// Direct version: know what happens
-struct Game {
-    Entity entities[MAX_ENTITIES];
-    int entity_count;
-    
-    void update() {
-        for (int i = 0; i < entity_count; i++) {
-            entities[i].x += entities[i].vx * dt;
-            entities[i].y += entities[i].vy * dt;
-            // Inline, no virtual, predictable memory
-        }
-    }
-};
-
-// The "managed" version:
-// - Hash table lookup per object
-// - Unique_ptr dereference
-// - Virtual dispatch
-// - Scattered heap memory
-// - 10-100x slower than direct
-```
-
-### Hot/Cold Splitting
-
-```cpp
-// All data together: cold data pollutes cache
-struct Entity_Mixed {
-    // Hot: accessed every frame
-    float x, y, z;
-    float vx, vy, vz;
-    uint32_t flags;
-    
-    // Cold: accessed rarely
-    char name[64];
-    char description[256];
-    time_t created_at;
-    uint64_t unique_id;
-};
-
-// Split hot and cold
-struct Entity_Hot {
-    float x, y, z;
-    float vx, vy, vz;
-    uint32_t flags;
-    uint32_t cold_index;  // Link to cold data
-};
-
-struct Entity_Cold {
-    char name[64];
-    char description[256];
-    time_t created_at;
-    uint64_t unique_id;
-};
-
-// Hot loop only touches hot data
-// Cache lines aren't wasted on names and descriptions
-```
-
-## Performance Reality Check
-
-```
-Operation                          Cycles    Notes
-═══════════════════════════════════════════════════════════
-Register operation                 1         Free
-L1 cache hit                       4         64 bytes
-L2 cache hit                       12        
-L3 cache hit                       40        
-RAM access                         200+      The wall
-Virtual function call              10-25     Depends on prediction
-std::unordered_map lookup          50-200    Hash + chase
-std::map lookup                    100-500   Tree traversal
-new/malloc                         100-1000  Varies wildly
-System call                        1000+     Context switch
-
-Reality: Most "fast" code is limited by memory access
-        Computation is essentially free by comparison
-        Every pointer chase is a potential cache miss
-```
-
-## Mental Model
-
-Muratori approaches code by asking:
-
-1. **What does this actually do?** Not what it represents—what instructions run
-2. **Where are the memory accesses?** That's where the time goes
-3. **Can I make this simpler?** Simpler usually means faster
-4. **Have I measured?** Intuition is often wrong
-5. **What's the cost of abstraction?** Is it worth paying?
-
-## Signature Muratori Moves
-
-- **Handmade code**: Write from scratch, understand everything
-- **Data-oriented design**: Lay out data for how it's accessed
-- **Reject OOP dogma**: Objects aren't always the answer
-- **Profile everything**: rdtsc is your friend
-- **Hot/cold splitting**: Don't pollute cache with cold data
-- **SIMD where it counts**: 4x-8x speedups when applicable
-- **Questioning "clean" code**: Clean for whom?
-- **Reading assembly**: Know what the compiler generates
+### Branches versus branchless code
+
+- A predicted branch is often cheaper than "branchless" code because `cmov` and masked arithmetic extend dependency chains and force both sides of the work into the issue window.
+- Use branchless rewrites only when the branch is truly high-entropy and both sides are cheap.
+  A practical rule of thumb from optimization work: if prediction is roughly above the 75 percent range, a normal branch often wins; if each side does more than a handful of simple ops, computing both sides usually loses even when mispredicts hurt.
+- Keep the hot path as fall-through code.
+  Taken branches and cold in-loop blocks cost more than the source looks like. One Easyperf case improved after moving an almost-never-taken normalization path out of the hot fall-through, because front-end slots were being wasted on code that rarely retired.
+
+### Store forwarding and 4K aliasing
+
+- Store-forwarding failures are a classic "everything is in L1 and still slow" trap.
+  Intel's tuning guide calls out the common case: a smaller store followed by a larger dependent load within roughly the prior 10 to 15 instructions. The load cannot forward, stalls, and the fix is often to size-match the producer and consumer.
+- 4K aliasing is another invisible stall source.
+  If a load follows a store at an address offset by 4096 bytes, the pipeline may assume they alias, attempt forwarding, then re-issue when full address resolution proves otherwise. Intel documents about a 7-cycle penalty, and it gets worse for unaligned loads spanning two cache lines.
+- Before changing algorithms, check whether a tiny offset or alignment change deletes the entire problem.
+  This is exactly the sort of win people miss when they only look at source structure.
+
+### False sharing and cache-line padding
+
+- False sharing is not "two threads touch nearby fields." It is "coherency turns correct code into a line-migration tax."
+- Do not blanket-pad structs to 64 bytes.
+  That fix is seductive because it feels principled, but it often bloats the working set, increases TLB pressure, and destroys cache density for no gain.
+- Pad only after you confirm HITM or equivalent evidence, and split the contended fields away from the cold ones.
+  The right move is usually one small hot shard, not turning the whole object graph into cache-line sculptures.
+
+### Hot/cold splitting and code locality
+
+- Split rare paths out of the loop body even if the source looks less "tidy."
+  Front-end starvation often comes from cold error handling, logging, normalization, or debug checks physically sitting inside the hot block.
+- If a branch is almost always false, keep the common case fall-through and move the rare path out-of-line.
+  This is where `likely` hints and `noinline` can matter: not because hints are magic, but because code layout changes can reclaim front-end bandwidth.
+- The same rule applies to data.
+  Keep counters, coordinates, states, and indices together; move strings, handles, debug names, and optional metadata out of the cache footprint of the hot pass.
+
+### Threading and the memory wall
+
+- More threads are not a free multiplier.
+  Once the workload is dominated by DRAM traffic, extra threads often buy you memory stalls, higher coherence traffic, and lower turbo clocks.
+- Test scaling in stages: 1 thread, one SMT sibling, more physical cores, and then turbo-disabled if you need to expose whether you are bandwidth-bound or just frequency-lucky.
+- If one thread already consumes a large fraction of sustained memory bandwidth, the next serious win probably comes from moving fewer bytes, not from adding worker threads.
+
+### Prefetching and "just vectorize it"
+
+- Software prefetch only helps when you can create a real time window before use.
+  If the loop has no independent work between prefetch and consumption, you are just issuing extra instructions.
+- SIMD helps when the loop is compute-dense or when vector loads reduce instruction pressure.
+  It does not rescue pointer-heavy, branch-heavy, latency-bound code. Vectorizing a cache-miss machine just gives you a wider cache-miss machine.
+
+## NEVER rules
+
+- NEVER replace a branch with `cmov` or masked arithmetic just because branchless code sounds more advanced. It is seductive because it looks deterministic. The concrete failure mode is a longer dependency chain plus duplicated work, which often loses to a mostly-predictable branch. Instead, measure branch entropy first and use branchless code only for genuinely unpredictable, cheap branches.
+
+- NEVER fix false sharing by padding everything in sight because "64-byte aligned" sounds like universal medicine. The non-obvious consequence is that you trade a coherency problem for a working-set and TLB problem. Instead, isolate only the proven hot shared fields and keep cold fields tightly packed.
+
+- NEVER trust a clean object model in a hot loop if it implies pointer chasing, vtables, or cold data riding along with hot state. It is seductive because the code reads like architecture. The consequence is cache misses plus control-flow unpredictability that no amount of local instruction tweaking will save. Instead, specialize the hot path into contiguous arrays, tables, or tagged data that matches the actual traversal.
+
+- NEVER celebrate a microbenchmark win before checking the real workload. Tiny loops over-emphasize front-end quirks, turbo effects, and toy cache behavior. The consequence is shipping a rewrite that wins the lab and loses the product. Instead, validate the app-level metric and keep the benchmark only as a microscope, not as the goal.
+
+- NEVER add threads to a memory-bound loop because the single-thread graph still "looks busy." The seductive story is that spare cores must equal spare throughput. The consequence is early scaling collapse, coherence traffic, and lower clocks. Instead, reduce bytes moved, improve locality, or shard ownership before adding parallelism.
+
+- NEVER assume all L1 hits are equal. Store-forwarding failures, 4K aliasing, line splits, and load-use timing can make "cache-resident" code stall badly. Instead, inspect the specific load/store path before rewriting whole subsystems.
+
+## What to do in each top-down bucket
+
+### If Front-End bound dominates
+
+- Suspect cold code sitting in the hot block, too many taken branches, or instruction footprint that no longer fits the front-end well.
+- First moves:
+  move rare paths out-of-line, keep the hot path fall-through, simplify dispatch, reduce instruction count before trying clever intrinsics.
+- Fallback:
+  if source looks clean but counters do not move, inspect generated code layout and whether the compiler kept the uncommon path inside the loop anyway.
+
+### If Bad Speculation dominates
+
+- Find the exact branches with high entropy.
+- First moves:
+  restructure data so the branch becomes predictable, separate rare cases, or use branchless selection only when both sides are cheap.
+- Fallback:
+  if the branch is inherently random, redesign the algorithmic shape around batches, lookup tables, or state partitioning rather than polishing the same branch.
+
+### If Back-End Memory dominates
+
+- Assume the problem is bytes moved, latency, or ordering hazards before you assume the problem is arithmetic.
+- First moves:
+  hot/cold split, SoA or tighter packing, fewer passes, better ownership, check TLB pressure, check line splits, check store-forwarding and 4K aliasing.
+- Fallback:
+  if layout changes do not help, quantify whether the issue is cache capacity, bandwidth, or latency. The next move depends on which one is real.
+
+### If Back-End Core dominates
+
+- This is the time to care about dependency chains, divider usage, port pressure, and vector width.
+- First moves:
+  delete scalar divides where reciprocals are valid, shorten chains, fuse passes if it reduces total ops, and only then look at SIMD.
+- Fallback:
+  if SIMD complicates the loop and the counters barely move, revert. Wider instructions are not a trophy.
+
+### If contention dominates
+
+- Suspect lock convoying, shared counters, allocator sharing, or line ownership thrash.
+- First moves:
+  thread-local accumulation, sharded ownership, batching, and removing write-sharing from hot lines.
+- Fallback:
+  if the "contention" disappears on one core, re-check whether the real limit is memory bandwidth rather than locks.
+
+## Muratori-style stop rules
+
+- Stop when the measured bucket changes but the governing metric does not. You moved the bottleneck without creating value.
+- Stop when the new version only wins under one compiler flag, one data shape, or a warmed-up microbenchmark. That is not a stable improvement.
+- Stop when the optimization survives only because the team is afraid to delete a heroic rewrite. Performance code is not exempt from evidence.
+
+## Final check before claiming a win
+
+- Re-run the real metric, not just cycles in isolation.
+- Check p50 and tail behavior when latency matters.
+- Verify that the new layout did not regress locality for the next stage of the pipeline.
+- Confirm that the change still wins when the dataset size crosses cache boundaries.
+- Keep the simplest version that still wins. The Muratori lesson is not "write gnarly code." It is "remove waste, then align the remaining work with the machine that actually runs it."

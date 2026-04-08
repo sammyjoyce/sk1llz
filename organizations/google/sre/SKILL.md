@@ -1,197 +1,169 @@
 ---
 name: google-sre
 description: >-
-  Apply Google's Site Reliability Engineering methodology with expert-level
-  precision. Covers SLI selection traps, dependent-service SLO ceilings,
-  multi-window multi-burn-rate alerting (14.4×/6×/1× with derivation),
-  error budget policy enforcement, Chubby-style planned outages, postmortem
-  action-item anti-patterns (Ben Treynor's P0/P1 rule), toil ROI economics,
-  and on-call sustainability thresholds. Use when designing SLIs/SLOs,
-  setting up burn-rate alerts, writing an error budget policy, conducting
-  postmortems, measuring toil, sizing on-call rotations, or deciding whether
-  to freeze deploys. Triggers: "SRE", "SLI", "SLO", "error budget",
-  "burn rate", "toil", "postmortem", "on-call", "reliability",
-  "incident response", "service level", "production readiness",
-  "freeze deploys", "pager load".
+  Apply Google's Site Reliability Engineering decision heuristics for SLO
+  design, burn-rate alerting, error-budget policy, on-call sustainability, and
+  postmortem quality. Use when defining or revising SLIs/SLOs, deciding whether
+  to freeze releases, tuning burn-rate alerts, diagnosing operational overload,
+  reviewing pager design, or rejecting hero-based reliability practices.
+  Triggers: "SRE", "SLI", "SLO", "error budget", "burn rate", "toil",
+  "on-call", "pager", "postmortem", "reliability", "incident",
+  "availability", "latency", "freeze releases", "heroism".
 ---
 
-# Google SRE — Expert Decision Guide
+# Google SRE - Decision Guide
 
-## Thinking Frames (ask before acting)
+## Start Here
 
-- **Who is the user, and what is the critical user journey?** SLOs measure *journeys*, not system health. If your SLI doesn't correlate with support tickets and churn, you're measuring the wrong thing.
-- **What does the error budget say right now?** Healthy → ship. Exhausted by our code → freeze. Exhausted upstream → document, don't freeze. Never negotiate the policy *during* an outage.
-- **Is this work toil or engineering?** If it scales linearly with service size and produces no compounding value, it's toil. Cap at 50%.
-- **Would a page at 3 AM require human intelligence to resolve?** If no, it is automation or a ticket, never a page.
-- **Does this postmortem have a P0/P1 action item?** Per Ben Treynor: "A postmortem without subsequent action is indistinguishable from no postmortem."
-- **Before defending this SLO in a planning meeting, can I actually win?** If not, it's decorative — delete it and propose a version you can defend.
-- **Before assigning this action item, would the receiving team prioritize it *without* a postmortem forcing the conversation?** If no, the fix is wrong or the owner is wrong — rework it before publishing.
+Before changing anything, ask:
 
-## SLI Selection — Expert Traps
+- Which user objective am I defending? If you cannot name the user step, you are about to optimize infrastructure vanity metrics.
+- Is the problem in measurement, policy, alerting, or system design? Treating all four as "monitoring work" is how teams accumulate dashboards instead of reliability.
+- Will this change reduce future cognitive load at 3 AM, or just move pain between teams?
+- Am I about to rely on heroics? Any plan that works only because someone watches graphs, hand-holds launches, or remembers tribal exceptions is already admitting the system is broken.
 
-Every SLI is a ratio `good_events / valid_events`. Both numerator and denominator must be inspectable during an incident, or you cannot debug a burn.
+Choose the path:
 
-**Measurement point is a deliberate choice, not a default.** Server-side success rate misses DNS, TLS, CDN, and everything past the load balancer. Load-balancer metrics miss client-side JavaScript errors. Client-side RUM captures user reality but inherits the client's own reliability and deployment lag. Rule: move the SLI closer to the user only once cheaper signals are exhausted — every hop closer raises cost and complexity.
+- Need outage math, downtime tables, or budget translation? READ `references/error_budget.md` first.
+- Need to compute or verify a real service's budget or exhaustion time? RUN `scripts/error_budget_calculator.py` with the actual SLO and window.
+- Need to decide whether to page, freeze, loosen or tighten an SLO, or reject a postmortem action item? Stay in this file.
+- Do NOT load `references/error_budget.md` for incident triage, on-call staffing, or postmortem review. It is math depth, not operational judgment.
+- Do NOT run `scripts/error_budget_calculator.py` for policy design, postmortem quality review, or pager-sizing work. It checks arithmetic, not whether the arithmetic is worth defending.
 
-**Precision vs recall is a real tradeoff you must measure.** Precision = fraction of SLI-captured events that were actually user-visible. Recall = fraction of real user-visible incidents the SLI captured. Improving one usually degrades the other. Replay the last quarter's incidents against your SLI: low recall → tighten SLO; low precision → loosen it or refine the SLI implementation.
+## 1. Pick the right SLI before arguing about the number
 
-**Latency needs *paired* thresholds, not a single percentile.** `99% < 300ms` lets the tail hide — a bug that makes 0.5% of requests take 30s looks fine. Use `90% < 100ms AND 99% < 400ms`. The second line catches the slow-tail class of bugs the first will always miss.
+Google SRE guidance is to start with a ratio `good / valid`, then choose the cheapest measurement point that still correlates with user pain. Service-side signals are cheap, low-latency, and under your control, but they have narrow coverage: the server can say "success" while users see blank pages, stale data, or broken client logic. Client-side SLOs widen coverage, but they arrive batched, can lose data when apps close or networks flap, and often lag by 15 to 60 minutes. End-to-end SLOs have the highest confidence and the highest cost; Google notes they can take months of engineering and often run as batch joins across multiple data sources.
 
-NEVER use mean latency — a 5% tail 50× slower than average hides behind a healthy mean. Use distribution-based ratio SLIs computed as counts, never as a single aggregate number. Instead: `count(requests < 300ms) / count(all)`.
+Before moving "closer to the user," ask whether the miss is a coverage problem or a threshold problem:
 
-NEVER set SLOs from engineering aspirations. Measure 2–4 weeks of actual performance, then set the SLO slightly below observed. A 99.99% target on a service delivering 99.95% leaves you with *negative* error budget on day one.
+- Support tickets and manually detected outages not reflected in budget burn: recall is low. Move the measurement point outward or cover more user journeys.
+- SLO misses with no user pain: precision is low. Relax the objective or narrow the denominator.
+- Both bad: fix the SLI implementation instead of arguing over one more nine.
 
-NEVER use a **calendar-aligned** SLO window (e.g., "99.9% per calendar month"). Teams will rush risky launches on day 1 of the month knowing the budget resets. Use a **rolling 4-week or 30-day window** so today's deploy is always measured against the last 30 days — there is no reset button to game.
+Use paired latency thresholds, not a single percentile. Google's example SLO documents use `90% < fast threshold` and `99% < slower threshold` because a single percentile lets slow-tail regressions hide behind an acceptable headline number.
 
-**Low-traffic trap**: a service at 10 req/hour burns 13.9% of its 30-day budget on a single failed request (a 1,000× burn rate). Below ~100 req/hour: generate synthetic probes, aggregate with sibling services into a shared SLO, or widen the window to 90 days — don't just tune alerts.
+For asynchronous or data products, availability is often the wrong abstraction. Google's example SLO documents use freshness, correctness, and completeness. A correctness prober with known-good inputs is often higher signal than pretending every enqueue success means the user outcome succeeded.
 
-## SLO Targets — Dependency Math and the Chubby Lesson
+Treat user-objective annotation as a prioritization tool, not an all-or-nothing migration. Product-focused SRE guidance recommends instrumenting the most critical user steps first and propagating that annotation through dashboards, logs, and load-shedding logic so low-value traffic cannot drown out the business-critical path.
 
-**The dependency ceiling.** With N hard dependencies each at SLO *s*, your theoretical max is `s^N`. Five dependencies at 99.9% cap you at 99.5%. Teams routinely set SLOs above their ceiling and then burn budget for reasons they cannot fix. Before committing to a target, compute `product(dep_slos)` — that is your real upper bound. If it's too low, reduce hard dependencies or accept a lower SLO.
+## 2. Set an SLO you can actually defend
 
-**Internal SLO < SLA, always.** Your internal SLO must be tighter than your external SLA by a deliberate margin (e.g., SLA 99.9%, internal 99.95%). The buffer is what absorbs a bad deploy without triggering customer refunds. Publishing your internal number is a footgun — users will rebuild against it.
+Before proposing a number, ask three questions from Google's SLO approval model:
 
-**Chubby's planned-outage pattern.** If a service consistently overperforms its SLO, users build hidden hard dependencies on the higher number. Google's Chubby lock service deliberately takes planned downtime each quarter to flush out these illegal dependencies before they calcify. If you're massively exceeding your SLO *and* cannot raise it, inject controlled unavailability to reset expectations. Counterintuitive but load-bearing.
+- Will product accept the user experience implied by this target?
+- Will development actually slow feature work when the budget is gone?
+- Can the defending team uphold it without burnout, Herculean effort, or permanent toil?
 
-**Exclude out-of-scope traffic from SLO math**: load tests, pentests, deprecated API versions, clients that went out-of-quota due to their own bugs. Count them and you'll burn budget on problems with no user impact and fight the wrong fires.
+If any answer is "no," the number is decorative. Rework the SLI, target, or ownership before publishing.
 
-**The "defend the SLO" test** (from the SRE book): if you cannot ever win a priority conversation by quoting a particular SLO, that SLO is not worth having — delete it. SLOs you can't point to during planning are reporting metrics in disguise.
+Start cheap and iterate. Google explicitly allows using current performance as a starting point when you have no better evidence, but only if you document that fact and plan to revisit it. Do not let today's observed behavior silently harden into tomorrow's promise.
 
-**Canary comparisons are relative, not absolute.** A canary error rate of 0.5% may be fine or catastrophic depending on baseline. The correct rollback trigger is `canary_error_rate > baseline_error_rate * 1.1` (10% worse than baseline), not an absolute threshold. Absolute thresholds rollback innocent canaries during real outages and miss regressions that are "within budget but worse than before".
+Prefer rolling windows over calendar windows. Reset-aligned SLOs invite risky launches right after the clock resets and hide whether today's change is borrowing against the same reliability promise users were relying on yesterday.
 
-**Progressive disclosure**:
-- Before writing an SLO document, computing budget translation tables, or designing a new policy tier, **READ `references/error_budget.md`** for templates and time tables.
-- Before setting up numerical burn-rate monitoring against a historical dataset, **RUN `scripts/error_budget_calculator.py`** against your actual request counts — don't eyeball it.
-- Do NOT load `references/error_budget.md` for freeze/don't-freeze decisions — use the decision tree below in this file. Loading it wastes context on templates you don't need.
+Do not forget dependency math. If the request path has multiple hard dependencies, your practical ceiling is the combined reliability of that path. If that ceiling is below the proposed SLO, reduce hard dependencies or lower the target before the team gets trapped defending an impossible commitment.
 
-## Multi-Window Multi-Burn-Rate Alerting
+Use Google's decision matrix instead of metric worship:
 
-The only alerting pattern that is simultaneously sensitive to real incidents and deaf to flaps.
+- Missed SLO, users still happy, toil low: loosen the SLO.
+- Met SLO, users unhappy: tighten the SLO.
+- Met SLO, users happy, toil high: reduce false-positive alerting or temporarily loosen the SLO while you automate away the operational pain.
 
-**Where does 14.4 come from?** The policy is "2% of a 30-day budget burned in 1 hour". Burn rate = budget_consumed / window_fraction = 0.02 / (1/720) = 14.4. The number is derived from the policy; you do not pick it separately.
+When a tighter target is clearly right for users but the system cannot meet it yet, create an aspirational SLO: measure it, review it, and explicitly exempt it from enforcement. Otherwise you put the team in permanent emergency mode and the policy stops meaning anything.
 
-| Tier | Policy | Long window | Short window (1/12) | Burn rate | Action |
-|---|---|---|---|---|---|
-| 1 | 2% in 1h | 1h | 5m | 14.4× | Page immediately |
-| 2 | 5% in 6h | 6h | 30m | 6× | Page |
-| 3 | 10% in 3d | 3d | 2h | 1× | Ticket |
+Remember that error budget is an approximation of user pain, not user pain itself. Four short outages, a constant low error rate, and one long outage can burn similar budget while feeling very different to users. Use budget to govern engineering attention, not as a claim that all failure shapes are equivalent.
 
-Both windows must exceed threshold simultaneously. The short window is the "is it still burning *right now*?" confirmation — it eliminates stale alerts post-recovery and prevents flap intervals from being treated as an incident.
+## 3. Alert on burn rate, not raw error rate
 
-NEVER add a Prometheus `for:` duration clause to a burn-rate alert. A spike every 10 minutes that clears between spikes resets the timer — you can lose 35% of monthly budget and never fire. The long/short window combination already handles duration.
+Google's recommended starting point for a 99.9% class SLO is:
 
-NEVER write a burn-rate query as a plain division — zero traffic yields NaN and silence during a full outage. Guard the denominator: `sum(rate(errors[1h])) / (sum(rate(total[1h])) > 0)`.
+- Page at `14.4x` burn over `1h` and `5m` together. That means 2% of a 30-day budget in 1 hour.
+- Page at `6x` burn over `6h` and `30m` together. That means 5% of budget in 6 hours.
+- Ticket at `1x` burn over `3d` and `6h` together. That means 10% of budget in 3 days.
 
-NEVER tune burn-rate thresholds per microservice. Three tiers (CRITICAL / HIGH / LOW) and assign each service to a tier. Per-service tuning creates O(n) cognitive load and on-callers stop trusting the thresholds.
+The short window should be about `1/12` of the long window. The long window answers "is this significant?"; the short window answers "is it still burning right now?" Without the short window, reset time stays bad long after recovery.
 
-**Recalculate 14.4 when SLO < 99%.** Max possible burn rate is `1/(1−SLO)`. A 90% SLO caps max burn rate at 10 — the 14.4× page threshold is mathematically impossible to hit, so you'll never page. For SLOs under 99%, use ~0.5× of max as the page threshold.
+Low-traffic services are special. Google calls out the trap directly: at 10 requests per hour, one failure is a `1000x` burn rate for a 99.9% SLO and consumes about 13.9% of a 30-day budget. For low-QPS services, use this order of operations:
 
-## Error Budget Policy — Enforcement, Not Theater
+- generate synthetic traffic if it gives representative coverage,
+- aggregate related small services that share a failure domain,
+- reduce impact per failure via retries, backoff, or fallback paths,
+- renegotiate the SLO only if each failed request is not valuable enough to justify a page.
 
-An unwritten policy is no policy. Pre-approve with VP/Director authority **before** any incident. Minimum contents:
+Synthetic traffic has a non-obvious failure mode: if the probes do not exercise the broken path, successful probe traffic can hide the real user signal. Treat probe coverage as a production concern, not a monitoring afterthought.
 
-- **Internal-cause freeze**: SLO missed for trailing 4-week window from our code/config → halt all non-P0, non-security changes until back in SLO.
-- **External-cause exemption**: Company-wide network failures, upstream team outages, and out-of-scope load tests do NOT trigger a freeze. Document; do not punish the wrong team.
-- **Single-incident rule** (from Google's Appendix B policy): one incident consuming >20% of quarterly budget mandates a postmortem with at least one P0 action item.
-- **Class-of-outage rule**: one class of outage consuming >20% over a quarter requires a P0 item on the following quarter's planning doc.
-- **Escalation clause**: Disagreements on budget calculation escalate to the named executive (usually CTO). Name them in advance.
+Keep canaries isolated. Google's canary guidance warns that simultaneous canaries contaminate the baseline and increase mental load exactly when fast diagnosis matters.
 
-NEVER grant ad-hoc exceptions to the freeze. Within two quarters, nobody takes the budget seriously. Define a "silver bullet" quota (max 2 per quarter, written approval required) for genuinely critical launches.
+Extreme SLOs need custom parameters. Google notes that a 90% availability goal can make the standard "2% of budget in one hour" page mathematically impossible even during a total outage. Re-derive the alert parameters instead of copy-pasting `14.4 / 6 / 1`.
 
-NEVER wait until the budget is exhausted to act. Set an orange zone at 25% remaining that requires extra deploy review and longer canaries — by the time you hit 0%, customer-visible damage is done.
+## 4. Error budget policy is the real control surface
 
-## Postmortem Quality — Where Value Lives or Dies
+The policy is the product, not the dashboard. Google's example policy is explicit:
 
-**The Treynor rule**: every postmortem following a user-affecting outage carries at least one P0 or P1 bug. No exceptions without VP approval, and Google's VP of 24/7 Ops personally reviews them.
+- above SLO: releases continue,
+- exhausted over the trailing four-week window: halt all but P0 and security work,
+- one incident above 20% of four-week budget: mandatory postmortem with at least one P0 action item,
+- one outage class above 20% of quarterly budget: put a P0 item on next quarter's plan,
+- disagreements escalate to a named executive.
 
-**Classify every action item** as: Investigate → Mitigate → Repair → Detect → Prevent. A plan containing only Prevent items missed faster wins. A plan containing only Mitigate items hasn't fixed the root cause.
+Before deciding "freeze or not," classify cause first:
 
-**Action item anti-patterns**:
+- Our code or process caused the miss: freeze and reallocate effort.
+- A hard dependency failed and can be softened: treat that as our reliability work too.
+- Company-wide network event, another team's outage already under its own freeze, or out-of-scope traffic consumed the budget: document the exception instead of punishing the wrong team.
 
-| Anti-pattern | Why it's seductive | Consequence | Correct alternative |
-|---|---|---|---|
-| "Train humans not to run unsafe commands" | Feels responsible | Per Dan Milstein: plan for a future where we're all as stupid as today. Humans will repeat the mistake. | Make the unsafe command impossible. Add idempotency, confirmation prompts, blast-radius preview. |
-| "Investigate monitoring for this scenario" | Sounds diligent | Can't be marked done. Rots in tracker. | "Alert when endpoint X error rate >1%, owned by @name, bug BUG-1234, due YYYY-MM-DD." |
-| Alert on the exact failing query | Directly addresses *this* incident | Only catches identical recurrence, misses the class | Alert on user-facing symptoms (error rate, latency) at the SLO level, not implementation details |
-| No named owner ("the team will handle it") | Feels inclusive | Never prioritized by anyone | One named human, assigned at creation, not later |
-| Tossing work over the wall | "Other team owns this area" | Receiving team has no context, deprioritizes | Co-author with the owning team, get buy-in *before* publishing the postmortem |
-| Unbalanced plan (all strategic items) | Feels ambitious | Nothing ships before the next outage | Include near-term mitigations alongside strategic fixes |
-| Finger-pointing in "Things that went poorly" | Feels like accountability | Erodes psychological safety; next incident will be hidden | Blameless language: "the automation allowed X" not "Alice did X" |
+Counterintuitive but important: Google also notes that freezing even on dependency-caused misses can make users happier by minimizing additional risk. Pick the rule deliberately and record it in the policy; do not improvise while people are already under incident pressure.
 
-**An unreviewed postmortem might as well not exist.** Schedule regular review sessions; close out comments; link every action item to a tracker bug. An AI without a bug is not an AI.
+If a service is meeting SLO with low toil and high customer satisfaction, Google's decision matrix says you may either increase release velocity or step back and spend SRE effort on a more reliability-constrained system. Reliability work should follow marginal value, not tradition.
 
-**Signs the postmortem is bad**: animated language ("ridiculous", "!!!"), missing Recovery Efforts section, no numbers in impact assessment, a root cause of "human error" (always ask *why* the human was allowed to cause it), or single-category action items.
+## 5. On-call design is mostly about preventing bad psychology
 
-## Toil — 50% Cap and Automation ROI
+Google's sustainable on-call numbers are sharper than most teams expect:
 
-Google caps SRE toil at 50% of team time. Sustained >50% for two consecutive quarters → SRE formally hands the service back to the dev team. That handback threat is the enforcement lever; without it, 50% is aspirational.
+- at least 50% of SRE time should remain engineering,
+- no more than 25% should be on-call,
+- with primary and secondary week-long rotations, that implies a minimum of 8 engineers for a single-site team,
+- 6 per site is the reasonable floor for dual-site rotations,
+- an incident averages about 6 hours of total work, so the cap is about 2 incidents per 12-hour shift.
 
-**Ticket toil is the insidious kind**: it accomplishes its goal (users get what they wanted), disperses evenly across the team, never loudly demands remediation. Audit quarterly by sampling and categorizing.
+Use these as design constraints, not after-the-fact health checks. If you need fewer people than this, shrink the supported scope or change service expectations; do not normalize overload.
 
-**Automation ROI**:
-```
-ROI_weeks = automation_effort_hours / weekly_toil_hours_saved
-```
-If ROI > 26 weeks, the toil may die naturally (reorg, retirement, platform migration) before automation pays off. Prioritize items with ROI < 8 weeks. Include hidden benefits in the spreadsheet: fewer human errors, less context switching, better morale, shorter onboarding — real but rarely counted.
+Google's on-call chapter is unusually explicit about psychology: repeated pages from the same symptom create confirmation bias, and stress pushes people toward fast but unexamined action. When the incident is multi-team, ambiguous, or has no credible upper bound yet, switch to formal incident management early instead of letting the on-caller improvise under cortisol.
 
-NEVER accept "it's a one-time migration" as not-toil. At scale, migrations meet every toil criterion: manual, repetitive, no lasting value, scales with inventory. Track them.
+Operational overload is usually a monitoring or service-design problem before it is a staffing problem. Google recommends driving toward a `1:1 alert-to-incident` ratio; if one condition fans out into several pages, the monitoring system itself is generating toil.
 
-NEVER script around a kernel/library bug when you can patch it (John Looney's Google lesson: 1,000 machines with full disks from a patched-driver log bug — masking the symptom removed incentive to fix the cause, and cost $1,000/hr across the fleet until the kernel was fixed).
+If sustained overload cannot be fixed quickly, "give back the pager" is a valid temporary move. The point is not punishment; it is preventing the SRE team from living indefinitely above supportable load while the service remains below SRE standards.
 
-## On-Call Sustainability — Concrete Thresholds
+## 6. Postmortems should change the system, not the mood
 
-- **Min team size**: 8 for a weekly rotation; 6 absolute floor. A team of 5 rotates every 5 days and burns out within one quarter regardless of incident volume.
-- **Max pages**: 2 per 12-hour shift on average across a quarter. Exceed → do NOT add people (masks the problem). Fix alerts (non-actionable pages are bugs in the alert) and the top 3 sources of pages.
-- **Shift length**: ≤12h with ≥12h rest between. Back-to-back is a postmortem waiting to happen.
-- **Every page requires human intelligence.** Robotic responses (restart, clear queue, bounce) must be automated before they can become a page.
+A good postmortem changes the system, not the narrative. Google's example policy requires at least one P0 action item for a sufficiently expensive incident. If the write-up has no named owner, no tracker, or no schedule authority behind the fix, it is theater.
 
-NEVER solve "too many pages" by adding headcount — you'll burn out more people at the same rate. Fix the alerts first.
+Before accepting any action item, ask:
 
-## Decision Tree: Should We Freeze Deploys?
+- Does this make the failure harder to repeat, or just document that it happened?
+- Does it remove risky human judgment from the path, or merely tell humans to concentrate harder?
+- Would the owning team prioritize it without the postmortem forcing the conversation?
 
-```
-Error budget exhausted?
-├── YES → Cause internal (our code/config)?
-│   ├── YES → FREEZE. Only P0 + security fixes.
-│   │         Single incident >20% budget → mandate P0 postmortem action item.
-│   │         Single class >20% of quarter → P0 item on next quarter's plan.
-│   └── NO (external infra, upstream team outage, out-of-scope load) →
-│       Document exception. Do NOT freeze (punishes wrong team).
-│       Increment silver-bullet counter — max 2/quarter.
-└── NO → Budget remaining > 25%?
-    ├── YES → Ship freely. Run chaos experiments.
-    │         Consistently overperforming → consider Chubby-style planned outage.
-    └── NO (orange zone, 10–25%) →
-        Slow velocity. Extra review on risky changes.
-        Lengthen canary duration. No experiments.
-        Extrapolate current burn → predict freeze date → notify product owner now.
-```
+Heroism is seductive because it is low risk, immediately rewarding, and hides the fact that the system is broken. Google's "Why Heroism Is Bad" guidance is direct: heroes get praise for hand-holding launches, manually rolling back bad canaries, or babysitting noisy systems, but the real consequence is that the team never has the realism conversation about the SLO, the process, or the architecture.
 
-## Fallback Strategies (when the primary approach fails)
+Spend error budget to expose broken systems when you need the signal. If the only reason an SLO appears healthy is that a human is quietly compensating for the system every day, the SLO is measuring hero availability, not service reliability.
 
-- **SLI data missing or unreliable**: Start with black-box HTTP probes (cheap, low-fidelity). Add load-balancer metrics next. Move to client-side RUM only once server-side is proven insufficient.
-- **Stakeholders can't agree on a target**: Skip the debate. Measure 4 weeks, present the data, propose "observed minus one standard deviation" as the starting SLO. Iterate quarterly.
-- **Pager load spiking with no clear cause**: Don't tune alerts yet. Read the last 10 pages verbatim and classify (real / flaky / dependency / user error). Fix the biggest category first.
-- **Freeze triggered and product is furious**: Re-read the policy *text*. If it allows this release under a documented condition, spend a silver-bullet and log the decision. If not, the policy is working — escalate per the escalation clause; do not override.
-- **Team demands per-service burn-rate thresholds**: Refuse; offer a new tier instead. If three tiers can't express the need, the real fix is an SLI change, not more tiers.
-- **Postmortem AI rotted for a quarter, outage recurred**: Don't write a new AI for the same root cause. Find the original AI, promote it to P0, reassign to a senior engineer with schedule authority, and add the rotted AI itself as a datapoint in the new postmortem ("process failure: AI-1234 unowned for 90 days").
-- **New service has no SLO and launch is Friday**: Ship with a provisional 99% SLO and a 14-day review. Lower is better than missing — you can always tighten once you have data, but a service without any SLO has no protection at all.
+## NEVER do these
 
-## NEVER List (summary)
+- NEVER treat service-side success as user happiness because it is cheap and low-latency. It misses empty responses, client breakage, and asynchronous failures. Instead move outward only when ticket or incident data proves recall is insufficient.
+- NEVER "fix" poor SLO coverage by only tightening the target because changing one number is easier than re-instrumenting. The consequence is endless false positives or false negatives. Instead decide whether the SLI, denominator, or measurement point is wrong.
+- NEVER add a `for:` timer to burn-rate alerts because it looks like a cheap precision boost. Google shows 100% spikes every 10 minutes can consume 35% of budget and never alert. Instead use long and short windows together.
+- NEVER copy `14.4 / 6 / 1` blindly because the numbers are memorable. They assume enough traffic and roughly 99.9-class goals. The consequence is impossible alerts on low-SLO services and useless noise on low-QPS systems. Instead re-derive parameters from budget share, traffic shape, and maximum possible burn.
+- NEVER use calendar-aligned SLO windows because they feel operationally tidy and make reporting easy. The consequence is reset gaming: teams learn that day-one risk is cheaper than day-twenty-eight risk. Instead use rolling windows so every release is judged against the same recent history.
+- NEVER negotiate an error-budget freeze during the outage because that is the most emotionally convenient moment to water the rule down. The consequence is a policy nobody believes. Instead pre-approve the rule and the escalation path.
+- NEVER solve excess paging by adding more people because that hides broken alerts and broken services behind a larger blast radius. Instead fix alert fan-out, non-actionable pages, and the top recurring failure sources.
+- NEVER rely on a hero to meet an SLO because the work feels urgent and praise arrives immediately. The consequence is masked system debt, burnout, and no pressure to repair the actual gap. Instead let the miss become visible and use the budget as the forcing function for structural fixes.
+- NEVER accept "train people to be careful" as a preventive action because it sounds responsible and cheap. The consequence is recurrence under stress. Instead remove the dangerous edge with automation, guardrails, idempotency, confirmation, or rollback safety.
+- NEVER keep supporting a service whose toil and on-call load stay above SRE limits quarter after quarter because the relationship feels easier than escalation. The consequence is permanent overload and stalled engineering. Instead renegotiate responsibilities or give back the pager until the service is supportable.
 
-- NEVER set SLO at 100% — mathematically impossible, infinite cost
-- NEVER set SLO above your dependency ceiling `product(dep_slos)`
-- NEVER publish your internal SLO — publish a looser SLA number
-- NEVER use a calendar-aligned SLO window; use a rolling 4-week/30-day window
-- NEVER use mean latency as an SLI; use ratios with paired thresholds
-- NEVER add `for:` duration to burn-rate alerts; use multi-window instead
-- NEVER write a burn-rate query without a denominator-guard against NaN
-- NEVER tune burn-rate thresholds per service; use tiered buckets
-- NEVER negotiate error budget policy during an outage
-- NEVER leave a postmortem without a P0/P1 action item (Treynor rule)
-- NEVER accept "train humans to be more careful" as a preventive AI
-- NEVER count out-of-scope traffic against the SLO (load tests, buggy quota-breachers)
-- NEVER page for events that don't require human intelligence
-- NEVER solve excess pager load by adding people
-- NEVER accept toil >50% for >2 quarters without escalating to hand back the service
-- NEVER skip Chubby-style planned outages when massively overperforming — hidden dependencies are worse than the outage
+## Fallbacks
+
+- No trustworthy historical data: start with black-box probes or load-balancer metrics, publish the caveat, and set a short review date.
+- Support tickets and budget burn disagree: compare incident dates to ticket spikes and SLO dips; use that gap to decide whether to tighten, relax, or re-instrument.
+- Stakeholders want an impossible target: bring dependency math and toil cost to the meeting instead of arguing from taste.
+- Canary signal is noisy: Google recommends one canary at a time. Multiple simultaneous canaries contaminate the baseline and increase cognitive load exactly when fast reasoning matters.
+- Low-QPS pages are useless noise: prefer synthetic traffic or grouping by shared failure domain before lowering the SLO. Lower the SLO only when the business truly accepts the extra failure impact.

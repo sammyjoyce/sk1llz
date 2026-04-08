@@ -1,333 +1,85 @@
 ---
 name: simpson-you-dont-know-js
-description: Write JavaScript code in the style of Kyle Simpson, author of "You Don't Know JS". Emphasizes deep understanding of JavaScript mechanics—scope, closures, this, prototypes, and async. Use when you need to truly understand JavaScript behavior.
-tags: scope, closures, this, prototypes, async, promises, generators, coercion, types, deep-understanding
+description: Deep JavaScript semantics in the style of Kyle Simpson. Use when debugging or refactoring bugs involving `this`, scope, closures, prototypes, `class`/`super`, coercion, promises, microtasks, sparse arrays, or host-vs-language confusion. Triggers: "why does JS do this", "lost this", "closure bug", "prototype chain", "safe ==", "async ordering", "microtask", "class field", "super", "holey array".
 ---
 
-# Kyle Simpson Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​‌‌‌‌​‍​​​​​​​‌‍‌‌​​​​‌‌‍‌‌​‌​‌​‌‍​​​​‌​‌​‍​​‌​​​​‌⁠‍⁠
-
-## Overview
-
-Kyle Simpson is the author of the "You Don't Know JS" book series. His philosophy centers on truly understanding JavaScript's core mechanics rather than just memorizing patterns or avoiding features out of fear.
-
-## Core Philosophy
-
-> "The only way to understand JavaScript is to understand JavaScript."
-
-> "Don't fear what you don't understand—learn it."
-
-> "Coercion is not evil, it's just misunderstood."
-
-Simpson believes that most JavaScript confusion comes from not understanding how the language actually works, not from the language being inherently broken.
-
-## Design Principles
-
-1. **Understand, Don't Memorize**: Know why code works, not just that it works.
-
-2. **Embrace the Language**: Use JavaScript as JavaScript, not as Java-lite.
-
-3. **Master the Core**: Scope, closures, `this`, prototypes are essential.
-
-4. **Explicit Over Magic**: Prefer explicit code even if longer.
-
-## When Writing Code
-
-### Always
-
-- Understand what `this` refers to in every function
-- Know the difference between lexical and dynamic scope
-- Use closures intentionally and understand their implications
-- Understand coercion rules when using `==`
-- Know prototype chain behavior
-- Understand event loop and async mechanics
-
-### Never
-
-- Use `this` without understanding its binding rules
-- Ignore type coercion—understand it instead
-- Assume `class` hides JavaScript's prototype nature
-- Use `async/await` without understanding Promises
-- Copy-paste code you don't understand
-
-### Prefer
-
-- Understanding over avoidance
-- Explicit type coercion (`Number()`, `String()`) over implicit
-- Factory functions or OLOO over `class` (for clarity)
-- Clear naming that reveals intent
-- Comments explaining *why*, not *what*
-
-## Code Patterns
-
-### The Four Rules of `this`
-
-```javascript
-// Rule 1: Default Binding (standalone function call)
-function sayHello() {
-    console.log(this.name);  // undefined (strict) or global (sloppy)
-}
-sayHello();
-
-
-// Rule 2: Implicit Binding (method call)
-var person = {
-    name: 'Alice',
-    greet: function() {
-        console.log(this.name);  // 'Alice'
-    }
-};
-person.greet();
-
-// CAUTION: Implicit binding can be lost!
-var greet = person.greet;
-greet();  // undefined - default binding now!
-
-
-// Rule 3: Explicit Binding (call, apply, bind)
-function introduce() {
-    console.log('I am ' + this.name);
-}
-var bob = { name: 'Bob' };
-
-introduce.call(bob);   // 'I am Bob'
-introduce.apply(bob);  // 'I am Bob'
-
-var boundIntroduce = introduce.bind(bob);
-boundIntroduce();      // 'I am Bob'
-
-
-// Rule 4: new Binding
-function Person(name) {
-    this.name = name;
-}
-var charlie = new Person('Charlie');
-console.log(charlie.name);  // 'Charlie'
-
-
-// Arrow functions: Lexical this (inherits from enclosing scope)
-var team = {
-    members: ['Alice', 'Bob'],
-    name: 'Dev Team',
-    introduce: function() {
-        // Arrow function inherits 'this' from introduce()
-        this.members.forEach(member => {
-            console.log(member + ' is on ' + this.name);
-        });
-    }
-};
-```
-
-### Closures Demystified
-
-```javascript
-// Closure: function retains access to its lexical scope
-function createCounter() {
-    var count = 0;  // This variable is "closed over"
-    
-    return function increment() {
-        count += 1;
-        return count;
-    };
-}
-
-var counter = createCounter();
-counter();  // 1
-counter();  // 2
-counter();  // 3 - count persists!
-
-
-// Classic closure gotcha
-for (var i = 0; i < 3; i++) {
-    setTimeout(function() {
-        console.log(i);  // 3, 3, 3 - all share same i!
-    }, 100);
-}
-
-// Solution 1: IIFE creates new scope each iteration
-for (var i = 0; i < 3; i++) {
-    (function(j) {
-        setTimeout(function() {
-            console.log(j);  // 0, 1, 2
-        }, 100);
-    })(i);
-}
-
-// Solution 2: let creates block scope
-for (let i = 0; i < 3; i++) {
-    setTimeout(function() {
-        console.log(i);  // 0, 1, 2
-    }, 100);
-}
-```
-
-### OLOO (Objects Linked to Other Objects)
-
-```javascript
-// Simpson's preferred pattern over class
-// Explicit delegation instead of hidden inheritance
-
-var PersonPrototype = {
-    init: function(name) {
-        this.name = name;
-        return this;
-    },
-    greet: function() {
-        return 'Hello, I am ' + this.name;
-    }
-};
-
-var EmployeePrototype = Object.create(PersonPrototype);
-EmployeePrototype.initEmployee = function(name, title) {
-    this.init(name);
-    this.title = title;
-    return this;
-};
-EmployeePrototype.introduce = function() {
-    return this.greet() + ', ' + this.title;
-};
-
-// Usage
-var alice = Object.create(EmployeePrototype)
-    .initEmployee('Alice', 'Engineer');
-alice.introduce();  // 'Hello, I am Alice, Engineer'
-
-// Clear delegation chain, no hidden magic
-```
-
-### Understanding Coercion
-
-```javascript
-// Explicit coercion (preferred - clear intent)
-var num = Number('42');      // 42
-var str = String(42);        // '42'
-var bool = Boolean('hello'); // true
-
-// Implicit coercion (understand it, use carefully)
-var result = '5' - 2;    // 3 (string coerced to number)
-var concat = '5' + 2;    // '52' (number coerced to string)
-
-// The == algorithm (Abstract Equality Comparison)
-// Know these rules:
-null == undefined;    // true (special case)
-42 == '42';          // true (string → number)
-true == 1;           // true (boolean → number)
-'0' == false;        // true (both → number: 0 == 0)
-
-// Simpson's take: == is safe when types are known
-// Use === when types are unknown or mixed
-function isNullOrUndefined(val) {
-    return val == null;  // Safely checks both null and undefined
-}
-```
-
-### Async Patterns Deep Dive
-
-```javascript
-// Callbacks: Understand the problems
-doA(function() {
-    doB(function() {
-        doC(function() {
-            // "Callback hell" - but inversion of control is the real issue
-        });
-    });
-});
-
-// Promises: Understand the guarantees
-// 1. Only resolved once
-// 2. Either success or failure
-// 3. Values are immutable once settled
-// 4. Exceptions become rejections
-
-function fetchData(url) {
-    return new Promise(function(resolve, reject) {
-        // Async operation
-        if (success) {
-            resolve(data);
-        } else {
-            reject(new Error('Failed'));
-        }
-    });
-}
-
-// Promise chaining - each .then returns a new Promise
-fetchUser(id)
-    .then(function(user) {
-        return fetchPosts(user.id);  // Returns Promise
-    })
-    .then(function(posts) {
-        return processPosts(posts);
-    })
-    .catch(function(err) {
-        // Catches any error in the chain
-        console.error(err);
-    });
-
-
-// async/await: Syntactic sugar over Promises
-// MUST understand Promises first!
-async function getUserPosts(id) {
-    try {
-        var user = await fetchUser(id);
-        var posts = await fetchPosts(user.id);
-        return processPosts(posts);
-    } catch (err) {
-        console.error(err);
-        throw err;
-    }
-}
-```
-
-### Scope and Hoisting
-
-```javascript
-// var is function-scoped and hoisted
-function example() {
-    console.log(x);  // undefined (not ReferenceError!)
-    var x = 5;
-    console.log(x);  // 5
-}
-
-// How JavaScript sees it (hoisting):
-function example() {
-    var x;           // Declaration hoisted
-    console.log(x);  // undefined
-    x = 5;           // Assignment stays
-    console.log(x);  // 5
-}
-
-// let/const are block-scoped with TDZ
-function example() {
-    console.log(x);  // ReferenceError: TDZ
-    let x = 5;
-}
-
-// Functions are fully hoisted
-sayHi();  // Works!
-function sayHi() {
-    console.log('Hi');
-}
-
-// Function expressions are not
-sayBye();  // TypeError: sayBye is not a function
-var sayBye = function() {
-    console.log('Bye');
-};
-```
-
-## Mental Model
-
-Simpson approaches JavaScript by asking:
-
-1. **What does `this` point to?** Apply the four rules
-2. **What scope does this live in?** Lexical, not dynamic
-3. **What's in the closure?** What variables are captured
-4. **What's the prototype chain?** Follow the `[[Prototype]]` links
-5. **What type coercion is happening?** Know the algorithm
-
-## Signature Simpson Moves
-
-- OLOO pattern instead of classes
-- Understanding `this` binding rules explicitly
-- Safe `==` usage when types are known
-- Explicit coercion over implicit
-- Deep async understanding before using `async/await`
+# Kyle Simpson: Mechanics First
+
+JavaScript is rarely "weird" at random. Most failures reduce to one of six systems: lexical scope, call-site binding, prototype lookup, coercion, job-queue scheduling, or host-environment behavior. Do not patch symptoms until you can name the system.
+
+## Use this style for
+
+- Semantic debugging, library/runtime code, API boundaries, and code review where the mechanism must be explainable, not merely tolerated.
+- Refactors that should remove cargo-cult `bind`, accidental `class` misuse, unsafe equality, sparse arrays, or async ordering bugs.
+
+## Loading Discipline
+
+- This skill is intentionally self-contained. Do not load framework docs until you reduce the issue to a language mechanism.
+- Only leave this skill for MDN/spec/V8 material when the code touches `super`, class fields, microtasks, or engine-sensitive array/object shapes.
+- Do not load performance material for cold code. Readability wins unless the path is measurably hot.
+
+## Before You Change Code, Ask Yourself
+
+- Is this a lexical-scope problem, a call-site problem, a prototype problem, a coercion problem, a scheduling problem, or a host-API problem?
+- Which values are own properties versus inherited ones right now?
+- Did this change create a new function identity, a new promise boundary, or a new object shape?
+- Am I relying on transpiler-era behavior that differs from current JavaScript semantics?
+
+## Semantic Triage
+
+1. Strip the bug down to the smallest reproduction that still fails.
+2. Log the receiver, ownership, and queue boundary: `this`, `Object.hasOwn(...)`, `Object.getPrototypeOf(...)`, and every `await`/`.then(...)`/`queueMicrotask(...)`.
+3. Remove the framework and host calls. If the bug disappears, it was never "just JavaScript."
+4. Decide whether the fix must preserve function identity, prototype sharing, field initialization order, or microtask ordering.
+5. Only after the mechanism is explicit should you refactor style or API shape.
+
+## Decision Heuristics
+
+- Wrong `this`: inspect the call-site, not the definition site. If the function should stay late-bound, keep a normal method. If the callback must inherit outer `this`, use an arrow only at that boundary. If teardown/removal matters, store a stable function reference once.
+- `class` or `super` weirdness: check whether a class field replaced constructor assignment, whether a method using `super` was extracted, and whether initializer order now matters more than inheritance structure.
+- Equality weirdness: reserve `x == null` for deliberate nullish collapse. For everything else, normalize the types before comparing.
+- Map-like object weirdness: if keys are uncontrolled strings, use `Object.create(null)` or `Map`, then pair it with `Object.hasOwn(...)`.
+- Async ordering weirdness: mark every `await` as a reentrancy point. If two branches must behave consistently, put both on the same queue or await once at a higher boundary.
+- Array weirdness: look for holes, sparse writes, and indexed descriptors before looking for algorithm bugs.
+
+## Mechanics That Matter
+
+- `this` is call-site state, not function identity. `self = this`, `bind(this)`, and arrow functions solve different problems; treating them as equivalent is how APIs become impossible to reason about.
+- Inline `bind(this)` or `() => ...` in `addEventListener`, subscription APIs, or caches creates identity drift. Removal fails because teardown requires the exact same function object, not equivalent source text.
+- Prototype methods are shared and patchable; arrow class fields are own properties created per instance. That means one closure per instance, different equality identity, weaker subclass override behavior, and harder spying/monkey-patching.
+- Public class fields use `[[DefineOwnProperty]]`. In derived classes they are applied after `super()`, and they do not invoke setters on the base prototype. Old Babel/TypeScript output often behaved like constructor assignment, so migrations can silently change behavior.
+- Computed public field names are evaluated once at class definition time, not per instance. A field like `[Math.random()] = 1` chooses one key for the class, not a new key for each object.
+- `super` is tied to a method's home object, not rebound the way `this` is. Reusing or reassigning a method that uses `super` can keep `this` working while `super` still points at the original prototype chain.
+- `==` is a disciplined tool only when the normalization contract is explicit. `x == null` is honest. The moment booleans, arrays, or `""`/`0` can enter the comparison, review quality collapses because the algorithm is now doing hidden `ToPrimitive` and `ToNumber` work.
+- `parseInt(...)` is a parser, not a coercion primitive. Use it for `"42px"` or explicit radix rules. Use `Number(x)` or unary `+x` when the contract is "this should already be numeric-ish."
+- `Object.create(null)` is the honest object-as-map when inherited keys or prototype pollution matter, but it also removes `hasOwnProperty`, `toString`, and other `Object.prototype` conveniences. Plan for that upfront with `Object.hasOwn(...)`.
+- `delete arr[i]` does not remove an element; it creates a hole. In V8, one hole is enough to move an array off packed fast paths, and prototype lookup can satisfy that missing index later. Sparse writes like `arr[9999] = "x"` push arrays toward dictionary elements.
+- Strings are immutable and not arrays. `split("").reverse().join("")` is a lossy Unicode hack that breaks astral symbols and grapheme clusters; use Unicode-aware tooling when text fidelity matters.
+- `await` is not only syntax sugar; it is a scheduling boundary. Other microtasks can run between lines that look adjacent. Historically an `await` could cost extra promises and multiple microtask hops; modern engines optimized the common case, but the reentrancy point remains.
+- `queueMicrotask(...)` and `Promise.resolve().then(...)` use the same queue, but `queueMicrotask(...)` avoids promise allocation and reports thrown errors as ordinary exceptions instead of rejected promises. Recursive microtasks can starve rendering and event processing.
+- Promise rejection handling has a timing window. A `.catch(...)` attached in a later `setTimeout(...)` is often too late for unhandled-rejection reporting. Attach rejection handling in the same chain or the same turn.
+- DOM events, timers, fetch, and loaders are host behavior layered on top of JS. Reduce a bug to pure language semantics before blaming the language.
+
+## NEVER
+
+- NEVER convert prototype methods to arrow class fields just to avoid `bind`, because the convenience hides per-instance closures, breaks stable listener identity, and weakens override/patch behavior. Instead keep a prototype method and bind once at the boundary that truly needs it.
+- NEVER replace constructor assignment with a class field when setters, proxies, or initialization order matter, because standard field semantics use `[[DefineOwnProperty]]` and skip inherited setters. Instead preserve constructor assignment unless bypassing the setter is intentional.
+- NEVER use `obj.hasOwnProperty(key)` on untrusted or map-like objects because shadowed methods lie and null-prototype objects throw. Instead use `Object.hasOwn(obj, key)`.
+- NEVER use `delete arr[i]` because it creates holes rather than removing elements, which changes lookup behavior and engine representation. Instead use `splice`, a sentinel value, or a real map keyed by index.
+- NEVER use `==` as a blanket "be flexible" operator because booleans, arrays, and empty strings trigger coercion paths humans review badly. Instead normalize types first, or reserve `x == null` for explicit nullish collapse.
+- NEVER sprinkle `await` through hot loops or state machines because each `await` creates an interleaving point where invariants can be observed half-updated. Instead batch independent work with `Promise.all(...)` or move the await to a higher boundary.
+- NEVER benchmark `+x` versus `Number(x)` or `++i` versus `i++` on cold code because engines aggressively rewrite trivial syntax and bad test setup dominates the result. Instead measure real hot paths and optimize data shape, holes, and scheduling boundaries first.
+- NEVER blame JavaScript for DOM, timer, or fetch oddities before isolating a language-only reproduction, because host objects often look like normal objects while obeying very different lifecycle rules. Instead reduce first, then reintroduce the host API.
+
+## Constraint Level
+
+- High freedom: API design and refactors. Favor explicit data flow, named functions, behavior delegation, and code that teaches the mechanism.
+- Low freedom: semantic bug fixes involving `super`, class fields, sparse arrays, or microtask ordering. Do not "clean up" until you can state the exact mechanism being preserved.
+- Medium freedom: performance work. Improve shapes, hole avoidance, and queue boundaries only with measurements from the actual hot path.
+
+## If the First Fix Fails
+
+- Re-check whether a transpiler changed class fields into constructor assignments or vice versa.
+- Replace host APIs with tiny stand-ins. If the bug disappears, you were debugging the host, not the language.
+- Turn hidden work into explicit work: normalize values before compare, pass the receiver explicitly, materialize the queue boundary, or swap object-as-map code for `Map`.
+- If you still cannot explain the behavior in one sentence, the code is not understood yet and should not be generalized.

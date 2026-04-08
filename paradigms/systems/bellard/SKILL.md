@@ -1,101 +1,99 @@
 ---
 name: bellard-minimalist-wizardry
-description: Build small, dense systems software in the style of Fabrice Bellard (TinyCC, QEMU, FFmpeg, JSLinux, QuickJS, BPG, LTE). Use when designing a non-optimizing compiler, a dynamic binary translator, a media codec kernel, an embeddable language runtime, a single-file emulator, or any system that must self-host with one author. Triggers include writing a recursive-descent parser without yacc, building a value-stack code generator instead of an SSA IR, translation-block chaining, softmmu TLB fast paths, hand-written SIMD assembly versus intrinsics, NaN boxing, refcount-plus-cycle GC, bump arenas, OTCC-style code-size budgets, replacing autovectorization with `.asm` files, getting a project to compile itself.
+description: Design single-author, size-constrained systems in the style of Fabrice Bellard: one-pass compilers, dynamic translators, embeddable runtimes, and hand-tuned codec kernels. Use when translation is cheaper than representation, when self-hosting or booting a proof matters more than portability, or when you need Bellard-specific tradeoffs such as no AST/SSA, value-stack codegen, fixed register mapping, translation blocks, direct block chaining, physically indexed code caches, refcount-plus-cycle GC, qjsc-style bytecode embedding, or scalar-oracle-plus-asm verification. Triggers: TinyCC, TCC, OTCC, QuickJS, QEMU, TCG, dyngen, translation block, direct block chaining, self-modifying code, no yacc, no SSA, no IR, x86inc, checkasm, NaN boxing, JS_SetMemoryLimit, js_std_eval_binary.
 ---
 
-# Bellard's Way
+# Bellard Minimalist Wizardry
 
-You are in this skill because size, speed, and "fits in one author's head" all matter at the same time. Bellard's body of work shares a recognizable engineering grammar — distinct from both "move fast" and "industrial software." This skill teaches the grammar, not the trivia.
+Bellard style is for problems where regeneration is cheaper than architecture. If you need a long-lived multi-author platform, stable serialized IR, or formal guarantees, stop and use a heavier design on purpose.
 
-## The first question (ask before any design decision)
+## First filter
 
-> **"Can I get a working end-to-end demo on ONE platform with ALL the dirty tricks, today?"**
+Before making any structural decision, ask yourself:
 
-If yes — do that first. Every Bellard project passes a self-test before any portability or cleanup work: TCC self-compiles, JSLinux boots Linux, FFmpeg round-trips a real file, QuickJS runs the test262 suite. Until you hit that bar, do not refactor, do not port, do not generalize.
+- **Can I prove the idea on one host first?** OTCC relied on endianness, unaligned access, in-memory codegen, and `dlsym()` before anyone worried about portability. If you cannot tolerate one ugly host-specific build, your scope is still too large.
+- **Is recomputation cheaper than representation?** If the answer is yes, do not add AST, SSA, or a persistent IR. Bellard systems repeatedly win by re-deriving state later instead of storing it now.
+- **Is invalidation cheaper than clever retention?** QEMU's original TB cache was 16 MiB and simply flushed when full. That only works when translation is cheap; if that sounds reckless, you are probably not in Bellard territory.
 
-If no — **your scope is wrong**. Cut features until the answer is yes. This is not a productivity tip; it is the load-bearing decision in every Bellard project.
+## Load only what matches
 
-## Decision tree: which sub-domain are you in?
+Load the smallest matching reference and stop there.
 
-Load **only** the reference that matches. Each is dense and loading the wrong one wastes context.
-
-| Building... | MANDATORY read before designing | Do NOT load |
+| Situation | MANDATORY read before design | Do NOT load |
 |---|---|---|
-| Non-optimizing compiler, DSL backend, JIT codegen | `references/tcc-vstack-codegen.md` | the others |
-| Dynamic binary translator, emulator, sandbox | `references/qemu-tcg.md` | the others |
-| Media/signal kernel where SIMD matters | `references/handwritten-simd.md` | the others |
-| Small embeddable language runtime | (inline notes below — no reference needed) | all |
+| You are about to add an AST, SSA, yacc, or a second compiler pass | `references/tcc-vstack-codegen.md` | `qemu-tcg.md`, `handwritten-simd.md` |
+| You are dealing with MMU, translation blocks, precise traps, interrupts, or self-modifying code | `references/qemu-tcg.md` | `tcc-vstack-codegen.md`, `handwritten-simd.md` |
+| You are writing codec/DSP assembly or benchmarking a "fast path" | `references/handwritten-simd.md` | `tcc-vstack-codegen.md`, `qemu-tcg.md` |
+| You are building a tiny embeddable runtime with direct bytecode generation | stay in this file unless you also hit one of the cases above | all three references |
 
-If your task spans two categories (e.g. building a JIT *and* writing SIMD intrinsics for it), read both — but read them sequentially, not preemptively.
+If the task spans two categories, load them sequentially. Do not preload all references "just in case."
 
-### When this skill does NOT apply
+## The real heuristics
 
-- You are building a long-lived multi-author production system where the "fits in one head" criterion is irrelevant. Use industrial patterns.
-- You need to ship something that other people will fork heavily — minimalism is a personal trait that doesn't survive contact with a community. (See: TCC's many forks, none of which shipped.)
-- You are doing genuine cross-block optimization (SSA, inlining, loop transforms). LLVM exists; use it.
-- You need formal correctness guarantees (cryptographic primitives, safety-critical control). Bellard-style code is brilliant but rarely formally verified.
+### 1. Representation tax is usually the first losing move
 
-## Six non-obvious heuristics
+TCC gets away with one-pass codegen because a value can live as a constant, stack slot, lvalue, register, CPU flags, or deferred jump. The trick is not "use a stack"; it is "delay materialization until a consumer forces it." If your boolean becomes a register the moment you emit a compare, you already paid the wrong tax.
 
-### 1. An IR is overhead until your optimizer can pay for it
-If you are not doing cross-block dataflow optimization (SSA, GVN, global register allocation), do **not** build the textbook `parse → AST → IR → backend` pipeline. TCC keeps a single value stack where each entry knows whether it currently lives in a register, in CPU flags as a pending compare, in memory at a stack offset, or as a constant — and emits code lazily on use. The non-obvious payoff: `if (a<b && c<d)` never materializes a boolean; the compare result chains straight into the branch. Idiomatic short-circuit code becomes free.
+### 2. Fixed register mapping beats a half-built allocator
 
-### 2. Translate, don't interpret — sooner than you think
-A naive instruction-by-instruction translator beats a heavily optimized interpreter the moment a basic block exceeds ~5 guest instructions, because dispatch overhead vanishes. The threshold for hand-rolling a JIT is much lower than people assume. QEMU's specific magic is **direct block chaining**: a translation block patches its own exit jump to point at the next block, so a hot loop becomes straight-line host code with zero dispatcher round trips after the second iteration.
+QEMU's early TCG mapped most guest registers to memory and only a few temporaries to host registers. That looks crude until you notice the payoff: portability stays linear, the generated state is easy to reason about, and the remaining copies are obvious in profiles. Do not build a heroic allocator unless you can point to the copies it removes.
 
-### 3. Index your caches by physical reality, not virtual convenience
-QEMU keys translation blocks by `(physical_PC, cs_base, flags, cflags)` — never by guest virtual PC. Sounds like extra work; it is the entire reason guest TLB changes don't blow away the JIT. Apply this anywhere you cache: key by what *cannot* change behind your back, not by what is cheapest to compute at insert time.
+### 3. Lazy condition codes are a design pattern, not an x86 hack
 
-### 4. Write the dumb C reference path first — and keep it forever
-FFmpeg ships a clean scalar C reference for every routine alongside the AVX-512. Not (only) as a portability fallback. The C version is the **oracle** that `checkasm` runs random inputs against to verify the SIMD is bit-exact. Without it, hand-asm degenerates into unverifiable folklore the moment its author moves on. Same applies to TCC's "naive codegen" comments and QuickJS's interpreter loop relative to its inline-cache fast paths.
+QEMU stores `CC_SRC`, `CC_DST`, and `CC_OP` instead of eagerly materializing flags. That buys two things at once: fewer useless flag writes on the hot path, and enough information to reconstruct precise state later. The non-obvious part is the backward pass over the whole translation block to delete dead condition-code assignments. If you need exact traps, carry reconstructable state; do not eagerly snapshot everything.
 
-### 5. If autovectorization helps you, your hot path isn't actually hot
-Compiler autovec wins ~2x on a regular loop. Hand SIMD wins ~8x on the same loop. The two **conflict**: leaving `-ftree-vectorize` on while shipping hand-written `.asm` paths slows the hand path through worse register allocation pressure. FFmpeg disables compiler autovectorization in its build for this reason. Commit fully or not at all — the worst configuration is "we have hand asm AND we let the compiler vectorize."
+### 4. Code caches should track physical reality
 
-A calibration note: the famous "94x" and "100x" FFmpeg headlines were measured against `-O0` C. With `-O2 -fno-tree-vectorize`, real speedups are 2–10x. Still enormous, but plan capacity around the honest number.
+For system emulation, QEMU indexes TBs by physical address and only chains direct branches when the destination stays on the same page. That is the real lesson: cache keys must be based on what cannot silently change behind your back. Virtual-PC caches feel convenient until page-table edits turn into global flush storms.
 
-### 6. Bump arenas eliminate categories of bugs, not just allocations
-In TCC the symbol/code/data sections are bump-allocated; in QuickJS the per-function compile arena is. The wins compound: `free()` becomes a single pointer reset, use-after-free within an arena is statistically impossible (nothing moves), cache locality is automatic, and Valgrind is mostly unnecessary because there is no per-object lifetime to mismanage. The pattern applies any time a group of allocations shares a phase boundary — a parse, a compile, a frame, a request, a translation block.
+### 5. Self-modifying code is a page problem first, a compiler problem second
 
-## Embeddable language runtime notes (QuickJS pattern)
+The first move is blunt and effective: write-protect code pages, invalidate everything on that page when a store lands, and undo block chaining. Only when mixed code/data pages invalidate too often do you graduate to a bitmap of actual code bytes inside the page so stores can prove whether invalidation is necessary. Skip straight to global dependency graphs and you will spend weeks solving the wrong problem.
 
-If you are building one of these and don't need a separate reference file, internalize these specifics:
+### 6. One-pass systems still have honest exceptions
 
-- **Compile straight to bytecode with no parse tree.** A stack-based bytecode plus a hand-written single-pass compiler is smaller and faster than any AST-walking compiler. Compute max stack depth at compile time so the interpreter loop needs no runtime overflow check.
-- **Reference counting + a separate cycle collector** beats tracing GC for embedded use: deterministic free, no GC root annotations leaking into your C API, embedders can reason about lifetimes. The cycle collector only walks reference counts and object contents — no roots.
-- **NaN-box only on 32-bit; use a two-register struct on 64-bit.** On 64-bit, memory is cheaper than the bit-twiddling tax. Two-CPU-register `JSValue` returns through registers via the SysV/Win64 ABI for free.
-- **Half your atom table is reserved for immediate small-int literals.** An "atom" is then either an interned string pointer or an integer in `[0, 2^31)` distinguished by tag bits — one path handles both.
-- **Backtracking regexp uses an explicit stack**, never host stack recursion. A 15 KiB regexp engine is achievable; ICU is not your friend.
+TCC breaks single-pass purity only when reality forces it: counting initializer elements for unknown-size arrays and reversing arguments on targets whose calling convention needs it. That is the Bellard test for a second pass: it must remove a concrete impossibility, not satisfy compiler aesthetics.
 
-## NEVER list (each item: the seductive wrong path → why it's wrong → what to do instead)
+### 7. Tiny runtimes win by deleting runtime work
 
-- **NEVER add an IR to a compiler that doesn't optimize across basic blocks.** Seductive because every textbook draws the diagram. Consequence: ~5x more code, slower compile times, identical output quality. **Instead** use a value stack with lazy code emission (read `references/tcc-vstack-codegen.md`).
+QuickJS compiles straight to stack bytecode, computes max stack depth at compile time, keeps small integers on fast paths, reserves half of atom space for immediate integer literals, and uses refcount plus cycle removal so the C API does not need an explicit root stack. If your embedded runtime needs stable bytecode across versions or hostile bytecode input, you have already left Bellard mode.
 
-- **NEVER use yacc/bison/ANTLR for a language whose semantics you control.** Seductive because they "generate the parser for free." Consequence: you lose error recovery, debug control, and the ability to interleave parsing with codegen — which is the *only* reason single-pass compilers stay small. **Instead** write hand-recursive-descent; it will be ~30% the size of the generated output and you can step through it.
+### 8. Feature stripping only counts if the linker can erase it
 
-- **NEVER use intrinsics if you have decided you need hand-tuned SIMD.** Seductive because they look like C and are "almost as fast." Consequence: ~10–15% perf loss from worse register allocation, brittleness across compiler upgrades, the actual instruction stream is hidden from you. **Instead** write real `.asm` files using `x86inc.asm` macros (read `references/handwritten-simd.md`) — or commit fully to the auto-vectorizer. The middle is the worst place.
+QuickJS's `-fno-*` feature toggles shrink binaries because `qjsc` relies on link-time optimization to dead-strip unused engine pieces. If you copy the surface idea without the LTO assumption, you keep the complexity and miss the size win.
 
-- **NEVER cache JIT-compiled or translated code by virtual address alone.** Seductive because virtual addresses are what your frontend already has. Consequence: any guest TLB or page-table change forces a full cache flush, killing throughput. **Instead** key by physical address (or content hash) so MMU events become precise per-page invalidations.
+## Before doing X, ask yourself
 
-- **NEVER use tracing GC in an embeddable interpreter.** Seductive because "modern languages use GC." Consequence: nondeterministic latency, GC root annotations leak into every C function that touches a value, embedders can't reason about lifetimes. **Instead** use refcount + periodic cycle collection.
+- **Before adding an abstraction layer:** what hot-path check disappears because this layer exists? If the answer is "none yet," delete the layer.
+- **Before porting:** which host-specific cheat is currently buying the demo? Preserve that cheat until the proof artifact self-hosts, boots, or round-trips.
+- **Before writing hand assembly:** do I already have a scalar C oracle, an honest benchmark baseline, and a fixed policy for compiler vectorization? If not, the asm path is premature.
+- **Before embedding a runtime:** what are the three hostile boundaries: memory limit, stack limit, and execution timeout? QuickJS exposes `JS_SetMemoryLimit()`, `JS_SetMaxStackSize()`, and `JS_SetInterruptHandler()` because tiny runtimes still need kill switches.
 
-- **NEVER port before self-hosting.** Seductive because porting is mechanical and feels like progress. Consequence: you lock in design decisions before you know which ones cost you. **Instead** depend freely on endianness, unaligned access, and a specific ABI until your project passes its own self-test; then generalize.
+## Use Bellard mode only while this remains true
 
-- **NEVER make the build system a feature matrix in v0.1.** Seductive because "users will ask for X." Consequence: the implementation gets shaped by the build system instead of by the algorithm. **Instead** ship one configuration. TCC's first release was Linux/i386 only. FFmpeg 0.1 supported one container and two codecs.
+| If your problem looks like... | Bellard move | Switch away when... |
+|---|---|---|
+| Expression-level codegen, REPL compiler, JIT backend | direct parse-to-bytecode or value-stack emission | you need cross-basic-block optimization, stable analysis passes, or non-local rewrites |
+| Emulator / DBT | fixed register mapping, TB chaining, physical indexing, retranslation for precise traps | translation is no longer cheap enough to justify full-cache flushes or simple invalidation |
+| Embeddable runtime | stack bytecode, refcount + cycle removal, compile-time stack sizing | you need untrusted bytecode loading, moving GC, or a stable serialized format |
+| Codec / DSP hot kernel | scalar oracle + standalone asm path | performance is diffuse across the program or the algorithm is still changing weekly |
 
-- **NEVER intern global state in singletons or `atexit` handlers in code you want to be embeddable.** Seductive because "it's the simple version." Consequence: nobody can run two instances in one process, sandboxing is impossible. **Instead** pass a runtime pointer everywhere — QuickJS has `JSRuntime` and `JSContext`, QEMU has `CPUState`, FFmpeg has `AVCodecContext`.
+## NEVER do these things
 
-- **NEVER trust a hand-asm-vs-C benchmark that wasn't compiled with `-O2 -fno-tree-vectorize`.** Seductive because the headline 94x number looks great in a talk. Consequence: you size your roadmap around fiction. **Instead** insist on apples-to-apples C with vectorization explicitly disabled (since that's what the asm replaces) before accepting any speedup claim.
+- **NEVER add SSA, a persistent AST, or a generic optimizer to a compiler that only optimizes expressions**, because the seductive "proper compiler architecture" move adds representation cost without creating any optimization that can pay for it. Instead keep values in the cheapest recoverable state and emit only when use forces you.
+- **NEVER use yacc/bison/ANTLR for a language whose semantics you still want to bend around code generation**, because parser generators feel like free leverage but they sever the tight parse/type/codegen interleave that keeps one-pass compilers tiny. Instead write recursive descent and spend complexity on emitted states, not grammar tooling.
+- **NEVER key translated blocks by virtual PC alone**, because it matches frontend intuition but every remap or aliasing event turns into unnecessary flush pressure and broken chains. Instead key by physical address plus static CPU state and chain only when the destination page is safe.
+- **NEVER materialize flags or booleans earlier than their first consumer**, because it looks explicit and debuggable but kills lazy-condition-code elimination and makes exact exception recovery more expensive. Instead carry reconstructable tuples or flag-backed values until something truly needs a register.
+- **NEVER trust TCC-style bounds checks across unchecked ABI boundaries**, because unchecked pointers are explicitly assumed valid. That is seductive because compatibility stays high, but it means the safety boundary disappears the moment foreign code hands you a pointer. Instead treat incoming pointers as tainted and validate or copy at the boundary.
+- **NEVER let a dyngen-style backend float across compiler versions**, because the compiler is part of the generator: relocation shapes, function prologues, and copied stub layouts are all load-bearing. Instead pin the toolchain and diff generated stubs before blaming runtime logic.
+- **NEVER mix inline asm, compiler vectorization, and handwritten SIMD in the same hot kernel**, because the halfway approach is seductive but produces impossible-constraint build failures, silent miscompiles, or tiny regressions that are miserable to attribute. Instead choose pure C plus compiler, or pure C oracle plus standalone asm.
+- **NEVER load QuickJS bytecode or Binary JSON from untrusted or cross-version sources**, because execution happens without a security check and the format can change without notice. Instead ship source or a trusted same-version embedded blob.
+- **NEVER execute JS from a QuickJS finalizer**, because it feels convenient for cleanup but re-enters the runtime from GC context. Instead free only C resources there and expose explicit JS-level close/dispose paths.
+- **NEVER port before the self-test exists**, because portability feels like progress while it quietly freezes the wrong abstractions. Instead exploit one host, one ABI, and one compiler until the proof artifact works.
 
-- **NEVER reach for `malloc()` in a hot path when the lifetime is bounded by a phase.** Seductive because it's the default. Consequence: per-allocation overhead, fragmentation, lifetime bugs. **Instead** bump-allocate from a per-phase arena; release with one pointer reset.
+## Fallbacks when the primary move breaks
 
-## Procedure: bringing up a new Bellard-style project (this order is not negotiable)
-
-1. **Define the smallest end-to-end demo that proves the concept.** TCC's was `compile and run printf("hello")`. QEMU's was booting a tiny boot sector. Don't write architecture docs first; write that demo first.
-2. **Lock in one host and one target platform.** Use endianness, ABI, and unaligned-access assumptions freely.
-3. **Single `.c` file until it doesn't fit in your head.** "Fits in head" is the splitting criterion — not file size, not module-count fashion.
-4. **Reach the self-test.** Compiler self-compiles. Emulator boots. Codec round-trips. *No optional features may be added before this step.*
-5. **Add `checkasm`-style golden tests** comparing every fast path to a clean reference path on random inputs. Forever.
-6. **Only now:** portability, configurability, additional architectures, optional features, the build matrix.
-
-If you feel pressure to skip step 4, the answer is always "scope is too big — cut more." Never reorder.
+- **Your JIT/emulator thrashes on mixed code/data pages:** first unchain aggressively, then add the per-page code bitmap, and only then consider a more complex invalidation graph.
+- **Your one-pass compiler keeps asking for "just one more" backpatch pass:** audit whether the problem is genuinely local. If it is not, stop pretending and add the smallest targeted IR at the exact seam that forced the second pass.
+- **Your QuickJS embedding leaks or crashes:** audit `JS_DupValue()` / `JS_FreeValue()` balance first, then verify every custom class exposes `gc_mark` for outgoing references, then set memory/stack/interrupt limits before debugging anything else.
+- **Your asm path benchmarks great but breaks in production:** treat the scalar C path as the oracle and re-run with adversarial widths, tails, alignment, saturation edges, and randomized buffers. If the asm is not bit-exact, delete or gate it until it is.

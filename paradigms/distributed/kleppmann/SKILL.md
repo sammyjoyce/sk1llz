@@ -1,433 +1,165 @@
 ---
 name: kleppmann-data-intensive
-description: Design distributed systems in the style of Martin Kleppmann, author of "Designing Data-Intensive Applications". Emphasizes understanding data systems deeply, making informed trade-offs, and building reliable data infrastructure. Use when designing databases, streaming systems, or data pipelines.
-tags: crdt, replication, streaming, consistency, event-sourcing, databases, partitioning, consensus, data-pipelines, real-time, collaborative
+description: Decision heuristics for data-intensive distributed systems: invariants, isolation anomalies, CDC/outbox cutovers, log-first architectures, quorum edge cases, multi-partition workflows, and CRDT or local-first trade-offs. Use when designing or reviewing databases, event-driven systems, stream processors, multi-region replication, offline sync, or consistency guarantees. Triggers: distributed systems, DDIA, Martin Kleppmann, replication, serializability, CDC, outbox, event log, materialized view, quorum, CRDT, local-first.
 ---
 
-# Martin Kleppmann Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​​​‌‌​‍‌​‌‌‌​​‌‍​​‌‌‌‌‌​‍​‌​‌‌‌‌​‍​​​​‌​‌​‍​​​​​‌​‌⁠‍⁠
-
-## Overview
-
-Martin Kleppmann is the author of "Designing Data-Intensive Applications" (DDIA), one of the most influential books on distributed systems and databases. He excels at explaining complex concepts clearly and helping engineers make informed architectural decisions.
-
-## Core Philosophy
-
-> "Reliability means making systems work correctly, even when faults occur."
-
-> "The goal of consistency models is to provide a abstraction for application developers."
-
-> "There's no such thing as a 'best' database—only trade-offs."
-
-Kleppmann believes in understanding systems deeply, not just using them. Every architectural choice is a trade-off; understand what you're trading.
-
-## Design Principles
-
-1. **Understand the Trade-offs**: CAP, PACELC, latency vs consistency.
-
-2. **Design for Failure**: Partial failure is the norm in distributed systems.
-
-3. **Data Outlives Code**: Schema design and data models matter enormously.
-
-4. **Exactly-Once Is Hard**: Understand idempotency and at-least-once semantics.
-
-## When Writing Code
-
-### Always
-
-- Understand the consistency guarantees your system provides
-- Design for idempotency where possible
-- Think about data evolution and schema changes
-- Consider exactly-once vs at-least-once semantics
-- Know your data access patterns before choosing storage
-- Plan for failure recovery
-
-### Never
-
-- Assume "eventual consistency" without understanding what it means
-- Ignore the differences between isolation levels
-- Couple tightly without considering failure modes
-- Treat distributed transactions as a silver bullet
-
-### Prefer
-
-- Idempotent operations
-- Append-only data structures
-- Event sourcing for audit trails
-- Change data capture over dual writes
-- Log-based message brokers over traditional ones
-
-## Code Patterns
-
-### Consistency Models Illustrated
-
-```python
-# Understanding consistency models through code
-
-class LinearizableStore:
-    """
-    Linearizability: operations appear atomic and instantaneous.
-    Strongest consistency - single copy illusion.
-    """
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._data = {}
-    
-    def write(self, key, value):
-        with self._lock:
-            self._data[key] = value
-    
-    def read(self, key):
-        with self._lock:
-            return self._data.get(key)
-    
-    def compare_and_set(self, key, expected, new_value):
-        with self._lock:
-            if self._data.get(key) == expected:
-                self._data[key] = new_value
-                return True
-            return False
-
-
-class CausallyConsistentStore:
-    """
-    Causal consistency: respects happens-before relationship.
-    Weaker than linearizable, but allows more concurrency.
-    """
-    def __init__(self, node_id):
-        self.node_id = node_id
-        self.data = {}
-        self.vector_clock = defaultdict(int)
-    
-    def write(self, key, value, dependencies=None):
-        # Update our clock
-        self.vector_clock[self.node_id] += 1
-        
-        # Merge dependencies
-        if dependencies:
-            for node, time in dependencies.items():
-                self.vector_clock[node] = max(self.vector_clock[node], time)
-        
-        self.data[key] = {
-            'value': value,
-            'clock': dict(self.vector_clock)
-        }
-        
-        return dict(self.vector_clock)
-    
-    def read(self, key):
-        if key in self.data:
-            return self.data[key]['value'], self.data[key]['clock']
-        return None, dict(self.vector_clock)
-```
-
-### Event Sourcing
-
-```python
-# Event sourcing: store events, derive state
-
-from dataclasses import dataclass
-from typing import List
-from datetime import datetime
-
-@dataclass
-class Event:
-    event_type: str
-    data: dict
-    timestamp: datetime
-    version: int
-
-class EventStore:
-    def __init__(self):
-        self.events: List[Event] = []
-        self.version = 0
-    
-    def append(self, event_type: str, data: dict):
-        self.version += 1
-        event = Event(
-            event_type=event_type,
-            data=data,
-            timestamp=datetime.now(),
-            version=self.version
-        )
-        self.events.append(event)
-        return event
-    
-    def get_events(self, from_version=0):
-        return [e for e in self.events if e.version > from_version]
-
-
-class BankAccount:
-    """Aggregate rebuilt from events"""
-    
-    def __init__(self, account_id: str, event_store: EventStore):
-        self.account_id = account_id
-        self.event_store = event_store
-        self.balance = 0
-        self._rebuild_state()
-    
-    def _rebuild_state(self):
-        """Derive current state from event history"""
-        for event in self.event_store.events:
-            self._apply(event)
-    
-    def _apply(self, event: Event):
-        if event.event_type == 'deposited':
-            self.balance += event.data['amount']
-        elif event.event_type == 'withdrawn':
-            self.balance -= event.data['amount']
-    
-    def deposit(self, amount: float):
-        event = self.event_store.append('deposited', {
-            'account_id': self.account_id,
-            'amount': amount
-        })
-        self._apply(event)
-    
-    def withdraw(self, amount: float):
-        if amount > self.balance:
-            raise ValueError("Insufficient funds")
-        event = self.event_store.append('withdrawn', {
-            'account_id': self.account_id,
-            'amount': amount
-        })
-        self._apply(event)
-
-# Benefits:
-# 1. Complete audit trail
-# 2. Time travel (state at any point)
-# 3. Event replay for debugging
-# 4. Easy to add new projections
-```
-
-### Idempotency Keys
-
-```python
-# Idempotency: safe retries without duplicate effects
-
-import uuid
-import hashlib
-
-class IdempotentProcessor:
-    def __init__(self):
-        self.processed_keys = {}  # key -> result
-        self.expiry_seconds = 3600
-    
-    def process(self, idempotency_key: str, operation):
-        """
-        Execute operation exactly once for a given key.
-        Retries with same key return cached result.
-        """
-        # Check if already processed
-        if idempotency_key in self.processed_keys:
-            return self.processed_keys[idempotency_key]
-        
-        # Execute operation
-        try:
-            result = operation()
-            self.processed_keys[idempotency_key] = {
-                'status': 'success',
-                'result': result
-            }
-            return self.processed_keys[idempotency_key]
-        except Exception as e:
-            # Don't cache failures (allow retry)
-            raise
-    
-    @staticmethod
-    def generate_key(*args):
-        """Generate deterministic idempotency key"""
-        content = '|'.join(str(arg) for arg in args)
-        return hashlib.sha256(content.encode()).hexdigest()
-
-
-# Usage:
-processor = IdempotentProcessor()
-
-def create_payment(user_id, amount, idempotency_key):
-    def do_payment():
-        # Actually create the payment
-        return {'payment_id': str(uuid.uuid4()), 'amount': amount}
-    
-    return processor.process(idempotency_key, do_payment)
-
-# Client can safely retry:
-key = IdempotentProcessor.generate_key(user_id, amount, request_id)
-result1 = create_payment(user_id, 100, key)
-result2 = create_payment(user_id, 100, key)  # Same result, no duplicate payment
-```
-
-### Change Data Capture
-
-```python
-# CDC: capture database changes as a stream
-
-from typing import Callable, List
-from enum import Enum
-from dataclasses import dataclass
-
-class OperationType(Enum):
-    INSERT = 'insert'
-    UPDATE = 'update'
-    DELETE = 'delete'
-
-@dataclass
-class ChangeEvent:
-    table: str
-    operation: OperationType
-    key: dict
-    before: dict  # For update/delete
-    after: dict   # For insert/update
-    timestamp: float
-    sequence: int
-
-class CDCProducer:
-    """Publish changes from database write-ahead log"""
-    
-    def __init__(self, publisher):
-        self.publisher = publisher
-        self.sequence = 0
-    
-    def capture_insert(self, table: str, key: dict, data: dict):
-        self.sequence += 1
-        event = ChangeEvent(
-            table=table,
-            operation=OperationType.INSERT,
-            key=key,
-            before=None,
-            after=data,
-            timestamp=time.time(),
-            sequence=self.sequence
-        )
-        self.publisher.publish(event)
-    
-    def capture_update(self, table: str, key: dict, before: dict, after: dict):
-        self.sequence += 1
-        event = ChangeEvent(
-            table=table,
-            operation=OperationType.UPDATE,
-            key=key,
-            before=before,
-            after=after,
-            timestamp=time.time(),
-            sequence=self.sequence
-        )
-        self.publisher.publish(event)
-
-
-class CDCConsumer:
-    """Consume changes and maintain derived view"""
-    
-    def __init__(self):
-        self.handlers: dict[str, List[Callable]] = {}
-        self.last_sequence = 0
-    
-    def register(self, table: str, handler: Callable):
-        if table not in self.handlers:
-            self.handlers[table] = []
-        self.handlers[table].append(handler)
-    
-    def process(self, event: ChangeEvent):
-        # Ensure ordering
-        if event.sequence <= self.last_sequence:
-            return  # Already processed
-        
-        if event.table in self.handlers:
-            for handler in self.handlers[event.table]:
-                handler(event)
-        
-        self.last_sequence = event.sequence
-
-# Usage: maintain search index from database changes
-def update_search_index(event: ChangeEvent):
-    if event.operation == OperationType.DELETE:
-        search_index.delete(event.key)
-    else:
-        search_index.index(event.key, event.after)
-
-consumer.register('products', update_search_index)
-```
-
-### Stream Processing
-
-```python
-# Stream processing patterns
-
-from collections import defaultdict
-from typing import Iterator, TypeVar, Callable
-
-T = TypeVar('T')
-
-class StreamProcessor:
-    """Stateful stream processing"""
-    
-    def __init__(self):
-        self.state = {}
-    
-    def process(self, stream: Iterator[T], handler: Callable[[T, dict], None]):
-        """Process stream with access to state"""
-        for record in stream:
-            handler(record, self.state)
-            yield self.state.copy()
-
-
-def windowed_count(window_size_seconds: int):
-    """Tumbling window aggregation"""
-    def handler(event, state):
-        window_start = (event['timestamp'] // window_size_seconds) * window_size_seconds
-        key = (event['key'], window_start)
-        
-        if key not in state:
-            state[key] = {'count': 0, 'window_start': window_start}
-        state[key]['count'] += 1
-        
-        # Emit completed windows
-        current_window = (time.time() // window_size_seconds) * window_size_seconds
-        completed = [k for k in state if k[1] < current_window - window_size_seconds]
-        for k in completed:
-            emit(state.pop(k))
-    
-    return handler
-
-
-def exactly_once_processing(processor, checkpointer):
-    """
-    Exactly-once semantics via:
-    1. Idempotent writes
-    2. Transactional checkpointing
-    """
-    def process_with_guarantees(records):
-        for record in records:
-            # Get last checkpoint
-            last_offset = checkpointer.get_offset()
-            
-            if record.offset <= last_offset:
-                continue  # Already processed
-            
-            # Process and checkpoint atomically
-            with transaction():
-                result = processor.process(record)
-                checkpointer.save_offset(record.offset)
-            
-            yield result
-    
-    return process_with_guarantees
-```
-
-## Mental Model
-
-Kleppmann approaches data systems by asking:
-
-1. **What are the consistency requirements?** Linearizable, serializable, eventual?
-2. **What are the access patterns?** Read-heavy, write-heavy, mixed?
-3. **How do we handle failures?** Retries, idempotency, compensation?
-4. **How does data evolve?** Schema changes, backward compatibility?
-5. **What happens at the edges?** Network partitions, slow nodes?
-
-## Signature Kleppmann Moves
-
-- Event sourcing for auditability
-- Idempotency keys for safe retries
-- CDC over dual writes
-- Understanding isolation levels deeply
-- Log-based messaging for durability
-- Making trade-offs explicit
+# Kleppmann: Data-Intensive Systems
+
+Read this file end to end before giving distributed-systems advice.
+This skill is intentionally self-contained.
+Do NOT go hunting for companion files in this directory.
+Do NOT use this skill for single-node SQL tuning, ORM issues, or cache-only work.
+
+## Section Selector
+
+- Use `Invariant / Isolation` when the task is about correctness under concurrency, retries, replication, or multi-region reads and writes.
+- Use `Log / CDC / Outbox` when the task involves derived views, search indexing, event-driven architecture, rebuildability, or external side effects.
+- Use `CRDT / Local-First` only when the task explicitly includes offline edits, peer-to-peer sync, collaborative editing, or server-optional products.
+- Use `Durability Math` only when reviewing large replicated clusters, tokenized partitions, or replication-factor claims.
+
+## Operating Stance
+
+Start with the invariant, not the storage product.
+The key question is: what is the smallest unit of state that must observe one serial order for the product to remain correct?
+Everything else is optimization pressure trying to escape that answer.
+
+Do not accept labels such as "strong consistency", "eventual consistency", "repeatable read", or "exactly once" as design inputs.
+Translate them into concrete failure stories: lost update, write skew, stale cross-view read, resurrected delete, duplicate side effect, or split ownership.
+
+When the async design is hard to reason about, centralize first and relax later.
+Kleppmann-style systems earn complexity only when they preserve a clear invariant boundary and a clear replay story.
+
+## Before You Design, Ask Yourself
+
+- Which invariant actually matters: uniqueness, non-negative balance, no lost edits, referential integrity, read-your-writes, or only eventual convergence?
+- On what key does that invariant live: one account, one cart, one document, one tenant, or a global namespace?
+- Which anomaly is acceptable for this user flow: stale reads, monotonic lag, duplicate processing, out-of-order projection, or none?
+- What is the ordering primitive: single leader, single log partition, commit LSN, consensus slot, or nothing trustworthy?
+- After a crash between "effect observed" and "checkpoint stored", what duplicate will happen, and where will it be suppressed?
+- If an operator needs to rebuild the world from scratch, which log or snapshot is the source of truth?
+
+## Decision Tree
+
+1. Write the invariant as a sentence a test could falsify.
+2. Classify its scope.
+   - Single-entity invariant: force all writes for that entity through one owner, leader, or log partition.
+   - Cross-entity but decomposable invariant: redesign into reservations, escrow, quotas, or a staged pipeline.
+   - Global uniqueness or atomic visibility invariant: pay for consensus, a serializable store, or a central allocator. Do not fake it with async consumers.
+3. Choose the read contract.
+   - If stale projections are acceptable, materialized views are fine.
+   - If the actor must see their own writes, start with sticky routing or version/session tracking before demanding global linearizability.
+   - If one user flow reads multiple projections as one snapshot, read from the source of truth or serialize the read path too.
+4. Choose the recovery contract.
+   - If side effects cross system boundaries, assume at-least-once and design durable dedupe keys.
+   - If replayability matters, use append-only events with deterministic consumers.
+5. Prove the claim with a task-specific harness.
+   - Isolation claim: run anomaly tests against the exact database and version.
+   - CDC claim: rehearse snapshot plus log-position cutover.
+   - CRDT claim: test adversarial concurrent edits, metadata growth, and malicious peers if peer-to-peer is in scope.
+
+## Invariant / Isolation
+
+Isolation names are a leaky abstraction, not a portable API.
+Kleppmann's Hermitage work exists because "repeatable read" means different things across databases, and Oracle's "serializable" is snapshot isolation rather than true serializability.
+Before trusting an isolation level name, name the anomaly you must prevent and test for it directly.
+
+Snapshot isolation is often good enough until an invariant spans multiple rows or records.
+That is where write skew hides.
+If correctness depends on "these two reads and my later write still describe the same world," do not stop at read committed and do not trust marketing copy around repeatable read.
+
+Use weaker guarantees deliberately.
+If the actual product need is "the author must see their own edit" or "reads should not move backward during one session," session guarantees are often cheaper than global linearizability and solve the real problem.
+Escalate only after you write the user-visible anomaly you are still willing to tolerate.
+
+Partitioning is not just a scaling choice; it is an order-destruction choice.
+OLEP-style systems give you one total order per partition and no ordering guarantee across partitions.
+If a decision must consider state from several partitions, either pipeline it stage by stage or admit that you need real coordination.
+If the product wants write latency below roughly one inter-region RTT, keep write ownership local to a region and replicate outward; a global leader is a physics choice, not just a topology choice.
+
+## Log / CDC / Outbox
+
+The safe ordering primitive for CDC is the commit log position, not `updated_at`.
+Kleppmann's Bottled Water work matters because the snapshot must be coordinated with the WAL or binlog stream; otherwise backfill and live changes do not share one order.
+Timestamp polling is seductive because it looks simple, but it fails under clock skew, concurrent commits, and races at the snapshot boundary.
+
+Exactly-once claims usually stop at the framework boundary.
+OLEP systems can atomically tie checkpoints to internal state, but once a consumer writes to an external index, cache, email system, payment rail, or third-party API, you are back in at-least-once territory.
+The real contract is stable event IDs plus idempotent consumers whose dedupe state survives crashes.
+
+Use append-only logs when you need rebuildability, forensic debugging, or new downstream projections.
+The main non-obvious benefit is not "events are cool"; it is that bad derived state can be discarded and recomputed, while bad mutable writes often require backup restore surgery.
+
+Do not promise snapshot-like reads across asynchronous consumers.
+Kleppmann explicitly calls out that there is no upper bound on when every subscriber catches up.
+If one view is ahead and another is behind, the system is still functioning as designed.
+If that breaks the product, the bug is architectural, not operational.
+
+For cross-entity workflows, prefer multistage pipelines over wide distributed transactions when the invariant can be decomposed.
+The winning property is that each stage decides using only local data, so one partition never waits on another.
+If you cannot express the invariant that way, stop pretending the pipeline is simpler than coordination.
+
+## CRDT / Local-First
+
+Use CRDTs when losing user input is worse than temporary odd merges, and when independent offline progress is a hard product requirement.
+Do not use them to avoid making authorization, inventory, or financial decisions synchronously.
+
+Last-write-wins is not benign conflict resolution.
+It converges by discarding somebody's update.
+That trade-off is sometimes acceptable for caches and lease heartbeats, but it is usually unacceptable for user-authored state.
+
+Many teams learn too late that "supports collaborative editing" is not one problem.
+Plain-text insertion order, move or reorder semantics, rich-text formatting spans, and undo or redo semantics are different problems.
+Kleppmann's later work exists because naive list CRDTs interleave concurrent inserts into unreadable text, move operations behave badly without explicit support, and rich-text intent is not preserved by plain-text algorithms.
+
+CRDT cost is often dominated by metadata, load time, and garbage collection rather than merge CPU.
+Eg-walker's result is important because it shows prior text CRDTs were paying a large steady-state memory and load penalty; it reports about an order-of-magnitude lower steady-state memory use and orders-of-magnitude faster load than earlier CRDT approaches.
+If startup, replay, or mobile memory budget matters, benchmark metadata growth before committing to a local-first architecture.
+
+Peer-to-peer convergence is not the same thing as security.
+Kleppmann also shows that ordinary CRDT algorithms do not protect against Byzantine peers.
+If replicas are not mutually trusted, convergence alone is the wrong success criterion.
+
+## Durability Math
+
+Replication factor by itself is a dangerously incomplete durability story.
+In large vnode or tokenized clusters, the probability of losing all replicas of some partition can grow with cluster size even while each node failure remains individually unlikely.
+
+Kleppmann's calculation for RF=3 with per-node failure probability `p = 0.001` and Cassandra-style `k = 256n` partitions shows why operators get surprised: cluster-level data loss scales roughly like `k * p^r`.
+More nodes can therefore mean more opportunities for some partition to lose all copies.
+If the design answer to scale is "add nodes," ask whether you also just increased the number of failure combinations that matter.
+
+Quorum arithmetic is not a correctness proof.
+`R + W > N` sounds definitive, but sloppy quorums, hinted handoff, read repair, changing replica sets, and tombstone edge cases can still produce non-linearizable outcomes or resurrect deleted data.
+If delete correctness, uniqueness, or monotonic state is critical, require a stronger primitive than quorum folklore.
+
+## NEVER Do These
+
+- NEVER choose "eventual consistency" as the answer because it feels scalable. That phrase hides which anomaly you are buying. Instead write the exact stale-read or conflict story the product will tolerate.
+- NEVER trust isolation level names because vendors reuse the same words for different anomaly sets, which is seductive when docs imply a clean standards ladder. Instead specify the forbidden anomalies and verify the actual engine and version.
+- NEVER dual-write a database and a broker or search index because the happy path demo is nearly always clean. Instead write once to a log or outbox in the same transaction, or use WAL-based CDC with a coordinated snapshot.
+- NEVER dedupe by payload hash or wall-clock timestamp because retries, batching, and schema evolution change payload shape while representing the same business action. Instead carry a durable business-stable event or request ID through every stage.
+- NEVER assume per-partition ordering implies global ordering because low-contention staging traffic makes the lie look true. Instead align partition boundaries with invariant boundaries and pipeline or coordinate the rest explicitly.
+- NEVER promise end-to-end exactly-once side effects because the broker says so. Instead assume crash-replay duplicates after the last checkpoint and make the downstream effect idempotent.
+- NEVER deploy CRDTs for money, bounded inventory, or authorization decisions because merge-based availability is seductive and still permits oversell, overgrant, or double-spend outcomes. Instead use single ownership, escrow, leases, or consensus.
+- NEVER cite quorum math as proof of linearizability because `R + W > N` is memorable folklore, not a guarantee under sloppy quorums or tombstone edge cases. Instead demand a linearizable primitive where deletes and uniqueness truly matter.
+
+## Freedom Calibration
+
+Use judgment when trading latency, availability, and rebuild cost.
+There is room for creative architecture once the invariant boundary is explicit.
+
+Do not improvise on four fragile edges:
+- isolation claims,
+- CDC cutover order,
+- dedupe identity,
+- cross-partition ordering.
+
+Those four areas need concrete proofs, rehearsals, or failure drills, not taste.
+
+## Fallbacks When The Elegant Design Fails
+
+- If the async design cannot explain duplicate suppression after a crash, fall back to at-least-once plus durable idempotency.
+- If a cross-entity invariant keeps leaking across partitions, centralize ownership first and re-partition later.
+- If the product cannot tolerate cross-view skew, stop reading from projections for that flow.
+- If CRDT semantics are surprising in user tests, move back toward server-ordered collaboration for that object type instead of patching semantics ad hoc.
+- If durability math looks scary, reduce blast radius before adding more replicas: fewer partitions per node, faster repair, or smaller failure domains often beat blind cluster growth.
