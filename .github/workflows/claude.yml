@@ -17,7 +17,7 @@ on:
 
 jobs:
   claude:
-    # Two-layer gate before running this job:
+    # Three-layer gate before running this job:
     #  1. Not a bot. Third-party AI reviewer bots (gemini-code-assist, devin,
     #     copilot, etc.) routinely mention "@claude" in their review text and
     #     would otherwise kick off this workflow, which GitHub then gates
@@ -28,6 +28,14 @@ jobs:
     #     itself enforces write-access on top of this, but gating at the job
     #     level saves workflow minutes. The `||` chain picks whichever
     #     association field exists for the current event.
+    #  3. No fork PRs. Even a trusted maintainer tagging @claude on a PR
+    #     that came from a fork would cause this job to check out the fork's
+    #     head and then run Claude with `contents: write` + the OAuth secret
+    #     against untrusted code — that is a secret-exfiltration / supply-
+    #     chain risk. For pull_request_review* events the fork origin is
+    #     available directly in the payload (`head.repo.full_name`). For
+    #     `issue_comment` events we can't see it here, so that case is
+    #     verified at runtime in the dedicated step below.
     if: |
       github.event.sender.type != 'Bot' &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
@@ -36,8 +44,8 @@ jobs:
         github.event.issue.author_association
       ) && (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') && github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') && github.event.pull_request.head.repo.full_name == github.repository) ||
         (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
       )
     runs-on: ubuntu-latest
@@ -58,11 +66,24 @@ jobs:
       # the default branch (GITHUB_REF=refs/heads/master), not the PR head.
       # Switch to the PR head so Claude sees the right code. Other PR-scoped
       # events (pull_request_review*, pull_request) already check out the PR.
-      - name: Checkout PR head for issue_comment on a PR
+      #
+      # Fork guard: the `if:` gate can't inspect fork origin for issue_comment
+      # (the payload doesn't include head repo info), so refuse fork PRs at
+      # runtime before we ever check out their code. Otherwise Claude would
+      # run with repo secrets and contents:write against untrusted fork code.
+      - name: Checkout PR head for issue_comment on a PR (fork-guarded)
         if: github.event_name == 'issue_comment' && github.event.issue.pull_request
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh pr checkout ${{ github.event.issue.number }} --repo ${{ github.repository }}
+        run: |
+          is_fork=$(gh pr view "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}" \
+            --json isCrossRepository --jq '.isCrossRepository')
+          if [ "$is_fork" = "true" ]; then
+            echo "::error::Refusing to check out fork PR head with repository secrets / contents:write."
+            exit 1
+          fi
+          gh pr checkout "${{ github.event.issue.number }}" --repo "${{ github.repository }}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
