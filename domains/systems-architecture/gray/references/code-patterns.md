@@ -222,6 +222,7 @@ class IdempotentExecutor:
 ## Pattern 4: Group commit (pseudocode)
 
 ```python
+import os
 import threading
 import time
 
