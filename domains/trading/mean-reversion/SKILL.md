@@ -1,494 +1,103 @@
 ---
 name: scarface-mean-reversion
-description: Trade mean reversion setups in the style of Scarface Trades, the mean reversion specialist known for mathematical precision and statistical edge. Emphasizes standard deviation bands, RSI extremes, and calculated entries with defined risk. Use when trading overextended moves, fading extremes, or building systematic reversion strategies.
-tags: mean-reversion, trading, statistical, quantitative, pairs-trading, finance, signals, backtesting, strategy
+description: "Trade dislocations in the style of Scarface Trades: fade statistically stretched moves only after anchor quality, regime, catalyst, and time-decay checks. Use when evaluating Bollinger/%B/z-score/VWAP/weekly-open/pairs-trading mean-reversion setups, deciding whether an extreme is exhaustion or a band-walk continuation, sizing a fade, or building a short-horizon reversion model. Trigger on: mean reversion, Bollinger Bands, z-score, VWAP reversion, weekly open, overextended move, buy the flush, sell the rip, pair spread, cointegration, half-life, fade extreme."
 ---
 
-# Scarface Trades Mean Reversion Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​‌‌​‌‌​‍​‌​‌‌‌​​‍‌‌‌​‌‌‌‌‍​‌​​​​​​‍​​​​‌​‌​‍‌​‌​‌​‌‌⁠‍⁠
+# Scarface Mean Reversion
 
-## Overview
+Mean reversion is a dislocation business, not an "oversold" business. The edge is not that price looks extreme; the edge is that price is extreme relative to an anchor other participants actually defend, and the move is occurring in a regime where the anchor still matters.
 
-Scarface Trades is a trader known for mastering mean reversion—the principle that prices tend to return to their average over time. When a stock deviates significantly from its mean, probability favors a snap-back. His approach is purely mathematical: standard deviations, RSI extremes, and statistical probabilities define every trade.
+This skill is self-contained. Do not load generic RSI or Bollinger primers for normal use; they dilute the signal. Load external material only if the user explicitly asks for indicator math or implementation code.
 
-## Core Philosophy
+## Operating Stance
 
-> "Price always returns to the mean. The only question is when and how far it overshoots."
+- A moving average is not automatically a destination. If the mean is drifting faster than the expected snap-back, you do not have a reversion trade; you have a trend pretending to be cheap.
+- Fixed anchors beat floating anchors when you need clean execution logic. For index futures, weekly open and session VWAP often outperform generic rolling means because everyone sees the same level and there is no parameter drift.
+- High-win-rate reversion systems naturally hide catastrophic loss. Judge setups by worst-case path, not average signal quality.
+- Reversion is front-loaded. If the move does not start snapping back quickly, probability usually decays faster than traders admit.
 
-> "Two standard deviations is where the math gets interesting. Three is where money is made."
+## Before You Fade Anything, Ask Yourself
 
-> "I don't predict direction. I bet on reversion to the mean with defined risk."
+1. What is the anchor?
+   Fixed anchor like weekly open, prior close, or session VWAP; rolling anchor like Bollinger mean; or spread residual from a hedged pair. The more subjective the anchor, the less aggressive the trade.
+2. Is this distance or information?
+   A panic flush inside a stable regime is distance. Earnings, guidance cuts, macro surprises, broken pegs, secondary offerings, or exchange outages are information. Information does not have to revert.
+3. Is the anchor stationary enough to matter?
+   Single-name price series after a catalyst are usually poor mean-reversion candidates. Pair spreads and index dislocations behave better because the anchor is less narrative-dependent.
+4. Where is the clock?
+   Estimate the expected decay window before entry. If you cannot state when the trade should start working, you cannot know when the thesis is dead.
+5. Can the trade pay friction?
+   Mean-reversion targets are smaller than momentum targets. If the expected snap-back is only a small multiple of fees, spread, borrow, and funding, the edge is fake.
 
-Mean reversion isn't about being right—it's about probability. When price extends 2-3 standard deviations from its mean, the statistical odds of reversion increase dramatically. Scarface trades these probabilities with strict math and risk management.
+## Anchor Selection
 
-## Design Principles
+| Situation | Preferred anchor | Why it works | Stand aside when |
+|---|---|---|---|
+| Index futures weekly dislocation | Weekly open | Objective, widely watched, no lookback drift | The distance is so large that price is repricing, not wobbling |
+| Intraday exhaustion in liquid index products | Session VWAP or prior day VWAP | Real intraday inventory anchor for dealers and execution algos | The open drive is still being accepted and price is walking away from VWAP |
+| Mature range in a liquid single name | Bollinger mean or %B | Useful only when bandwidth is stable and the tape is rotational | The band is expanding and price keeps accepting outside it |
+| Relative-value pair | Spread residual with dynamic hedge ratio | Edge comes from spread stationarity, not raw price cheapness | Hedge ratio drifts or cointegration only exists in one regime window |
 
-1. **Standard Deviation is King**: Price at 2σ has ~95% historical reversion probability.
+For NQ-style weekly-open trades, distance matters more than the mere existence of a gap. In one 565-week study, Tuesday opened back to the weekly open 92.9% of the time when the deviation was under 0.25%, but only 45.5% when the deviation exceeded 1.5%. Most successful touches happened early: roughly two-thirds on Tuesday, nearly half of first touches in the first 30 minutes of RTH, and if the level had not been touched by the end of Wednesday the remaining Thursday-Friday probability was only about 16%. Treat large dislocations as possible trend weeks, not "better bargains."
 
-2. **RSI Confirms Extremes**: Oversold (<30) or overbought (>70) adds confluence.
+## Regime Filters That Actually Matter
 
-3. **Define Risk First**: Know your stop before calculating position size.
+- Do not short or buy because price merely tagged a band. John Bollinger's own "walk the band" behavior matters more: repeated closes on the outer band during expanding bandwidth are continuation, not reversal.
+- The first close outside the band after a squeeze is usually a directional release, not a fade. Fade only after the move stops gaining acceptance: failed follow-through, rejection back inside the band, and loss of impulse quality.
+- The default 20-period / 2-sigma Bollinger setting is not sacred. If you shorten the lookback to around 10, tighten the deviation multiplier toward 1.9; if you lengthen toward 50, widen it toward 2.1. Using 2.0 everywhere creates false comparability across timeframes.
+- For long-only equity index dip buying, the Connors-style filter is a useful template: price above the 200-day average, VIX at least 5% above its 10-day average for 3 or more days, and exit on RSI(2) strength above 65. The point is not the exact numbers; the point is that volatility shock inside an intact bull regime is a different trade from generic oversold.
 
-4. **Scale In, Scale Out**: Enter in thirds at 2σ, 2.5σ, 3σ; exit in thirds at mean.
+## Execution Rules
 
-5. **Time Frame Alignment**: Higher timeframe mean = stronger magnet.
+- Probe, do not full-size, on the first touch. First touch is where reversion feels safest and is most likely to be a continuation trap.
+- Add only on a preplanned ladder. A valid add is part of the initial map; an emotional add is disguised loss aversion.
+- Use time stops as seriously as price stops. On OU-style spreads, estimate half-life first. Faster reversion supports tighter entry/exit spacing; higher volatility and higher transaction costs require wider thresholds. If there is no believable half-life, there is no trade.
+- As a working rule, if the position has not meaningfully reverted within about 2 to 3 half-lives, assume the relationship changed and get out. Waiting longer usually converts a mean-reversion thesis into an unpriced regime bet.
+- Increase target distance when volatility or friction rises. High volatility does not mean "easier reversion"; it often means you must demand more room before entering and more distance before exiting.
+- For pair trades, do not trust a relationship built on a tiny sample. Use roughly a year of daily data as a minimum sanity window, then re-check the relationship on rolling sub-windows and refresh the pair list periodically; even good pairs often decay within a year or two.
 
-## The Math
+## Decision Tree
 
-### Standard Deviation Bands
+If the move was caused by earnings, macro news, a hard catalyst, or a structural break:
+- Do not run mean reversion by default.
+- Fallback: switch to post-event momentum or wait for a new balance area to form.
 
-```
-Mean (μ) = SMA(price, period)
-Standard Deviation (σ) = STDEV(price, period)
+If the anchor is fixed and nearby, the regime is stable, and the move is small relative to recent realized range:
+- Mean reversion is allowed.
+- Fallback: if price does not start reverting in the expected session window, cut size or exit; front-loaded edges decay fast.
 
-Upper Band 1σ = μ + (1 × σ)
-Upper Band 2σ = μ + (2 × σ)
-Upper Band 3σ = μ + (3 × σ)
+If the tape is walking the band, bandwidth is expanding, and every pullback is shallow:
+- Do not fade the extreme.
+- Fallback: wait for a failed continuation and reclaim back inside the structure.
 
-Lower Band 1σ = μ - (1 × σ)
-Lower Band 2σ = μ - (2 × σ)
-Lower Band 3σ = μ - (3 × σ)
-```
+If a pair spread looks cheap but the hedge ratio is drifting or cointegration vanishes outside one backtest window:
+- Do not assume stationarity.
+- Fallback: re-estimate hedge ratio on a rolling basis, test stability across sub-windows, or abandon the pair.
 
-**Statistical Probabilities (Normal Distribution):**
-- Price within 1σ: 68.2% of the time
-- Price within 2σ: 95.4% of the time
-- Price within 3σ: 99.7% of the time
+If borrow, funding, or spread costs widen enough that the expected snap-back barely clears friction:
+- Do not trade the setup just because the chart looks statistically clean.
+- Fallback: widen thresholds, reduce size, or wait for a larger dislocation.
 
-**Reversion Edge:**
-- At 2σ: ~95% chance price returns to within 1σ
-- At 3σ: ~99% chance price returns to within 2σ
+## NEVER
 
-### RSI Calculation
+- NEVER fade the first close outside a band after compression because it feels like "maximum stretch." That setup is seductive precisely because the chart looks extreme, but it is often the start of range expansion. Instead wait for failed continuation and acceptance back inside the band structure.
+- NEVER use a rolling mean as if it were an objective magnet because moving averages make every chart look tidy. The seduction is visual neatness; the consequence is fading a mean that is actively running away from you. Instead prefer fixed anchors when available and demand stronger confirmation when the anchor floats.
+- NEVER average down just because the z-score got larger. That feels mathematically smarter because the average entry improves, but one structural break can erase months of small wins. Instead define probe levels, add levels, and invalidation before the first order.
+- NEVER treat event-driven dislocations as "extra oversold." The move feels safer because the candle is large and indicators are pinned, but the market may be repricing new information rather than overshooting. Instead let the event digest or trade a different framework.
+- NEVER hold a reversion trade without a clock because high win rates train traders to say "it always comes back." The consequence is turning a short-horizon statistical trade into an open-ended fundamental opinion. Instead use half-life or session-window decay and exit when the thesis ages out.
+- NEVER trust pair stationarity from one historical sample because the backtest looks clean. The seductive part is a smooth equity curve; the consequence is trading yesterday's hedge ratio in today's regime. Instead re-check stability across rolling windows and monitor hedge-ratio drift.
+- NEVER ignore friction because reversion targets look numerically close and achievable. The consequence is a strategy that is right often and still loses live after fees, slippage, funding, and borrow. Instead require materially more gross edge as costs rise.
 
-```
-RS = Average Gain (n periods) / Average Loss (n periods)
-RSI = 100 - (100 / (1 + RS))
+## If You Are Building a System
 
-Oversold: RSI < 30
-Overbought: RSI > 70
-Extreme Oversold: RSI < 20
-Extreme Overbought: RSI > 80
-```
+- Bucket results by distance-from-anchor, not just signal/no-signal. Edge usually changes nonlinearly with distance.
+- Separate event days from normal days. A strategy that looks strong in aggregate can be carried by quiet regimes and destroyed by catalysts.
+- Inspect the worst 1% of losses before optimizing entries. Reversion systems die from tail events, not from average trade quality.
+- For pairs, test cointegration and hedge-ratio stability on rolling sub-windows, not only the full sample.
+- Walk forward by regime. A parameter set that survives only one volatility regime is not robust.
 
-### Position Sizing Formula
+## Practical Heuristics
 
-```
-Risk Amount = Account × Risk Percentage (typically 1-2%)
-Position Size = Risk Amount / (Entry Price - Stop Price)
-
-Example:
-  Account: $100,000
-  Risk: 1% = $1,000
-  Entry: $50.00
-  Stop: $52.00 (2σ + buffer)
-  
-  Position Size = $1,000 / $2.00 = 500 shares
-```
-
-## When Trading Mean Reversion
-
-### Always
-
-- Calculate standard deviation bands before entering
-- Confirm with RSI or other momentum oscillator
-- Set stops beyond the extreme (3σ + ATR buffer)
-- Scale into positions at multiple deviation levels
-- Take partial profits at the mean
-- Use limit orders, not market orders
-
-### Never
-
-- Fight a trend without deviation from mean
-- Enter at 1σ (not enough edge)
-- Hold through earnings or major catalysts
-- Average down without predefined levels
-- Ignore volume (climactic volume = exhaustion)
-- Risk more than 2% per trade
-
-### Prefer
-
-- Stocks with history of mean-reverting behavior
-- High RSI divergence with price
-- End-of-day setups (overnight reversion)
-- Liquid names with tight spreads
-- Multiple timeframe confluence
-- Scaling in/out over single entry/exit
-
-## Code Patterns
-
-### Mean Reversion Scanner
-
-```python
-class MeanReversionScanner:
-    """
-    Scarface-style mean reversion setup identification.
-    Pure math: standard deviations and RSI extremes.
-    """
-    
-    def __init__(self, lookback_period: int = 20):
-        self.period = lookback_period
-    
-    def calculate_bands(self, prices: pd.Series) -> dict:
-        """
-        Calculate mean and standard deviation bands.
-        """
-        mean = prices.rolling(self.period).mean()
-        std = prices.rolling(self.period).std()
-        
-        return {
-            'mean': mean,
-            'std': std,
-            'upper_1sd': mean + std,
-            'upper_2sd': mean + (2 * std),
-            'upper_3sd': mean + (3 * std),
-            'lower_1sd': mean - std,
-            'lower_2sd': mean - (2 * std),
-            'lower_3sd': mean - (3 * std),
-        }
-    
-    def calculate_z_score(self, price: float, mean: float, std: float) -> float:
-        """
-        How many standard deviations from the mean?
-        """
-        return (price - mean) / std
-    
-    def calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
-        """
-        Relative Strength Index calculation.
-        """
-        delta = prices.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-    
-    def scan_for_setups(self, 
-                        symbols: List[str], 
-                        data: Dict[str, pd.DataFrame]) -> List[Setup]:
-        """
-        Scan universe for mean reversion setups.
-        """
-        setups = []
-        
-        for symbol in symbols:
-            df = data[symbol]
-            prices = df['close']
-            
-            bands = self.calculate_bands(prices)
-            rsi = self.calculate_rsi(prices)
-            
-            current_price = prices.iloc[-1]
-            current_mean = bands['mean'].iloc[-1]
-            current_std = bands['std'].iloc[-1]
-            current_rsi = rsi.iloc[-1]
-            
-            z_score = self.calculate_z_score(current_price, current_mean, current_std)
-            
-            # Long setup: price at -2σ or below with RSI < 30
-            if z_score <= -2 and current_rsi < 30:
-                setups.append(Setup(
-                    symbol=symbol,
-                    direction='LONG',
-                    z_score=z_score,
-                    rsi=current_rsi,
-                    entry_price=current_price,
-                    mean_target=current_mean,
-                    stop_price=bands['lower_3sd'].iloc[-1] - self.atr_buffer(df),
-                    edge_probability=self.get_reversion_probability(z_score)
-                ))
-            
-            # Short setup: price at +2σ or above with RSI > 70
-            elif z_score >= 2 and current_rsi > 70:
-                setups.append(Setup(
-                    symbol=symbol,
-                    direction='SHORT',
-                    z_score=z_score,
-                    rsi=current_rsi,
-                    entry_price=current_price,
-                    mean_target=current_mean,
-                    stop_price=bands['upper_3sd'].iloc[-1] + self.atr_buffer(df),
-                    edge_probability=self.get_reversion_probability(z_score)
-                ))
-        
-        return sorted(setups, key=lambda x: abs(x.z_score), reverse=True)
-    
-    def get_reversion_probability(self, z_score: float) -> float:
-        """
-        Statistical probability of reversion based on z-score.
-        """
-        from scipy import stats
-        # Probability of returning to within 1σ
-        return stats.norm.cdf(1) - stats.norm.cdf(z_score) if z_score < 0 else \
-               stats.norm.cdf(z_score) - stats.norm.cdf(1)
-    
-    def atr_buffer(self, df: pd.DataFrame, period: int = 14) -> float:
-        """
-        ATR-based buffer for stop placement.
-        """
-        high = df['high']
-        low = df['low']
-        close = df['close']
-        
-        tr = pd.concat([
-            high - low,
-            abs(high - close.shift(1)),
-            abs(low - close.shift(1))
-        ], axis=1).max(axis=1)
-        
-        return tr.rolling(period).mean().iloc[-1]
-```
-
-### Position Manager with Scaling
-
-```python
-class MeanReversionPositionManager:
-    """
-    Manage scaled entries and exits for mean reversion trades.
-    """
-    
-    def __init__(self, 
-                 account_size: float,
-                 risk_per_trade: float = 0.01):  # 1%
-        self.account = account_size
-        self.risk_pct = risk_per_trade
-    
-    def calculate_scaled_entries(self, setup: Setup) -> List[Entry]:
-        """
-        Scale into position at 2σ, 2.5σ, 3σ levels.
-        Scarface method: thirds at each level.
-        """
-        direction = 1 if setup.direction == 'LONG' else -1
-        mean = setup.mean_target
-        std = (setup.entry_price - mean) / setup.z_score * direction
-        
-        total_risk = self.account * self.risk_pct
-        risk_per_level = total_risk / 3
-        
-        entries = []
-        
-        levels = [
-            ('2.0σ', 2.0, 0.33),
-            ('2.5σ', 2.5, 0.33),
-            ('3.0σ', 3.0, 0.34),
-        ]
-        
-        for label, sigma, allocation in levels:
-            entry_price = mean + (direction * -1 * sigma * std)
-            stop_distance = abs(setup.stop_price - entry_price)
-            
-            shares = int((risk_per_level * allocation * 3) / stop_distance)
-            
-            entries.append(Entry(
-                level=label,
-                price=entry_price,
-                shares=shares,
-                allocation_pct=allocation
-            ))
-        
-        return entries
-    
-    def calculate_scaled_exits(self, 
-                                setup: Setup,
-                                avg_entry: float,
-                                total_shares: int) -> List[Exit]:
-        """
-        Scale out at mean, -1σ (for longs), and breakeven.
-        """
-        direction = 1 if setup.direction == 'LONG' else -1
-        mean = setup.mean_target
-        std = abs(setup.entry_price - mean) / abs(setup.z_score)
-        
-        exits = [
-            Exit(
-                level='Mean (μ)',
-                price=mean,
-                shares=int(total_shares * 0.50),
-                reason='Primary target: reversion to mean'
-            ),
-            Exit(
-                level='1σ toward entry',
-                price=mean + (direction * -0.5 * std),
-                shares=int(total_shares * 0.25),
-                reason='Partial: halfway to mean'
-            ),
-            Exit(
-                level='Runner',
-                price=mean + (direction * std),  # 1σ past mean
-                shares=int(total_shares * 0.25),
-                reason='Runner: extended reversion'
-            ),
-        ]
-        
-        return exits
-    
-    def calculate_risk_reward(self, setup: Setup, entries: List[Entry]) -> dict:
-        """
-        Calculate overall risk/reward for scaled position.
-        """
-        total_shares = sum(e.shares for e in entries)
-        avg_entry = sum(e.price * e.shares for e in entries) / total_shares
-        
-        risk = abs(avg_entry - setup.stop_price) * total_shares
-        reward = abs(setup.mean_target - avg_entry) * total_shares
-        
-        return {
-            'avg_entry': avg_entry,
-            'total_shares': total_shares,
-            'total_risk_dollars': risk,
-            'target_reward_dollars': reward,
-            'risk_reward_ratio': reward / risk,
-            'required_win_rate': 1 / (1 + reward/risk)
-        }
-```
-
-### Backtesting Mean Reversion
-
-```python
-class MeanReversionBacktest:
-    """
-    Backtest mean reversion strategy with realistic assumptions.
-    """
-    
-    def __init__(self, 
-                 entry_z_threshold: float = 2.0,
-                 exit_z_threshold: float = 0.0,  # Mean
-                 stop_z_threshold: float = 3.5,
-                 lookback: int = 20):
-        self.entry_z = entry_z_threshold
-        self.exit_z = exit_z_threshold
-        self.stop_z = stop_z_threshold
-        self.lookback = lookback
-    
-    def run_backtest(self, 
-                     prices: pd.Series,
-                     start_date: str,
-                     end_date: str) -> BacktestResult:
-        """
-        Run backtest on historical data.
-        """
-        prices = prices.loc[start_date:end_date]
-        
-        mean = prices.rolling(self.lookback).mean()
-        std = prices.rolling(self.lookback).std()
-        z_score = (prices - mean) / std
-        
-        trades = []
-        position = None
-        
-        for i in range(self.lookback, len(prices)):
-            current_z = z_score.iloc[i]
-            current_price = prices.iloc[i]
-            
-            if position is None:
-                # Check for entry
-                if current_z <= -self.entry_z:
-                    position = Trade(
-                        direction='LONG',
-                        entry_price=current_price,
-                        entry_date=prices.index[i],
-                        entry_z=current_z,
-                        stop_price=mean.iloc[i] - (self.stop_z * std.iloc[i])
-                    )
-                elif current_z >= self.entry_z:
-                    position = Trade(
-                        direction='SHORT',
-                        entry_price=current_price,
-                        entry_date=prices.index[i],
-                        entry_z=current_z,
-                        stop_price=mean.iloc[i] + (self.stop_z * std.iloc[i])
-                    )
-            else:
-                # Check for exit
-                exit_signal = False
-                exit_reason = None
-                
-                if position.direction == 'LONG':
-                    if current_z >= self.exit_z:
-                        exit_signal = True
-                        exit_reason = 'TARGET'
-                    elif current_price <= position.stop_price:
-                        exit_signal = True
-                        exit_reason = 'STOP'
-                else:  # SHORT
-                    if current_z <= self.exit_z:
-                        exit_signal = True
-                        exit_reason = 'TARGET'
-                    elif current_price >= position.stop_price:
-                        exit_signal = True
-                        exit_reason = 'STOP'
-                
-                if exit_signal:
-                    position.exit_price = current_price
-                    position.exit_date = prices.index[i]
-                    position.exit_reason = exit_reason
-                    position.pnl_pct = self.calculate_pnl(position)
-                    trades.append(position)
-                    position = None
-        
-        return self.analyze_trades(trades)
-    
-    def calculate_pnl(self, trade: Trade) -> float:
-        """Calculate percentage P&L for a trade."""
-        if trade.direction == 'LONG':
-            return (trade.exit_price - trade.entry_price) / trade.entry_price
-        else:
-            return (trade.entry_price - trade.exit_price) / trade.entry_price
-    
-    def analyze_trades(self, trades: List[Trade]) -> BacktestResult:
-        """Compute strategy statistics."""
-        if not trades:
-            return BacktestResult(total_trades=0)
-        
-        pnls = [t.pnl_pct for t in trades]
-        winners = [t for t in trades if t.pnl_pct > 0]
-        losers = [t for t in trades if t.pnl_pct <= 0]
-        
-        return BacktestResult(
-            total_trades=len(trades),
-            win_rate=len(winners) / len(trades),
-            avg_win=np.mean([t.pnl_pct for t in winners]) if winners else 0,
-            avg_loss=np.mean([t.pnl_pct for t in losers]) if losers else 0,
-            profit_factor=abs(sum(t.pnl_pct for t in winners) / 
-                            sum(t.pnl_pct for t in losers)) if losers else float('inf'),
-            total_return=np.prod([1 + p for p in pnls]) - 1,
-            max_drawdown=self.calculate_max_drawdown(pnls),
-            sharpe_ratio=np.mean(pnls) / np.std(pnls) * np.sqrt(252) if np.std(pnls) > 0 else 0,
-            avg_holding_period=np.mean([(t.exit_date - t.entry_date).days for t in trades])
-        )
-```
-
-## Mental Model
-
-Scarface approaches mean reversion by asking:
-
-1. **How extended is it?** Z-score tells you standard deviations from mean
-2. **Is momentum confirming?** RSI extremes add confluence
-3. **What's my risk?** Stop at 3σ + ATR buffer
-4. **What's the probability?** >2σ has 95%+ reversion probability
-5. **How do I scale?** Enter in thirds, exit in thirds
-
-## The Setup Checklist
-
-```
-□ Price at 2σ or beyond from 20-period mean
-□ RSI < 30 (long) or RSI > 70 (short)
-□ No earnings within 5 days
-□ Sufficient liquidity (>1M avg volume)
-□ Stop calculated (3σ + 1 ATR buffer)
-□ Position sized to 1% account risk
-□ Scaling levels defined (2σ, 2.5σ, 3σ)
-□ Exit targets defined (mean, runner)
-```
-
-## Signature Scarface Moves
-
-- Standard deviation bands (2σ, 3σ entries)
-- RSI confirmation at extremes
-- Scaling in at multiple sigma levels
-- Taking profits at the mean
-- ATR-based stop buffers
-- Mathematical position sizing
-- Z-score quantification of setups
-- Probability-based edge calculation
+- The best fade is usually a stable regime, a respected anchor, and a move that is stretched enough to matter but not so large that the market is repricing.
+- Small dislocations around objective anchors often outperform dramatic chart extremes around subjective means.
+- If a setup needs multiple narratives to justify why the reversion is "still coming," it is usually no longer a Scarface-style trade.

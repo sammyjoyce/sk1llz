@@ -1,292 +1,158 @@
 ---
 name: kennedy-mechanical-sympathy
-description: Write Go code in the style of Bill Kennedy, author of Go in Action. Emphasizes mechanical sympathy, data-oriented design, and understanding how Go code executes. Use when writing performance-critical Go or when teaching Go fundamentals.
-tags: performance, data-oriented, cache, memory, profiling, benchmarking, goroutines, scheduler, hardware
+description: "Apply Bill Kennedy's Go engineering style when correctness, latency, or API design depends on how the runtime actually pays for code. Use when working on escape analysis, value vs pointer semantics, channel/goroutine design, scheduler or GC behavior, profiling, tracing, or container tuning. Triggers: mechanical sympathy, data semantics, escape analysis, pprof, go tool trace, schedtrace, GOMAXPROCS, GOMEMLIMIT, channel buffer, sync.Pool, goroutine leaks."
+tags: go, runtime, scheduler, gc, profiling, tracing, escape-analysis, channels, goroutines, semantics
 ---
 
-# Bill Kennedy Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌​​​​‍​​‌‌​‌​​‍​‌‌​​‌‌‌‍‌​​‌​‌‌‌‍​​​​‌​‌​‍​​​​‌‌​​⁠‍⁠
+# Kennedy Mechanical Sympathy
 
-## Overview
+Bill Kennedy style is not "micro-optimize Go." It is "preserve integrity, then make the runtime bill explicit." If you cannot name the copy, allocation, queueing rule, or scheduler consequence you are buying, you are still guessing.
 
-Bill Kennedy is the author of "Go in Action" and founder of Ardan Labs. His teaching emphasizes **mechanical sympathy**: understanding how software interacts with hardware. His "Ultimate Go" course is legendary for deep-dive explanations.
+This skill is self-contained. Do not go load generic Go references until you have identified which runtime bill you are trying to change.
 
-## Core Philosophy
+## Start With The Bill
 
-> "Integrity, readability, and simplicity—in that order."
+Before editing code, ask yourself:
 
-> "If you don't understand the data, you don't understand the problem."
+- Is the problem CPU time, allocation rate, scheduler latency, lock contention, or container throttling?
+- Is this type modeling ownership and identity, or copies and replacement?
+- Is this channel carrying data, or only a signal?
+- Is the service running under cgroup CPU or memory limits?
 
-> "Mechanical sympathy: understanding how the hardware and runtime work."
+Then pick the lane:
 
-Kennedy believes that **great Go code comes from understanding what happens beneath the surface**: memory layout, garbage collection, scheduler behavior.
+| Symptom | First move | Why this lane |
+| --- | --- | --- |
+| Higher `ns/op`, unclear why | CPU profile, then benchmark again | CPU work first; tracing is too wide for hotspot attribution |
+| Higher `B/op` or `allocs/op` | `go test -benchmem`, then memory profile, then `-gcflags=-m -m` | `pprof` tells you where; compiler tells you why |
+| Good microbenchmarks, bad p95/p99 | `go tool trace`; if prod overhead matters, start with `GODEBUG=schedtrace=1000,scheddetail=1` | This is usually runnable latency, blocking, or syscall imbalance |
+| Good bare-metal behavior, bad containers | inspect `GOMAXPROCS`, CPU limit, `GOMEMLIMIT` | The runtime may be fighting cgroup throttling, not your algorithm |
+| Too many goroutines or rising memory floor | inspect `/sched/goroutines*`, `/sched/latencies`, `/gc/stack/starting-size:bytes` | Goroutine count hurts twice: scheduler pressure and GC root scanning |
 
-## Design Principles
+## Data Semantics Before APIs
 
-1. **Data-Oriented Design**: Design around data transformations, not object hierarchies.
+Bill Kennedy's strongest habit is choosing semantics before method sets.
 
-2. **Mechanical Sympathy**: Write code that works with the hardware, not against it.
+- Use value semantics when copies are part of the truth of the API: snapshots, replacement, small immutable-ish records, and data you want callers to reason about locally.
+- Use pointer semantics when the value represents identity, shared mutable state, external resources, or invariants that would become dangerous if copied.
+- Once a type picks a semantic, keep it consistent across receivers, helpers, and interfaces. The method-set rules are there to stop you from smuggling a pointer-semantic type through value copies.
 
-3. **Value Semantics First**: Prefer values over pointers unless you have a reason.
+Before changing a receiver, ask yourself:
 
-4. **Integrity First**: Correctness beats performance, readability beats cleverness.
+- If this value were copied in three call paths, would the program still be correct?
+- Is the copy cheaper than the extra heap object, pointer chasing, and GC scan work?
+- Am I changing semantics because the type truly changed, or because I want a convenient method call?
 
-## When Writing Code
+Two Kennedy-style heuristics matter here:
 
-### Always
+- Interface values are "valueless" from a design perspective. Do not reason from the implementation detail that interfaces currently store a pointer internally. Reason from the semantic contract: value receivers permit storing copies; pointer receivers preserve no-copy intent.
+- Mixed semantics are acceptable only as a conscious exception. If half the code treats a type as a copy and half as shared state, code review loses its ability to catch side effects.
 
-- Understand the memory layout of your data structures
-- Know when copies happen and when references are used
-- Consider CPU cache behavior for hot paths
-- Profile before optimizing
-- Use value semantics by default
-- Understand escape analysis
+## Channels Are Signaling Contracts
 
-### Never
+Treat a channel choice as a delivery guarantee decision, not as a vague queue abstraction.
 
-- Optimize without profiling
-- Use pointers just to "avoid copies" without measuring
-- Create deep pointer chains (bad for cache)
-- Ignore alignment and padding
-- Assume you know what escapes to heap
+- Unbuffered channel: sender gets a receive guarantee before send completes. Use it for handoff, request/response orchestration, or "you may not proceed until someone took this."
+- Buffered channel of `1`: delayed guarantee. The second send cannot complete until the first value has been received. Use it when you need one unit of slack without losing backpressure.
+- Buffered channel `>1`: no receive guarantee. Use it only when the system has a real bounded backlog model.
 
-### Prefer
+Before assigning channel capacity, ask yourself:
 
-- Contiguous data (slices) over pointer-heavy structures
-- Value receivers for small, immutable types
-- Stack allocation over heap when possible
-- Struct of arrays over array of structs for hot loops
-- Understanding over blind rules
+- What physical constraint is this buffer representing: workers, open connections, downstream QPS, bytes on the wire, or tolerated burst?
+- What failure do I want when that bound is hit: block, drop, or cancel?
+- If I make the buffer larger, what signal becomes invisible?
 
-## Code Patterns
+Expert rule: a channel buffer must come from a named bound. "8 felt good" is not a design.
 
-### Data-Oriented Design
+## Goroutines Are Not Free Once Runnable
 
-```go
-// BAD: Object-oriented thinking, pointer-heavy
-type Node struct {
-    Value    int
-    Children []*Node  // Pointers scattered in memory
-}
+Spawning is cheap; runnable goroutines are where the bill arrives.
 
-// GOOD: Data-oriented, cache-friendly
-type Tree struct {
-    Values   []int    // Contiguous memory
-    Children [][]int  // Indices into Values
-}
+- Each P has a local run queue of 256 goroutines. If runnable work spills far beyond roughly `GOMAXPROCS * 256`, you are now paying more global queue and steal overhead and less useful work.
+- The scheduler has a `runnext` fast path for communicate-and-wait pairs, which is why tight handoff pipelines can feel great at low concurrency and fall apart once you flood them with unrelated runnable work.
+- New goroutines no longer simply "start at 2 KB forever." The runtime tracks scanned stack sizes and adapts the starting stack size over time. If your service creates huge goroutine bursts after deep call stacks become normal, stack footprint can climb unexpectedly.
 
-// For hot loops, struct of arrays beats array of structs
-// BAD: Array of structs (AoS)
-type Particle struct {
-    X, Y, Z  float64
-    VX, VY, VZ float64
-    Mass     float64
-}
-particles := make([]Particle, 1000)
+Before adding fan-out, ask yourself:
 
-// GOOD: Struct of arrays (SoA) - better cache utilization
-type Particles struct {
-    X, Y, Z    []float64
-    VX, VY, VZ []float64
-    Mass       []float64
-}
-p := Particles{
-    X: make([]float64, 1000),
-    Y: make([]float64, 1000),
-    // ...
-}
+- Am I bounding concurrency to the scarce resource, or merely matching input cardinality?
+- Do I need more concurrency, or less runnable latency?
+- Would a fixed worker set preserve cache locality and stack reuse better than one goroutine per item?
 
-// When updating just positions:
-for i := range p.X {
-    p.X[i] += p.VX[i]  // Sequential memory access
-    p.Y[i] += p.VY[i]
-    p.Z[i] += p.VZ[i]
-}
-```
+When the answer is unclear, measure `/gc/stack/starting-size:bytes`, `/sched/goroutines/runnable:goroutines`, and `/sched/latencies:seconds` before touching code.
 
-### Value vs Pointer Semantics
+## Escape Analysis: Ask Why, Not Just Where
 
-```go
-// Value semantics: type is small, immutable logically
-type Time struct {
-    sec  int64
-    nsec int32
-}
+`pprof` tells you where memory is allocated. The compiler tells you why it had no stack option.
 
-func (t Time) Add(d Duration) Time {
-    return Time{sec: t.sec + int64(d), nsec: t.nsec}
-}
+Use this sequence:
 
-// Pointer semantics: type represents a resource or is large
-type File struct {
-    fd      int
-    name    string
-    // ...
-}
+1. `go test -bench ... -benchmem`
+2. For end-of-benchmark churn, inspect `alloc_space` or `alloc_objects`
+3. For live footprint, inspect `inuse_space`
+4. Only then run `go build -gcflags='-m -m'`
 
-func (f *File) Read(b []byte) (int, error) {
-    // Modifies state, represents resource
-}
+Kennedy's important correction: `make([]byte, n)` with variable `n` often escapes not because the slice is "too large," but because the compiler cannot size that stack frame at compile time. Replacing a value with a pointer does not fix that bill; reusing caller-owned scratch space or making the bound static sometimes does.
 
-// RULE: Pick one semantic and be consistent for a type
-// If any method needs pointer, use pointer for all methods
-```
+Optimization rule:
 
-### Understanding Escape Analysis
+- Remove needless temporary ownership first.
+- Remove unpredictable sizes second.
+- Only then consider pooling.
 
-```go
-// Stack allocation: fast, automatic cleanup
-func sumLocal() int {
-    numbers := [4]int{1, 2, 3, 4}  // Array on stack
-    sum := 0
-    for _, n := range numbers {
-        sum += n
-    }
-    return sum  // numbers never escapes
-}
+## GC And Memory Limits
 
-// Heap allocation: slower, needs GC
-func sumHeap() *int {
-    sum := 0
-    for i := 0; i < 4; i++ {
-        sum += i
-    }
-    return &sum  // sum escapes to heap!
-}
+Know the trade, or do not tune.
 
-// Check with: go build -gcflags="-m"
-// ./main.go:10:2: moved to heap: sum
+- `GOGC` is a CPU vs memory dial. Doubling it roughly doubles heap overhead and roughly halves GC CPU cost for steady-state workloads.
+- `GOMEMLIMIT` is a soft limit, not a safety blanket. Set it too close to the working set and the runtime can thrash trying to stay under it. The runtime intentionally caps GC CPU to about 50% over a `2 * GOMAXPROCS` CPU-second window to avoid total collapse.
+- Since Go 1.18, GC pacing includes GC roots such as goroutine stacks. Hundreds of thousands of goroutines are not "just scheduler state"; they distort GC economics too.
 
-// Slices and interfaces often cause escapes
-func process(data []byte) {
-    // If data is used after function returns
-    // or passed to interface{}, it may escape
-}
-```
+Use `GOMEMLIMIT` when you know the memory envelope. Avoid baking it into CLIs or unknown-input tools where working set depends on user data or host memory you do not control.
 
-### Memory Layout Awareness
+## Container Reality
 
-```go
-// Struct padding wastes memory
-// BAD: Poor layout (24 bytes with padding)
-type BadLayout struct {
-    a bool    // 1 byte + 7 padding
-    b int64   // 8 bytes
-    c bool    // 1 byte + 7 padding
-}
+Container CPU limits are throughput limits, not parallelism limits.
 
-// GOOD: Optimized layout (16 bytes)
-type GoodLayout struct {
-    b int64   // 8 bytes
-    a bool    // 1 byte
-    c bool    // 1 byte + 6 padding
-}
+- On Go 1.25+, default `GOMAXPROCS` becomes container-aware and tracks CPU limits unless you manually set `GOMAXPROCS` via env or `runtime.GOMAXPROCS`.
+- On Go versions before 1.25, the runtime defaults to host CPU count, not the container limit. In containers, failing to correct this is often a tail-latency bug, not a throughput win.
+- CPU throttling usually happens on a 100 ms period. If `GOMAXPROCS` is much higher than the effective CPU limit, Linux can pause the process for the rest of that period, which shows up as ugly tail latency.
+- The new default is better for most services, but bursty workloads can still prefer a different setting because a hard parallelism cap may block short CPU spikes that were previously tolerated.
 
-// Check with: unsafe.Sizeof()
-// Or use: go vet -fieldalignment
-```
+Before overriding `GOMAXPROCS`, ask yourself:
 
-### Slice Internals
+- Which Go version is this binary built with?
+- Is latency coming from kernel throttling, or from too little parallelism?
+- Did I just disable runtime auto-adjustment by setting `GOMAXPROCS` manually?
 
-```go
-// Slice header: (pointer, length, capacity)
-// Understanding this prevents bugs
+## `sync.Pool` Is Scratch Reuse, Not Ownership
 
-func modify(s []int) {
-    s[0] = 999       // Modifies original!
-    s = append(s, 4) // May or may not affect original
-}
+Use `sync.Pool` only for temporary objects reused across independent concurrent clients.
 
-func main() {
-    original := []int{1, 2, 3}
-    modify(original)
-    // original[0] is 999
-    // but append may have created new backing array
-}
+- The runtime may drop pooled items at any time.
+- Current implementations keep a victim cache for roughly one GC cycle, but you must code as if every `Get` can miss.
+- `Pool.New` should generally return pointer types, since storing non-pointers in the returned interface value commonly adds an allocation you were trying to avoid.
+- Pooling large buffers without size caps often keeps oversized backing arrays circulating long after the burst that created them.
 
-// Safe pattern: return the slice
-func appendSafe(s []int, v int) []int {
-    return append(s, v)
-}
+Good uses: request-local scratch buffers, temporary encoders, short-lived formatting state.
 
-original = appendSafe(original, 4)
-```
+Bad uses: connection ownership, per-object free lists, caches that must stay warm, or anything whose correctness depends on pool retention.
 
-### Benchmarking Properly
+## NEVER Do These
 
-```go
-func BenchmarkProcess(b *testing.B) {
-    // Setup outside the loop
-    data := generateTestData()
-    
-    b.ResetTimer()  // Don't count setup time
-    
-    for i := 0; i < b.N; i++ {
-        result := Process(data)
-        // Prevent compiler from optimizing away
-        _ = result
-    }
-}
+- NEVER add pointers just to "avoid copies" because the seductive local win often becomes heap promotion, more GC scan work, and worse cache locality. Instead measure the copy cost against allocation and scan cost, and prefer values until identity or mutation truly requires sharing.
+- NEVER mix value and pointer semantics for the same type because it feels ergonomic in one call site. The consequence is hidden copies, harder interface reasoning, and side effects code review stops seeing. Instead pick one semantic and make exceptions explicit and rare.
+- NEVER choose a channel buffer by folklore because a larger buffer feels like instant throughput. The consequence is erased backpressure and lost delivery guarantees. Instead derive capacity from a named bound or use buffer `1` deliberately for delayed guarantee.
+- NEVER use a buffered channel for cancellation-only signaling because it looks symmetric with work channels. The consequence is ambiguous ownership and one more hidden queue. Instead use `context.Context` or a closed done channel.
+- NEVER trust `sync.Pool` to retain state because it worked in a benchmark. The consequence is production misses after GC and giant pooled objects lingering after bursts. Instead design for miss-tolerance and cap what you return to the pool.
+- NEVER set `GOMEMLIMIT` right above steady-state memory because it feels safer than an OOM. The consequence is soft-limit thrashing and worse latency than a clean crash. Instead leave headroom or lower `GOGC`.
+- NEVER pin `GOMAXPROCS` in a container without checking Go version and CPU policy because a manual override now disables adaptive defaults on modern Go. Instead verify cgroup limits, throttling behavior, and p99 latency first.
+- NEVER reach for tracing to find hot code because traces are seductive and visual. The consequence is wide data with weak hotspot attribution. Instead use CPU or memory profiles first, then trace only when the problem is scheduling, blocking, or utilization.
 
-// Compare implementations
-func BenchmarkProcessV1(b *testing.B) { ... }
-func BenchmarkProcessV2(b *testing.B) { ... }
+## What "Done" Looks Like
 
-// Run with: go test -bench=. -benchmem
-// BenchmarkProcessV1-8    1000000    1234 ns/op    256 B/op    3 allocs/op
-// BenchmarkProcessV2-8    2000000     567 ns/op      0 B/op    0 allocs/op
-```
+A Kennedy-style change is done when you can state, in one sentence each:
 
-### Goroutine Pool Pattern
-
-```go
-type Pool struct {
-    work chan func()
-    sem  chan struct{}
-}
-
-func NewPool(size int) *Pool {
-    p := &Pool{
-        work: make(chan func()),
-        sem:  make(chan struct{}, size),
-    }
-    return p
-}
-
-func (p *Pool) Submit(task func()) {
-    select {
-    case p.work <- task:
-        // Worker picked it up
-    case p.sem <- struct{}{}:
-        // Start new worker
-        go p.worker(task)
-    }
-}
-
-func (p *Pool) worker(task func()) {
-    defer func() { <-p.sem }()
-    
-    for {
-        task()
-        task = <-p.work
-    }
-}
-```
-
-## Mental Model
-
-Kennedy teaches by asking:
-
-1. **What's the data?** Understand it before writing code.
-2. **Where does it live?** Stack? Heap? How is it laid out?
-3. **How does it flow?** What transformations happen?
-4. **What's the cost?** Allocations, copies, cache misses?
-
-## Kennedy's Priorities
-
-1. **Integrity**: Code must be correct
-2. **Readability**: Code must be maintainable
-3. **Simplicity**: Don't over-engineer
-4. **Performance**: After the above are satisfied
-
-*In that order.*
-
+- which semantic model the type now uses,
+- which runtime bill you reduced,
+- which measurement proved it,
+- and which guarantee you intentionally kept or gave up.

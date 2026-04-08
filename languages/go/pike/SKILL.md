@@ -1,272 +1,95 @@
 ---
 name: pike-simplicity-first
-description: Write Go code in the style of Rob Pike, co-creator of Go. Emphasizes radical simplicity, concurrency through communication, and composition over inheritance. Use when writing Go that should be clear, concurrent, and maintainable.
-tags: simplicity, concurrency, channels, goroutines, composition, unix, plan9, interfaces, communication
+description: "Apply Rob Pike's simplicity-first Go heuristics for exported API shape, concurrency structure, package boundaries, and dependency restraint. Use when designing or refactoring Go libraries, public types, channel or goroutine pipelines, naming or package layouts, config or option patterns, or compatibility-sensitive changes. Triggers: rob pike, pike, simplicity, goroutines, channels, interfaces, context, package names, options, exported api, go library design."
 ---
 
-# Rob Pike Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​​‌‌​​‍‌‌​​‌​​​‍‌‌​‌​‌​​‍​​​‌‌‌​​‍​​​​‌​‌​‍​‌‌​‌‌‌​⁠‍⁠
+# Pike Simplicity First
 
-## Overview
+Use this skill when the hard part is not writing Go syntax but keeping the package easy to extend, easy to call, and easy to stop. The goal is not "idiomatic-looking Go." The goal is deleting irreversible complexity before it escapes into the API.
 
-Rob Pike co-created Go at Google with Ken Thompson and Robert Griesemer. He also created Plan 9, Acme, sam, and co-invented UTF-8. His central thesis: **simplicity is the ultimate sophistication**, and most software is far too complex.
+## Load only what matches the task
 
-## Core Philosophy
+- Before changing exported functions, methods, interfaces, structs, or constructors, READ `references/api-evolution.md`.
+- Before adding goroutines, channels, pipeline stages, cancellation, or shutdown logic, READ `references/concurrency-and-shutdown.md`.
+- Before renaming packages, adding dependencies, or choosing config or option shapes, READ `references/surface-area.md`.
+- Do NOT load `references/philosophy.md` for normal implementation work; it is background and quotes, not the operational playbook.
+- Do NOT load any reference file for leaf-local bug fixes that do not affect exported API, concurrency, or package boundaries.
 
-> "Simplicity is complicated."
+## Core lens
 
-> "Don't communicate by sharing memory; share memory by communicating."
+- Treat simplicity as a systems property, not a minimal-lines trick. Pike's standard is severe: even a 2 percent speedup usually does not justify 0.1 to 2 percent more system complexity.
+- Optimize the caller's mental load, not the author's convenience. Fewer decisions at the call site beat abstract machinery hidden behind "flexibility."
+- Prefer functions and concrete values over early taxonomies. Go's interfaces worked because algorithms came first and type hierarchies came later.
+- Use concurrency to express ownership, cancellation, and composition. Parallel speedup is optional; leak-free structure is not.
 
-> "Clear is better than clever."
+## Before you change the design, ask yourself
 
-Pike believes that **complexity is the enemy**, and Go was designed as an antidote to the bloat of C++ and Java. Every feature in Go earned its place by being essential.
+### Exported API
 
-## Design Principles
+- What decision can I remove from the caller entirely?
+- Am I about to freeze a method set I do not own?
+- If I need one more method or parameter next year, can I add it without breaking old code?
+- If I add a field later, will its zero value preserve the old behavior?
 
-1. **Simplicity Above All**: If you can remove something without breaking functionality, remove it.
+### Concurrency
 
-2. **Composition Over Inheritance**: Embed types, implement interfaces implicitly.
+- Which goroutine owns this state?
+- How does every started goroutine learn to stop?
+- If a downstream stage returns early, how are blocked upstream senders released?
+- Is a channel expressing ownership transfer, or am I using it as an elaborate mutex?
 
-3. **Concurrency as First-Class**: Goroutines and channels, not threads and locks.
+### Package surface
 
-4. **Orthogonality**: Features should be independent and composable.
+- Does the package name make selectors shorter and clearer at the call site?
+- Would copying 20 lines be cheaper than a permanent dependency and trust edge?
+- Is this option or config mechanism helping the user, or just making me feel future-proof?
 
-## When Writing Code
+## Decision rules
 
-### Always
+### API shape
 
-- Use `gofmt` — no exceptions, no debates
-- Keep functions short and focused
-- Use interfaces for abstraction, keep them small
-- Handle errors explicitly at the call site
-- Use goroutines freely, they're cheap
-- Communicate via channels, not shared memory
-- Name things clearly—`userCount` not `uc`
+- Return concrete types from constructors unless you explicitly need third-party implementations. Concrete returns let you add methods later; exported interfaces do not.
+- Define interfaces at the consumer boundary. If a package exports an interface only for tests or "future flexibility," it is usually freezing the wrong abstraction too early.
+- If a stable API needs cancellation or deadlines later, add `FooContext` or `QueryContext` style siblings and let the old API delegate with `context.Background()`.
+- If behavior may gain more knobs, prefer a config struct or receiver-based config type over exploding function signatures. New struct fields are usually compatible if their zero value preserves prior behavior.
+- If you export a value type directly, remember comparability is part of the contract. Adding an uncomparable field later breaks `==` and map-key users.
+- If you want callers to copy values while hiding representation, return opaque values with unexported fields instead of forcing pointers or interfaces.
 
-### Never
+### Concurrency shape
 
-- Fight `gofmt`
-- Create deep inheritance hierarchies (Go doesn't have them anyway)
-- Use `interface{}` without good reason
-- Ignore errors with `_`
-- Use `panic` for normal error handling
-- Create goroutines without knowing how they'll stop
+- Channels are best when ownership moves with the message or when cancellation is part of the protocol.
+- A mutex or atomic is often simpler when you are only protecting shared in-memory state and no ownership transfer exists.
+- Pipeline stages should close their outbound channels, keep receiving until inbound closes or senders are unblocked, and accept cancellation on every send path.
+- Use channel close as broadcast when the number of blocked senders is unknown. A fixed buffer only works when you can prove the exact outstanding count.
+- Treat `select` defaults as a code smell in long-lived loops. An empty default turns a blocking protocol into a spin loop.
+- `defer` is function-scoped, not loop-scoped. In workers that may run forever, put cleanup on the actual exit path, not inside the steady-state loop.
 
-### Prefer
+### Surface area
 
-- Small interfaces (1-2 methods ideal)
-- Returning errors over panicking
-- Channels over mutexes for coordination
-- Composition over embedding over "inheritance"
-- Standard library over third-party when possible
-- Table-driven tests
+- Package names are part of every call site. If the only honest name is `util`, `common`, or `base`, the boundary is probably wrong.
+- Avoid stutter in import paths and exported names. Callers should not type the same concept twice.
+- Prefer a little copying to a little dependency when the dependency would add long-term trust, review, and upgrade cost for trivial reused code.
+- If you use functional options, do it because options will genuinely grow or because temporary reversible state is valuable. Otherwise plain arguments or a config struct are simpler.
+- When options must be temporary, Pike's self-referential option pattern is stronger than write-only setters because it can return the inverse for `defer`-based restoration.
 
-## Code Patterns
+### Errors
 
-### Composition via Embedding
+- Do not equate "errors are values" with "write `if err != nil` after every line." Design APIs so the mainline stays readable and the error is checked at the semantic boundary.
+- If a loop's purpose is iteration, consider `Scanner`-style APIs that separate iteration from final error reporting rather than forcing error handling on every step.
 
-```go
-// NOT inheritance — composition
-type Reader interface {
-    Read(p []byte) (n int, err error)
-}
+## Never do these
 
-type Writer interface {
-    Write(p []byte) (n int, err error)
-}
+- NEVER export producer-owned interfaces "for mocking" because it feels abstract and testable, but it freezes a method set you cannot extend later. Instead return concrete types or opaque values and let consumers define the smallest interface they need.
+- NEVER unstick a blocked pipeline with a magic channel buffer because it is the fastest patch and often makes tests green, but the required capacity depends on the exact number of abandoned senders and breaks silently when topology changes. Instead thread `context.Context` or a `done` channel through every stage and use close as broadcast.
+- NEVER store `context.Context` in a struct because constructor injection looks tidy, but it smuggles one request lifetime into another and makes per-call deadlines and cancellation impossible. Instead accept `ctx` as the first parameter on request-scoped calls.
+- NEVER add a dependency for a one-function convenience because it looks cheaper than writing code, but every dependency is a permanent trust and upgrade edge. Instead copy the tiny, obvious code or stay inside the standard library when the abstraction is not carrying real weight.
+- NEVER spend design complexity to win a microbenchmark because the number looks objective, but system complexity compounds faster than local speedups. Instead measure on real workloads and quarantine unavoidable complexity behind a tiny internal boundary.
+- NEVER leave `for { select { default: } }` or per-iteration `defer` cleanup in long-lived workers because the code feels responsive and structured, but it spins the scheduler and the defers never fire. Instead block, use a ticker or condition, and place cleanup on the goroutine's real return path.
+- NEVER adopt functional options by default because they look extensible and idiomatic, but they inflate package namespace and make duplicate or ordering semantics harder to reason about. Instead start with plain arguments or a config struct; escalate only when growth or reversible configuration is real.
 
-// Compose interfaces
-type ReadWriter interface {
-    Reader
-    Writer
-}
+## Fallbacks
 
-// Embed structs for composition
-type CountingWriter struct {
-    io.Writer        // Embedded — gets all Writer methods
-    count int64
-}
-
-func (cw *CountingWriter) Write(p []byte) (int, error) {
-    n, err := cw.Writer.Write(p)  // Delegate to embedded
-    cw.count += int64(n)
-    return n, err
-}
-```
-
-### Concurrency: Share by Communicating
-
-```go
-// BAD: Sharing memory, communicating by locking
-type Counter struct {
-    mu    sync.Mutex
-    value int
-}
-
-func (c *Counter) Inc() {
-    c.mu.Lock()
-    c.value++
-    c.mu.Unlock()
-}
-
-// GOOD: Communicate via channels
-func Counter() (inc func(), value func() int) {
-    ch := make(chan int)
-    go func() {
-        count := 0
-        for delta := range ch {
-            if delta == 0 {
-                ch <- count  // Request for value
-            } else {
-                count += delta
-            }
-        }
-    }()
-    return func() { ch <- 1 }, 
-           func() int { ch <- 0; return <-ch }
-}
-
-// Even better: channel as work queue
-func worker(jobs <-chan Job, results chan<- Result) {
-    for job := range jobs {
-        results <- process(job)
-    }
-}
-
-func main() {
-    jobs := make(chan Job, 100)
-    results := make(chan Result, 100)
-    
-    // Start workers
-    for i := 0; i < 4; i++ {
-        go worker(jobs, results)
-    }
-    
-    // Send jobs, collect results...
-}
-```
-
-### Small Interfaces
-
-```go
-// BAD: Large interface
-type Repository interface {
-    Create(user User) error
-    Read(id string) (User, error)
-    Update(user User) error
-    Delete(id string) error
-    List() ([]User, error)
-    Search(query string) ([]User, error)
-    // ... and 20 more methods
-}
-
-// GOOD: Small, focused interfaces
-type UserReader interface {
-    Read(id string) (User, error)
-}
-
-type UserWriter interface {
-    Write(user User) error
-}
-
-type UserDeleter interface {
-    Delete(id string) error
-}
-
-// Compose when needed
-type UserStore interface {
-    UserReader
-    UserWriter
-}
-
-// Functions accept minimal interface
-func ProcessUser(r UserReader, id string) error {
-    user, err := r.Read(id)
-    // ...
-}
-```
-
-### Error Handling
-
-```go
-// Errors are values — handle them
-func readConfig(path string) (*Config, error) {
-    f, err := os.Open(path)
-    if err != nil {
-        return nil, fmt.Errorf("open config: %w", err)
-    }
-    defer f.Close()
-    
-    var cfg Config
-    if err := json.NewDecoder(f).Decode(&cfg); err != nil {
-        return nil, fmt.Errorf("decode config: %w", err)
-    }
-    
-    return &cfg, nil
-}
-
-// Sentinel errors for checking
-var ErrNotFound = errors.New("not found")
-
-func Find(id string) (*Item, error) {
-    item, ok := store[id]
-    if !ok {
-        return nil, ErrNotFound
-    }
-    return item, nil
-}
-
-// Caller can check:
-if errors.Is(err, ErrNotFound) {
-    // handle not found
-}
-```
-
-### Make the Zero Value Useful
-
-```go
-// BAD: Requires initialization
-type Buffer struct {
-    data []byte
-}
-
-func NewBuffer() *Buffer {
-    return &Buffer{data: make([]byte, 0, 1024)}
-}
-
-// GOOD: Zero value works
-type Buffer struct {
-    data []byte
-}
-
-func (b *Buffer) Write(p []byte) (int, error) {
-    b.data = append(b.data, p...)  // nil slice append works!
-    return len(p), nil
-}
-
-// Can use immediately:
-var buf Buffer
-buf.Write([]byte("hello"))
-
-// sync.Mutex zero value is unlocked
-// sync.WaitGroup zero value is ready
-// etc.
-```
-
-## Mental Model
-
-Pike approaches software by asking:
-
-1. **Is this necessary?** Remove anything that isn't essential
-2. **Is this simple?** Can someone understand it in 30 seconds?
-3. **Is this orthogonal?** Does it compose with other features?
-4. **How does it fail?** Design for failure cases explicitly
-
-## The Go Way
-
-- No generics (until Go 1.18) — and that was intentional restraint
-- No exceptions — errors are values
-- No inheritance — composition only
-- No operator overloading — `+` always means numeric addition
-- No implicit conversions — explicit is better
-
-Each "missing" feature is a deliberate choice for simplicity.
+- If a bad interface already escaped into the public API, add a new sibling interface or dynamic type-check path instead of mutating the old interface in place.
+- If channel ownership is unclear after two passes, simplify: collapse stages, use a worker function plus callback, or use a mutex. Confused ownership is a design smell, not a documentation problem.
+- If package naming is contentious, sketch three real call sites and pick the name that makes those selectors shortest and least repetitive.
+- If a performance change needs extra machinery, keep the simple version beside the optimized path until benchmarks on production-like inputs prove the complexity earned its keep.

@@ -1,325 +1,109 @@
 ---
 name: lamport-formal-distributed
-description: Design distributed systems in the style of Leslie Lamport, creator of Paxos, TLA+, and LaTeX. Emphasizes formal specification, logical time, and rigorous reasoning about concurrent systems. Use when designing consensus protocols or proving system correctness.
-tags: paxos, consensus, tla+, formal-verification, logical-clocks, state-machine-replication, byzantine, distributed-transactions
+description: "Formalize, model-check, and de-risk distributed protocols the Lamport way: isolate safety first, add liveness only with explicit synchrony assumptions, use refinement mappings to connect specs to optimized implementations, and choose the right Paxos-family variant for reconfiguration, leases, quorum shape, or Byzantine faults. Use when designing or reviewing consensus, replication, logical clocks, TLA+, PlusCal, TLC, TLAPS, Multi-Paxos, Fast Paxos, Flexible Paxos, Vertical Paxos, Cheap Paxos, leases, quorums, or refinement mappings."
+tags: paxos, tla+, pluscal, tlc, tlaps, consensus, quorum-systems, refinement-mapping, logical-clocks, leases, reconfiguration, byzantine
 ---
 
-# Leslie Lamport Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌‌‌​‌‌‌‍​‌‌‌‌‌‌​‍‌‌‌​‌​‌​‍‌‌‌‌‌‌​‌‍​​​​‌​‌‌‍‌‌​​​‌‌​⁠‍⁠
+# Lamport Formal Distributed
 
-## Overview
+This skill is for tasks where informal reasoning is the bug. Use it when the work hinges on invariants, quorum math, reconfiguration, lease safety, or proving that an optimization still implements the original protocol.
 
-Leslie Lamport is a Turing Award winner who invented logical clocks, the Paxos consensus algorithm, TLA+ specification language, and LaTeX. His work forms the theoretical foundation of modern distributed systems.
+## Load Only What You Need
 
-## Core Philosophy
+- Before writing historical or philosophical material about Lamport, READ `references/philosophy.md`.
+- Before showing or editing a Python logical-clock demo, READ `scripts/lamport_clock.py`.
+- Do NOT load `references/philosophy.md` for quorum math, Paxos debugging, TLA+ modeling, or lease analysis.
+- Do NOT load `scripts/lamport_clock.py` for consensus, reconfiguration, fairness, or proof work.
 
-> "A distributed system is one in which the failure of a computer you didn't even know existed can render your own computer unusable."
+## Start Here
 
-> "If you're thinking without writing, you only think you're thinking."
+Before doing anything, ask yourself:
 
-> "The way to get correct programs is to first get something that is obviously correct and then make it efficient."
+- What exact bad state must be impossible? Write that as an invariant before discussing algorithms.
+- What assumption makes progress possible? Name the leader, timing, quorum, or recovery assumption explicitly; if you cannot state it, you do not have a liveness story.
+- Which information must survive a crash? In Paxos terms, stable storage is usually the real boundary between a proof and a fantasy.
+- Is the proposed optimization an implementation of the same abstract machine, or a different protocol that merely feels equivalent?
 
-Lamport believes that distributed systems are too complex to reason about informally. Formal specification isn't optional—it's essential.
+## Operating Procedure
 
-## Design Principles
+### 1. Separate the problem you are solving
 
-1. **Formal Specification First**: Write the spec before the code.
+- If the task is `safety`, use the smallest finite model that can violate the invariant. Three processes and two values are usually enough to find real bugs.
+- If the task is `liveness`, add fairness only after the safety model is clean. Treat fairness as an assumption about enabled actions, not as a vague promise that the scheduler will be nice.
+- If the task is `operational design`, split the protocol into consensus, leader election, state transfer, and lease logic. Production failures usually hide in those seams, not in the textbook core.
 
-2. **Time Is Logical, Not Physical**: Use happens-before, not wall clocks.
+### 2. Build a model TLC can actually check
 
-3. **Safety Before Liveness**: First ensure nothing bad happens, then ensure something good does.
+- Prefer model values and symmetry sets for process identities and values when checking safety. This cuts equivalent states aggressively.
+- Start with sets or bounded multisets of messages. Model queues or long sequences only when FIFO order is semantically required; otherwise TLC spends its budget exploring queue growth, not protocol bugs.
+- Use state constraints to bound uninteresting growth. Lamport’s own tutorials show message sequences running forever unless you cap them.
+- Turn symmetry off for liveness runs unless you have proved it is sound. Safety optimizations often erase the distinctions liveness depends on.
 
-4. **State Machines**: Model systems as state machines for clarity.
+### 3. Add detail in refinement layers, not in one giant spec
 
-## When Writing Code
+- Keep the top spec abstract: chosen value, quorum intersection, and invariants.
+- Add implementation detail with refinement mappings and auxiliary variables.
+- Use history variables when the lower-level algorithm forgets information the abstract proof needs.
+- Use prophecy variables only when an implementation choice depends on a future event; if you add them casually, the spec usually became too concrete too early.
+- Use stuttering to align optimized multi-step implementations with coarse abstract steps instead of mutating the abstract spec until it matches the code.
 
-### Always
+## Paxos-Family Decision Tree
 
-- Write a formal specification (TLA+ or similar)
-- Define safety and liveness properties explicitly
-- Use logical timestamps for ordering events
-- Model failures as part of the specification
-- Prove correctness before implementing
-- Consider all interleavings
+- Need crash-fault consensus with a stable leader and replicated log? Use classic/Multi-Paxos reasoning.
+- Need lower steady-state quorum cost or even-sized acceptor sets? Consider Flexible Paxos. Only cross-phase quorum intersection is required; majority quorums in both phases are conservative, not fundamental.
+- Need client-to-decision latency in two message delays? Only consider Fast Paxos when conflicting proposals are rare and you can afford the quorum cost. Lamport’s bound is `more than 2e + f` processes to tolerate `f` faults and still decide in two delays despite `e` fast-path faults.
+- Need reconfiguration or primary-backup semantics? Use Vertical Paxos reasoning with an explicit configuration master.
+- Need lower active hardware cost with spare processors? Cheap Paxos is viable only if the set of healthy processors does not "jump around" too fast while repaired nodes reacquire state.
+- Need Byzantine tolerance? Do not bolt signatures onto crash Paxos and call it done. Use a refinement-based Byzantine design with byzquorums and explicit malicious-leader handling.
 
-### Never
+## Non-Obvious Lamport Moves
 
-- Assume reliable networks
-- Rely on synchronized clocks
-- Ignore failure modes
-- Test into correctness (testing finds bugs, not proves absence)
-- Hand-wave about "eventual consistency"
+- New leaders in Multi-Paxos do not need to serialize log repair before serving new work. A leader can fill holes with no-ops and resume assigning later instances while old gaps are being learned.
+- Observation O4 from Lamport’s Paxos variants matters in practice: hashing large values reduces traffic, but at least one process must still be able to recover the full value. A leader that learns only hashes cannot legally send Phase 2a.
+- The minimum persistent Paxos state is smaller than most implementations store: an acceptor needs two ballot numbers and one accepted value; a leader needs the largest ballot for which it executed Phase 2a. Extra persistence is an engineering choice, not proof necessity.
+- In Chubby, fewer than 1% of instances needed full Paxos. This is why steady-state quorum design and lease behavior dominate performance discussions more than the cold-path proof does.
+- Local linearizable reads are not "free reads". They are lease reads. If you cannot state the lease expiry and clock-drift assumption in the spec, the optimization is not justified.
+- Vertical Paxos I and II make a real trade-off: one active configuration is easy to reason about, but it ties progress to state transfer; allowing multiple active configurations decouples service from copying large state.
+- Vertical Paxos also fixes a nasty leader-failure edge case: without activation discipline, each failed reconfiguration can force the next leader to consult yet another old configuration.
+- An external configuration master is not only organizationally neat; it can reduce the processors needed to tolerate `k` failures from `2k + 1` to `k + 1` for the replicated state machine it governs.
+- Cheap Paxos trades hardware for an extra liveness assumption, not for safety. That trade is reasonable only when repair and state catch-up are fast relative to fault movement.
+- Byzantine refinement changes quorum reasoning. A single reported prior vote is no longer trustworthy; byzquorums and cooperative emulation of leader actions are what preserve safety.
 
-### Prefer
+## Fairness and Liveness Traps
 
-- State machine specifications
-- Logical clocks over physical clocks
-- Consensus protocols over ad-hoc coordination
-- Formal proofs over informal arguments
-- Explicit failure handling
+- Weak fairness on the wrong action is nearly useless. If a receive action is enabled only intermittently because messages can be lost or delayed, weak fairness may prove nothing.
+- Strong fairness on an entire process is usually too blunt. Apply fairness to the exact action or PlusCal label whose repeated enablement matters.
+- Do safety without fairness first. Fairness assumptions enlarge the search and can hide simple safety counterexamples under a mountain of liveness machinery.
+- When a liveness argument depends on "eventually one leader gets timely responses", say that directly. Omega-style leader stability assumptions are often the actual theorem, not the protocol.
 
-## Code Patterns
+## Reconfiguration and Implementation Heuristics
 
-### Logical Clocks (Lamport Timestamps)
+- Reconfiguration is where English-only Paxos designs usually fail. Group membership, snapshot handles, log truncation, and operator procedures are part of the protocol boundary.
+- Snapshot state must record its relation to the replicated log. Chubby used snapshot handles carrying Paxos-specific metadata because "snapshot file plus log" is otherwise not a recoverable state.
+- Keep the consensus core as an explicit state machine separate from application code. Chandra et al. changed replica membership state in about an hour because the algorithm was isolated; the tests took days.
+- Add runtime consistency checks even after proof work. Replicated checksums and replayable fault injection catch operator error, memory corruption, and implementation drift that the proof never modeled.
 
-```python
-# Lamport's logical clock: happens-before ordering
+## Fallbacks When the First Pass Fails
 
-class LamportClock:
-    def __init__(self):
-        self.time = 0
-    
-    def tick(self):
-        """Local event: increment clock"""
-        self.time += 1
-        return self.time
-    
-    def send(self):
-        """Send message: increment and return timestamp"""
-        self.time += 1
-        return self.time
-    
-    def receive(self, msg_timestamp):
-        """Receive message: max(local, received) + 1"""
-        self.time = max(self.time, msg_timestamp) + 1
-        return self.time
+- If TLC does not terminate, remove liveness, replace sequences with sets or bounded buffers, and shrink constants before adding more hardware or timeout detail.
+- If the proof argument needs paragraphs of prose, step back and introduce a refinement layer; long English explanations are usually hiding a missing abstraction boundary.
+- If reconfiguration logic dominates the discussion, stop pretending it is "just Paxos" and model the master, snapshot metadata, and activation rule as first-class state.
+- If Byzantine support forces ad hoc exceptions into a crash-fault spec, split the abstraction: prove the Byzantine protocol refines a clean crash-fault one instead of mixing both stories in one model.
 
-# Usage:
-# Process A: clock.tick() -> 1, clock.send() -> 2
-# Process B: clock.receive(2) -> 3
-# Now we know: A's event 2 happened-before B's event 3
-```
+## Anti-Patterns
 
-### Vector Clocks (Causal Ordering)
+- NEVER start with a giant realistic model because it feels faithful. It is seductive because it looks production-like; the consequence is state explosion and no counterexample. Instead start with the smallest model that can falsify the invariant.
+- NEVER model the network as FIFO queues unless FIFO is a contractual requirement. Queues feel intuitive, but the consequence is spending TLC on queue permutations and unbounded growth. Instead model messages as sets, bags, or tightly bounded sequences.
+- NEVER mix safety and liveness in the first spec because it feels "complete". The consequence is that fairness assumptions mask basic safety bugs and make counterexamples unreadable. Instead freeze safety first, then add the minimum liveness machinery.
+- NEVER claim a lease optimization is safe because clocks are "pretty synchronized". That wording is seductive operationally; the consequence is split-brain reads when drift or delayed renewal breaks the hidden bound. Instead specify the bound and prove the read path depends on it.
+- NEVER assume majority is the only sensible quorum shape because that is what most textbooks use. The consequence is overpaying in steady state or mis-designing even-sized clusters. Instead reason from the actual intersection requirement for the phase structure you chose.
+- NEVER treat reconfiguration as a side feature outside the proof. It is seductive to prove a fixed-membership core and hand-wave membership changes; the consequence is unsafe failover, stuck state transfer, or data loss during recovery. Instead model reconfiguration, snapshot metadata, and activation rules explicitly.
+- NEVER translate a crash-fault proof into Byzantine settings by intuition. It feels like "just add signatures"; the consequence is trusting fake prior votes or malicious leaders. Instead use byzquorums and refinement to show the Byzantine protocol still implements the crash-fault abstraction.
+- NEVER trust operator procedures that are not automated. Real systems lose data through rollout mistakes more often than through the clean failures in papers. Instead automate the dangerous transitions and make recovery replayable.
 
-```python
-# Vector clocks: detect concurrent events
+## Output Style Under This Skill
 
-class VectorClock:
-    def __init__(self, node_id, num_nodes):
-        self.node_id = node_id
-        self.clock = [0] * num_nodes
-    
-    def tick(self):
-        """Local event"""
-        self.clock[self.node_id] += 1
-        return self.clock.copy()
-    
-    def send(self):
-        """Send: increment own component"""
-        self.clock[self.node_id] += 1
-        return self.clock.copy()
-    
-    def receive(self, other_clock):
-        """Receive: element-wise max, then increment own"""
-        for i in range(len(self.clock)):
-            self.clock[i] = max(self.clock[i], other_clock[i])
-        self.clock[self.node_id] += 1
-        return self.clock.copy()
-    
-    @staticmethod
-    def compare(vc1, vc2):
-        """Compare: <, >, =, or concurrent"""
-        less = all(a <= b for a, b in zip(vc1, vc2))
-        greater = all(a >= b for a, b in zip(vc1, vc2))
-        
-        if less and not greater:
-            return "before"  # vc1 happened-before vc2
-        elif greater and not less:
-            return "after"   # vc1 happened-after vc2
-        elif less and greater:
-            return "equal"
-        else:
-            return "concurrent"  # Neither happened-before the other
-```
-
-### TLA+ Specification
-
-```tla
---------------------------- MODULE SimpleConsensus ---------------------------
-EXTENDS Integers, FiniteSets
-
-CONSTANTS Nodes, Values
-
-VARIABLES 
-    proposed,   \* proposed[n] = value proposed by node n
-    decided     \* decided[n] = value decided by node n (or null)
-
-TypeInvariant ==
-    /\ proposed \in [Nodes -> Values \union {NULL}]
-    /\ decided \in [Nodes -> Values \union {NULL}]
-
-\* Safety: Agreement - all decided values are the same
-Agreement ==
-    \A n1, n2 \in Nodes:
-        (decided[n1] # NULL /\ decided[n2] # NULL) =>
-            decided[n1] = decided[n2]
-
-\* Safety: Validity - decided value was proposed
-Validity ==
-    \A n \in Nodes:
-        decided[n] # NULL => 
-            \E m \in Nodes: proposed[m] = decided[n]
-
-\* Liveness: Termination - eventually all decide
-Termination ==
-    <>(\A n \in Nodes: decided[n] # NULL)
-
-Init ==
-    /\ proposed = [n \in Nodes |-> NULL]
-    /\ decided = [n \in Nodes |-> NULL]
-
-Propose(n, v) ==
-    /\ proposed[n] = NULL
-    /\ proposed' = [proposed EXCEPT ![n] = v]
-    /\ UNCHANGED decided
-
-Decide(n, v) ==
-    /\ decided[n] = NULL
-    /\ \E m \in Nodes: proposed[m] = v
-    /\ decided' = [decided EXCEPT ![n] = v]
-    /\ UNCHANGED proposed
-
-Next ==
-    \E n \in Nodes, v \in Values:
-        Propose(n, v) \/ Decide(n, v)
-
-Spec == Init /\ [][Next]_<<proposed, decided>>
-==============================================================================
-```
-
-### Paxos Simplified
-
-```python
-# Simplified Paxos - single decree
-
-class PaxosNode:
-    def __init__(self, node_id, nodes):
-        self.node_id = node_id
-        self.nodes = nodes
-        
-        # Acceptor state
-        self.promised = 0      # Highest proposal number promised
-        self.accepted_num = 0  # Number of accepted proposal
-        self.accepted_val = None
-        
-    def prepare(self, proposal_num):
-        """Phase 1a: Proposer sends prepare"""
-        responses = []
-        for node in self.nodes:
-            resp = node.handle_prepare(proposal_num)
-            if resp:
-                responses.append(resp)
-        return responses
-    
-    def handle_prepare(self, proposal_num):
-        """Phase 1b: Acceptor handles prepare"""
-        if proposal_num > self.promised:
-            self.promised = proposal_num
-            return {
-                'promised': True,
-                'accepted_num': self.accepted_num,
-                'accepted_val': self.accepted_val
-            }
-        return {'promised': False}
-    
-    def accept(self, proposal_num, value):
-        """Phase 2a: Proposer sends accept"""
-        responses = []
-        for node in self.nodes:
-            resp = node.handle_accept(proposal_num, value)
-            responses.append(resp)
-        return responses
-    
-    def handle_accept(self, proposal_num, value):
-        """Phase 2b: Acceptor handles accept"""
-        if proposal_num >= self.promised:
-            self.promised = proposal_num
-            self.accepted_num = proposal_num
-            self.accepted_val = value
-            return {'accepted': True}
-        return {'accepted': False}
-    
-    def propose(self, value):
-        """Full Paxos proposal"""
-        n = self.generate_proposal_number()
-        
-        # Phase 1: Prepare
-        promises = self.prepare(n)
-        if len([p for p in promises if p['promised']]) <= len(self.nodes) // 2:
-            return None  # Failed to get majority
-        
-        # Use highest accepted value if any
-        highest = max(promises, key=lambda p: p['accepted_num'])
-        if highest['accepted_val'] is not None:
-            value = highest['accepted_val']
-        
-        # Phase 2: Accept
-        accepts = self.accept(n, value)
-        if len([a for a in accepts if a['accepted']]) > len(self.nodes) // 2:
-            return value  # Consensus reached!
-        
-        return None
-```
-
-### State Machine Replication
-
-```python
-# State machine replication: the foundation of distributed consensus
-
-class ReplicatedStateMachine:
-    """
-    Key insight: if all replicas start in the same state
-    and apply the same operations in the same order,
-    they will end up in the same state.
-    """
-    
-    def __init__(self):
-        self.state = {}
-        self.log = []        # Ordered log of operations
-        self.commit_index = 0
-    
-    def apply(self, operation):
-        """Apply operation to state machine"""
-        op_type = operation['type']
-        
-        if op_type == 'set':
-            self.state[operation['key']] = operation['value']
-        elif op_type == 'delete':
-            self.state.pop(operation['key'], None)
-        elif op_type == 'increment':
-            key = operation['key']
-            self.state[key] = self.state.get(key, 0) + 1
-    
-    def append_to_log(self, operation):
-        """Add operation to log (not yet applied)"""
-        self.log.append(operation)
-        return len(self.log) - 1  # Return log index
-    
-    def commit(self, index):
-        """Apply all operations up to index"""
-        while self.commit_index <= index:
-            self.apply(self.log[self.commit_index])
-            self.commit_index += 1
-    
-    # The consensus protocol ensures all replicas
-    # have the same log in the same order
-```
-
-## Mental Model
-
-Lamport approaches distributed systems by asking:
-
-1. **What is the state?** Define the state machine precisely
-2. **What are the safety properties?** What must never happen?
-3. **What are the liveness properties?** What must eventually happen?
-4. **How do we order events?** Logical time, not physical time
-5. **Can I specify this formally?** If not, I don't understand it
-
-## Signature Lamport Moves
-
-- TLA+ specifications before implementation
-- Logical clocks for event ordering
-- Safety and liveness as separate concerns
-- State machine replication for consensus
-- Happens-before reasoning
-- Formal proofs of correctness
+- Write invariants, assumptions, and quorum conditions before prose.
+- Prefer statements of the form `safe if`, `live when`, `breaks if`.
+- If proposing an optimization, state what abstract action it refines.
+- If reviewing an implementation, ask for the missing spec boundary: stable storage, leader election, state transfer, lease expiry, or membership change.

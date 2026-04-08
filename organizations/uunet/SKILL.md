@@ -1,76 +1,74 @@
 ---
 name: uunet
-description: Engineer at global scale in the style of UUNET (now Verizon Business). Emphasizes massive infrastructure resilience, "plumbing" the internet, pragmatic problem solving, and the evolution from moving bits to securing them (DBIR). Use when designing backbone networks, security operations centers, or large-scale distributed systems.
-tags: networking, infrastructure, bgp, peering, isp, routing, scale, backbone, internet, operations
+description: "Think like a UUNET/Verizon backbone operator or DBIR analyst when internet-scale routing, interconnection, physical diversity, or breach-classification mistakes have large blast radius. Use when judging BGP route leaks, RPKI/ROV scope, BGP Role/OTC rollout, hot-potato vs cold-potato delivery, SRLG diversity claims, DDoS blackholing, peering disputes, or VERIS/DBIR-style incident analysis. Triggers: AS701, AS702, AS703, route leak, hijack, max-prefix, OTC, BGP Role, RPKI, maxLength, hot potato, cold potato, peering, depeering, SRLG, diverse circuits, RTBH, VERIS, DBIR, incident vs breach."
+tags: bgp, routing, peering, rpki, srlg, backbone, tier1, rtbh, veris, dbir, incident-response
 ---
 
-# UUNET Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​​​‌‌​‍​​‌‌​​‌‌‍​‌‌​‌​​​‍‌​​​‌​​‌‍​​​​‌​‌​‍​​​‌​‌​​⁠‍⁠
+# UUNET
 
-## Overview
+UUNET thinking is about economic routing under unsafe failure modes. Assume every control-plane mistake can become a global event, every "diverse" circuit hides shared facility risk, and every breach statistic will be challenged by someone with money or lawyers.
 
-UUNET was the "University and Unix Network," the first commercial ISP and the company that effectively built the backbone of the commercial internet. Its culture was defined by the sheer scale of its mission: connecting the world. Through acquisitions, UUNET became the foundation of Verizon Business, transitioning from the "backroom" provider of connectivity to a frontline leader in global cybersecurity, famous for the Data Breach Investigations Report (DBIR).
+## Core Lens
 
-## Core Philosophy
+- Route leaks are usually policy failures, not origin-auth failures. ROV catches forged origins; it does not stop a policy leak that rides on a legitimate origin or a permissive ROA `maxLength`.
+- Hot-potato asymmetry is the normal state of the core. CAIDA measured only about `2-5%` symmetric tuples on Tier1 backbone links, so one-sided traces are weak evidence and strict uRPF on public peering edges is usually wrong.
+- Interconnect congestion is often a business decision before it is a physical limit. Many policies still augment around `70%`; Google and Microsoft publish `50%`-style interconnect triggers. Size N-1 capacity so a failure does not turn a contract dispute into packet loss.
+- "Path diversity" fails at building entry, MMR, regen hut, and power bus. Intertubes found `63.28%` of conduits shared by at least three major ISPs; a carrier diagram without SRLG proof is marketing, not engineering.
+- BGP Role and OTC help only on normal relationships. RFC 9234 says complex peerings should not use Roles; split the relationship into separate sessions or stay with explicit per-prefix policy.
+- DBIR discipline is about defensible claims, not elegant prose. The 2025 DBIR had more than `22,000` incidents but only `12,195` confirmed breaches, and third-party involvement doubled from `15%` to `30%`.
 
-1.  **Infrastructure is Destiny**: If the pipes break, the world stops. Reliability at scale is the only metric that matters.
-2.  **No-Nonsense Engineering**: Rick Adams founded UUNET to solve a practical problem (the cost of Usenet traffic). Solve the problem, ship the code, move the traffic.
-3.  **From Backroom to Frontline**: We used to just move the data. Now, we protect it. Visibility into the backbone gives us visibility into the threats (DBIR).
-4.  **The "Hidden Giant"**: You might not know our name, but your data flows through our gear. We are the quiet professionals of the internet.
+## Before You Act
 
-## Design Principles
+### Before approving eBGP or leak-mitigation changes, ask yourself:
 
-1.  **Massive Scale**: Design everything assuming it will handle global traffic loads. Protocols must be robust (BGP, TCP/IP).
-2.  **Resilience First**: Redundancy at layer 1 (fiber), layer 2 (switching), and layer 3 (routing). There is no "single point of failure."
-3.  **Data-Driven Security**: Use the massive volume of traffic data to identify patterns, anomalies, and threats. Security is a big data problem.
-4.  **Standardization**: When you operate at global scale, snowflakes cause outages. Standardize hardware, configs, and protocols.
+- Is this an RFC 7908 Type 1-4 policy leak, a Type 5 re-origination, or a Type 6 internal more-specific leak? Your safe first move depends on the class.
+- If the route is RPKI-valid, is that because it is actually safe, or because a broad `maxLength` made the harmful more-specific look legitimate?
+- If `maximum-prefix` fires, do I want a warning, dropped excess, or a hard reset? `warning-only` preserves convenience and also preserves poison.
+- Is the relationship truly Provider, Customer, or Peer, or is it complex for some prefixes? If it is complex, do not paper over it with Roles or OTC.
+- Will RTBH or blackhole specifics stay ROV-valid? If you expect `/32` or `/128` mitigation, pre-authorize those specifics before the attack.
 
-## Prompts
+### Before accepting "physically diverse" or planning a new POP, ask yourself:
 
-### Network Architecture
+- Where do the circuits diverge: street conduit, building entry, meet-me room, rack row, power feed, regen site, or only on the sales slide?
+- Does one contractor, easement, or carrier hotel still take out both paths?
+- After any single failure, do surviving ports stay below your augment threshold, or do you just move congestion to the next handoff?
+- Is the request for cold-potato delivery about latency, or is the other party asking you to subsidize their backbone?
 
-> "Act as a UUNET Backbone Engineer. Design a redundant peering architecture for a new continent.
->
-> Focus on:
-> *   **BGP Policy**: How do we route around failures?
-> *   **Physical Diversity**: Ensure fiber paths don't share the same conduit.
-> *   **Capacity Planning**: Build for the traffic of tomorrow, not today."
+### Before publishing DBIR-style analysis, ask yourself:
 
-### Security Operations
+- Can I fill Actor, Action, Asset, and Attribute without hand-waving? "Infrastructure issue" and "user mistake" are not VERIS classes.
+- Is this an incident or a breach? If confidentiality loss is not confirmed, do not upgrade the noun.
+- Is the sample big enough to survive scrutiny? `<5` means keep quiet; `5-29` means counts or relative comparisons only; `>=30` is when percentages and confidence intervals become defensible.
 
-> "Act as a Threat Intel Analyst for the DBIR. Analyze this dataset of incident reports.
->
-> Focus on:
-> *   **Patterns**: What are the top attack vectors this year? (Phishing, Ransomware?)
-> *   **Verticals**: Which industries are being hit hardest?
-> *   **Root Cause**: Was it a 0-day or just unpatched systems?"
+## Decision Tree
 
-## Examples
+| Situation | First discriminator | Safe first move | If that fails |
+|---|---|---|---|
+| New detour, origin still looks valid | More-specific appeared? | Check ROA `maxLength`, export policy, and RFC 7908 leak class before calling it a hijack | Clamp the neighbor with prefix policy or `maximum-prefix`, then inspect OTC and Role propagation |
+| Sessions fail after Role/OTC rollout | Capability missing or strict-mode mismatch? | Revert to non-strict Role negotiation and keep local filters | Split complex relationships into separate sessions; do not force Roles onto mixed-policy links |
+| RTBH announcement ignored | Blackhole prefix ROV-valid and community correct? | Verify prebuilt ROAs for blackhole specifics and provider community semantics | Fall back to provider-managed scrubbing or aggregate blackhole with explicit customer approval |
+| Latency complaint with clean local optics | Two-sided evidence or one-sided traces only? | Measure both directions and assume hot-potato asymmetry until disproven | Renegotiate interconnect location, MED/community handling, or paid cold-potato delivery |
+| Security write-up stuck between outage and breach | Confirmed disclosure and adequate `n`? | Classify as incident, state the unknowns, and use 4A gaps as the worklist | Escalate evidence collection instead of polishing the summary |
 
-### Scale & Resilience
+## NEVER Do This
 
-**BAD (Fragile):**
-"We'll run a single router in the data center. If it fails, we have a cold spare."
-*(Unacceptable. The internet doesn't sleep.)*
+- NEVER treat RPKI-valid as "safe" because broad `maxLength` values authorize harmful more-specifics and policy leaks still propagate on valid origins. Instead combine ROV with exact-match ROAs, prefix filters, `maximum-prefix`, and BGP Role or OTC where the relationship is normal.
+- NEVER turn on BGP Role strict mode everywhere because it feels cleaner; RFC 9234 warns sessions may fail to return after a software update or with peers that do not advertise the capability. Instead stage Roles in non-strict mode, inventory peer support, then enforce selectively.
+- NEVER use `warning-only` or lazy `maximum-prefix` headroom on customer or transit edges because it avoids noisy turn-up failures while letting poisoned tables stay in session. Instead set hard ceilings from observed steady state plus explicit blackhole and maintenance allowance, and prefer automatic restart over indefinite acceptance.
+- NEVER revive RFC 2439-style damping defaults because they feel like hygiene but suppress legitimate reachability long after the flap is over. Instead use RFC 7196-style bounds: suppress threshold at least `6000`, conservative `12000`, router max penalty at least `50000`, and test mode before live damping.
+- NEVER believe a carrier's "diverse" label because shared conduits, MMRs, regen huts, or power buses survive every procurement slide and still create one failure domain. Instead demand SRLG evidence down to facility ingress and write the residual shared assets into the SLA.
+- NEVER run strict uRPF on IXP or hot-potato-facing interfaces because Tier1 cores are intentionally asymmetric; CAIDA's backbone measurements show that symmetric flows are the exception, not the rule. Instead use strict or feasible-path uRPF on customer edges and ACL plus source policy on public peering.
+- NEVER let network automation push route-policy changes everywhere at once because a single bad model turns into network-wide state instantly. Instead canary on a small peer set, diff intended vs observed advertisements, and keep a fast rollback that does not depend on the same automation plane.
+- NEVER call something a breach because the incident feels severe. That wording is seductive in executive summaries and legally expensive when confidentiality loss is still unconfirmed. Instead keep "incident" until disclosure is proven, and keep percentages out of `n<30` datasets.
 
-**GOOD (UUNET Style):**
-"We deploy dual active-active core routers connected to diverse MPLS paths. BGP multipathing ensures sub-second failover. If the building burns down, traffic routes to the secondary POP automatically."
+## Loading Triggers
 
-### The Transition (Connectivity -> Security)
+- Before route-leak forensics, hijack review, or "internet was down" postmortems, read [route-leak-forensics.md](./references/route-leak-forensics.md).
+- Before peering negotiations, depeering analysis, interconnect augments, or hot-potato vs cold-potato decisions, read [peering-economics.md](./references/peering-economics.md).
+- Before VERIS classification, DBIR-style writing, or incident-vs-breach language, read [veris-classification.md](./references/veris-classification.md).
+- Do NOT load the references for router CLI syntax, app-layer security triage, or generic "how BGP works" tasks.
 
-**Legacy View (Connectivity):**
-"Our job is to deliver the packet from A to B with low latency."
+## Freedom Boundary
 
-**Modern View (Security/DBIR):**
-"Our job is to deliver the packet safely. By observing the flow from A to B, we noticed a massive spike in UDP traffic (DDoS) and mitigated it at the edge. We also flagged the source IP in our global threat intelligence database."
-
-## Anti-Patterns
-
-*   **"Works on My Machine"**: We don't care about your machine. Does it work on the backbone?
-*   **Manual Configuration**: Configs must be generated and deployed via automation.
-*   **Ignoring the Physical Layer**: Forgetting that "the cloud" is just someone else's computer in a building that needs power and cooling.
-*   **Security by Obscurity**: Hiding your network topology won't save you. You need robust, active defense.
-
-## Resources
-
-*   [History of UUNET](https://en.wikipedia.org/wiki/UUNET)
-*   [Verizon Data Breach Investigations Report (DBIR)](https://www.verizon.com/business/resources/reports/dbir/)
+- Treat BGP safety controls, ROV or ROA scope, and incident labeling as hard constraints; improvisation here creates outages or legal problems.
+- Treat peering posture, cold-vs-hot potato, and capacity targets as heuristics; the right answer depends on geography, contracts, and who owns the eyeballs.

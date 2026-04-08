@@ -1,421 +1,120 @@
 ---
 name: de-shaw-computational-finance
-description: Build trading systems in the style of D.E. Shaw, the pioneering computational finance firm. Emphasizes systematic strategies, rigorous quantitative research, and world-class technology infrastructure. Use when building research platforms, systematic trading strategies, or quantitative finance infrastructure.
-tags: trading, computational-finance, quantitative, simulation, risk-management, hpc, finance, algorithms
+description: "Make research, portfolio, and execution decisions in a D.E. Shaw style: hypothesis-first, leak-intolerant, capacity-aware systematic trading. Use when building alpha research, stat-arb, factor portfolios, transaction-cost models, risk systems, or research infrastructure. Triggers: quant, stat arb, alpha decay, market impact, borrow fee, crowding, backtest, factor model, execution, capacity."
+tags: trading, computational-finance, quantitative, stat-arb, market-microstructure, risk, portfolio-construction
 ---
 
-# D.E. Shaw Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​​‌​‌‌‍‌‌​​​‌‌​‍​‌​​‌‌​‌‍​‌‌‌​‌‌​‍​​​​‌​‌​‍‌​‌‌‌‌‌​⁠‍⁠
+# D.E. Shaw Computational Finance
 
-## Overview
+This skill is for turning vague quant ideas into evidence that survives hostile implementation. The stance is simple: a result is not real until it survives multiple-testing controls, point-in-time data checks, borrow and impact frictions, and crowding stress.
 
-D.E. Shaw, founded in 1988 by computer scientist David E. Shaw, is one of the original quantitative hedge funds. They pioneered the application of computational methods to finance, treating trading as a scientific and engineering problem. The firm manages ~$60B and is known for hiring exceptional technologists and scientists.
+Do not load generic factor-investing or "what is market microstructure" material for normal use. This skill is intentionally self-contained. Before writing code or approving a result, read the project's actual data-timestamp, cost, borrow, and execution interfaces; this skill tells you what to demand from them.
 
-## Core Philosophy
+## Read Order
 
-> "We approach problems in finance the same way scientists approach problems in physics or biology."
+Before building research code, read the project's point-in-time data and corporate-action path first. Most quant failures are timestamp bugs wearing statistical makeup.
 
-> "The best ideas often come from people who aren't finance experts."
+Before approving a backtest, read the project's cost, borrow, and execution assumptions next. If you cannot find them, treat that as a blocker rather than filling the gap with textbook defaults.
 
-> "Technology is not a cost center; it's a competitive advantage."
+Do not load generic primers, factor encyclopedias, or market-microstructure intros unless the user explicitly wants teaching material. They lower signal density and weaken the decision boundary.
 
-D.E. Shaw believes that finance is fundamentally a computational problem. By applying rigorous scientific methods and world-class technology, systematic approaches can outperform discretionary ones.
+## Think Like A Skeptical Quant
 
-## Design Principles
+Before researching a signal, ask yourself:
+- What exact market mistake is being harvested, and why has competition not removed it yet?
+- What is the edge clock: minutes, days, months? If the signal half-life is shorter than the time needed to source liquidity, this is an execution problem disguised as alpha.
+- Which parts of the result come from the short leg, stale fundamentals, or cheap historical spreads that no longer exist?
+- What would falsify the signal quickly? Write that down before running the first search.
 
-1. **Science Over Intuition**: Hypothesize, test, validate, or reject.
+Before trusting a backtest, ask yourself:
+- How many independent trials did I really run, including feature choices, universe cuts, rebalance rules, neutralizations, and cleaning decisions?
+- Are labels or features overlapping across folds? If yes, ordinary walk-forward or k-fold is leaking.
+- Does the signal still work after replacing idealized fills with realistic arrival, spread, borrow, and incomplete-fill assumptions?
 
-2. **Research Infrastructure**: The platform enables the research, not the other way around.
+Before sizing a strategy, ask yourself:
+- Is the alpha still attractive after crowding, not just volatility, is treated as a state variable?
+- Is the short book a real source of edge, or just a backtest convenience that will disappear when names become specials or recalls hit?
+- Am I comparing net alpha conditional on urgency, venue, and participation, or fooling myself with average bps costs?
 
-3. **Hire Generalists**: The best quants aren't necessarily from finance.
+## Hard Research Gates
 
-4. **Long-Term Thinking**: Build systems that will work for decades.
+Use these as default gates unless the user explicitly wants exploratory work:
 
-5. **Risk First**: Understand what can go wrong before what can go right.
+1. Treat every research branch as multiple testing.
+   A new factor should generally clear `t > 3.0`, not the old `t > 2.0` standard. Harvey, Liu, and Zhu argue finance's usual significance cutoff is too weak once hundreds of factors have been mined.
+2. Record trial count, then deflate the Sharpe.
+   Bailey and Lopez de Prado show that an annualized Sharpe of `1.0` over `10` years of daily data drops below 95% confidence after as few as `3` independent trials once selection bias is acknowledged.
+3. Use purge-plus-embargo validation whenever labels overlap in time.
+   Ordinary walk-forward is not enough when your target spans future windows or when features reuse adjacent information.
+4. Demand point-in-time joins, not reconstructed truth.
+   Restated fundamentals, revised corporate actions, and borrow data observed after the decision time are enough to turn mediocre signals into fake discoveries.
+5. Convert alpha into economics immediately.
+   A signal that only works before spread, borrow, impact, recall risk, and unfilled-order opportunity cost is not a production candidate.
 
-## When Building Systematic Trading Systems
+## Implementation Heuristics That Matter
 
-### Always
+- Post-publication anomaly decay is brutal.
+  Chen and Velikov find the average anomaly nets about `4 bps/month` after trading costs and post-publication effects; the strongest only reach about `10 bps/month`. If your idea resembles published anomaly plumbing, assume the baseline edge is near zero until you show a fresh dataset or mechanism.
+- Turnover is often the hidden killer.
+  In the same work, post-publication implementations show about `40%` two-sided monthly turnover and roughly `85 bps` average paid spread, enough to erase about `30 bps/month` of gross return.
+- Borrow is asymmetric and stateful.
+  D'Avolio reports that about `91%` of borrowed names are general collateral at roughly `17 bps/year`, but the remaining `9%` are specials averaging about `4.30%/year` and sometimes far higher. Later evidence shows that by 2023 more than `15%` of the universe had borrow fees above `10%`, and sub-`$100M` names averaged above `30%`.
+- Short unavailability matters as much as short fees.
+  Kim and Lee's evidence, summarized in "When Equity Factors Drop Their Shorts," attributes about `10.4 bps/month` of anomaly drag to shorting frictions, roughly `40%` of gross short profits, with both fees and outright inability to source stock.
+- Impact is not globally linear.
+  On ANcerno metaorders, impact is approximately linear only for very small volume fractions `phi < 1e-3`; from about `1e-3` to `1e-1` of daily volume it is better modeled by square-root behavior. Treat anything near or above `1e-1 ADV` as a stress regime, not a calibrated expectation.
+- Participation rate has its own threshold.
+  Bucci et al. estimate the crossover participation rate around `eta* ~= 3.15e-3`, with duration dependence near `T^-1/2`. Small child orders can look cheap because fast liquidity absorbs them; larger metaorders run into slow liquidity and a different cost regime.
+- Closing auctions are often cheaper than continuous trading for non-urgent rebalances.
+  Recent evidence shows materially lower impact at the close than in continuous trading, while the opening auction is usually the worst place to lean on size because overnight information concentrates informed flow there.
+- Crowding should be treated like a live risk factor.
+  MSCI reports that factor crowding scores above `1` were historically associated with a meaningfully higher frequency of subsequent drawdowns, above `25%` over the following year in their 2025 review.
 
-- Formulate clear, testable hypotheses
-- Separate alpha research from execution
-- Build robust risk management into every layer
-- Version control everything: code, data, models, configs
-- Design for extensibility and maintainability
-- Document assumptions and limitations
+## Decision Tree
 
-### Never
+If you are evaluating a new signal:
+- If the result is `t <= 2`, reject it as noise unless the task is explicitly exploratory.
+- If `2 < t <= 3`, keep it in research only if there is a strong causal prior and a clean untouched holdout.
+- If `t > 3`, move to cost, borrow, and capacity translation before spending time on model refinement.
 
-- Rely on intuition without empirical validation
-- Conflate in-sample and out-of-sample performance
-- Ignore regime changes and structural breaks
-- Assume correlations are stable
-- Deploy without thorough testing
-- Optimize for a single metric
+If the signal is short-horizon:
+- If alpha decays faster than you can complete the order, optimize execution first.
+- If the strategy still looks attractive only under midpoint or linear-impact fills, reject it.
+- If close-auction liquidity matches the holding horizon, benchmark against close execution, not all-day VWAP mythology.
 
-### Prefer
+If the edge comes mostly from the short leg:
+- If names are small-cap, high-dispersion, high-turnover, or message-board crowded, assume borrow fragility first and alpha second.
+- If borrow data is missing, rerun the economics as long-only plus index or sector hedge.
+- If removing the individual-stock short destroys the edge, you do not yet have a robust strategy.
 
-- Modular, composable architectures
-- Clear separation of concerns
-- Reproducible research pipelines
-- Defensive programming practices
-- Extensive logging and monitoring
-- Gradual rollouts with kill switches
+If portfolio construction is the bottleneck:
+- If optimizer output changes violently under small covariance changes, shrink and regularize before adding more factors.
+- If the optimizer neutralizes every known exposure, check whether you have neutralized the alpha itself.
+- If multiple teams would share the same risk model and neutralization stack, explicitly model crowding and liquidation correlation.
 
-## Code Patterns
+## NEVERs
 
-### Research Pipeline Architecture
+- NEVER accept `t ~= 2` evidence because that threshold is still common in finance papers. It is seductive because it looks "published-grade," but in practice it promotes false discoveries into production queues. Instead demand `t > 3`, a declared trial count, and a deflated performance check.
+- NEVER compare strategies only on reported transaction-cost bps because low cost can simply mean slow trading against fast-decaying alpha. That mistake selects pretty execution statistics and poor net PnL. Instead compare net alpha conditional on decay rate, participation, venue choice, completion rate, and opportunity cost.
+- NEVER assume the short book is symmetric with the long book because the names that are most attractive to short are often the ones that become specials or unavailable precisely when you need them. That shortcut creates phantom alpha and surprise recalls. Instead use stateful borrow, fee, and recall assumptions and test long-only-plus-hedge fallbacks.
+- NEVER extrapolate linear impact from tiny child orders into portfolio-scale trading because fast liquidity makes small prints look cheap while slow liquidity sets the real bill. The consequence is systematic underestimation of capacity and liquidation risk. Instead use piecewise impact with square-root stress once size gets beyond tiny volume fractions.
+- NEVER trust post-publication anomaly economics because the chart still looks smooth. That is seductive because the in-sample story remains coherent, but the live result is often spread-and-crowding tax with no residual edge. Instead assume publication decay plus current spreads remove most of the edge until a fresh source of exclusivity is proven.
+- NEVER neutralize every observable risk factor because shared neutralization schemes create identical trades and synchronized exits. The consequence is crowding-driven drawdowns that look like "model error" after the fact. Instead preserve intentional exposures and treat crowding as a separate constraint.
 
-```python
-class ResearchPipeline:
-    """
-    D.E. Shaw's approach: systematic research with reproducibility.
-    Every experiment is tracked, versioned, and reproducible.
-    """
-    
-    def __init__(self, experiment_tracker, data_warehouse, compute_cluster):
-        self.tracker = experiment_tracker
-        self.data = data_warehouse
-        self.compute = compute_cluster
-    
-    def run_experiment(self,
-                       hypothesis: Hypothesis,
-                       config: ExperimentConfig) -> ExperimentResult:
-        """
-        Run a single experiment with full tracking.
-        """
-        # Create experiment record
-        experiment_id = self.tracker.create_experiment(
-            hypothesis=hypothesis.description,
-            config=config.to_dict(),
-            git_commit=get_git_commit(),
-            data_version=self.data.get_version()
-        )
-        
-        try:
-            # Load data with point-in-time correctness
-            data = self.data.load(
-                universe=config.universe,
-                start_date=config.start_date,
-                end_date=config.end_date,
-                as_of_date=config.as_of_date  # Prevent lookahead
-            )
-            
-            # Validate data quality
-            quality_report = self.validate_data(data)
-            self.tracker.log_artifact(experiment_id, 'data_quality', quality_report)
-            
-            # Run the actual analysis
-            result = hypothesis.evaluate(data, config)
-            
-            # Compute statistical significance
-            significance = self.assess_significance(result, config)
-            
-            # Log results
-            self.tracker.log_metrics(experiment_id, {
-                'sharpe_ratio': result.sharpe_ratio,
-                'information_ratio': result.information_ratio,
-                't_statistic': significance.t_stat,
-                'p_value': significance.p_value,
-                'num_observations': result.n_obs
-            })
-            
-            return ExperimentResult(
-                experiment_id=experiment_id,
-                hypothesis=hypothesis,
-                result=result,
-                significance=significance,
-                reproducible=True
-            )
-            
-        except Exception as e:
-            self.tracker.log_failure(experiment_id, str(e))
-            raise
-    
-    def run_hypothesis_suite(self, 
-                             hypotheses: List[Hypothesis],
-                             config: ExperimentConfig) -> SuiteResult:
-        """
-        Run multiple hypotheses and correct for multiple testing.
-        """
-        results = []
-        
-        for hypothesis in hypotheses:
-            result = self.run_experiment(hypothesis, config)
-            results.append(result)
-        
-        # Apply Benjamini-Hochberg FDR correction
-        corrected = self.apply_fdr_correction(results)
-        
-        return SuiteResult(
-            results=corrected,
-            significant_count=sum(1 for r in corrected if r.is_significant),
-            total_count=len(corrected)
-        )
-```
+## Fallbacks When Reality Is Messy
 
-### Multi-Factor Risk Model
+- Missing borrow data:
+  Price the strategy with the short leg removed, then with a synthetic hedge, then with a punitive specials schedule. If it only works in the optimistic case, stop.
+- Missing impact model:
+  Bound economics between a close-auction benchmark and a stressed square-root impact curve. If the trade only survives under linear or spread-only costs, stop.
+- Weak sample length:
+  Prefer fewer, theory-linked parameters and demand a longer untouched holdout instead of widening the search.
+- Regime instability:
+  Re-estimate on subperiods defined by microstructure changes, decimalization, fee regime shifts, and crowding spikes. A signal that depends on one market regime is a conditional tactic, not a platform strategy.
 
-```python
-class RiskModel:
-    """
-    D.E. Shaw's risk approach: understand and control risk at multiple levels.
-    """
-    
-    def __init__(self, factor_returns, factor_covariance, specific_risk):
-        self.factor_returns = factor_returns  # Historical factor returns
-        self.factor_cov = factor_covariance   # Factor covariance matrix
-        self.specific_risk = specific_risk    # Idiosyncratic risk by asset
-    
-    def estimate_portfolio_risk(self,
-                                 positions: pd.Series,
-                                 factor_exposures: pd.DataFrame) -> RiskEstimate:
-        """
-        Decompose portfolio risk into systematic and idiosyncratic components.
-        """
-        # Factor risk: w' * B * Σ_f * B' * w
-        portfolio_exposures = factor_exposures.T @ positions
-        factor_var = portfolio_exposures @ self.factor_cov @ portfolio_exposures
-        
-        # Specific risk: Σ(w_i^2 * σ_i^2)
-        specific_var = (positions ** 2 * self.specific_risk ** 2).sum()
-        
-        # Total risk
-        total_var = factor_var + specific_var
-        
-        return RiskEstimate(
-            total_volatility=np.sqrt(total_var * 252),  # Annualized
-            factor_volatility=np.sqrt(factor_var * 252),
-            specific_volatility=np.sqrt(specific_var * 252),
-            factor_contribution=self.calculate_factor_contributions(
-                positions, factor_exposures
-            )
-        )
-    
-    def calculate_factor_contributions(self, positions, factor_exposures):
-        """
-        Break down risk by factor for attribution.
-        """
-        portfolio_exposures = factor_exposures.T @ positions
-        
-        contributions = {}
-        for factor in self.factor_cov.columns:
-            # Marginal contribution to risk
-            factor_exposure = portfolio_exposures[factor]
-            factor_vol = np.sqrt(self.factor_cov.loc[factor, factor])
-            contributions[factor] = {
-                'exposure': factor_exposure,
-                'volatility': factor_vol,
-                'contribution': factor_exposure * factor_vol
-            }
-        
-        return contributions
-    
-    def stress_test(self, 
-                    positions: pd.Series,
-                    scenarios: Dict[str, Dict[str, float]]) -> Dict[str, float]:
-        """
-        Apply historical or hypothetical stress scenarios.
-        """
-        results = {}
-        
-        for scenario_name, factor_shocks in scenarios.items():
-            pnl = 0.0
-            
-            for factor, shock in factor_shocks.items():
-                factor_exposure = self.get_portfolio_exposure(positions, factor)
-                pnl += factor_exposure * shock
-            
-            results[scenario_name] = pnl
-        
-        return results
-```
+## Freedom Calibration
 
-### Strategy Composition Framework
-
-```python
-class StrategyFramework:
-    """
-    D.E. Shaw's modular strategy architecture.
-    Strategies are composed from reusable components.
-    """
-    
-    def __init__(self):
-        self.alpha_models = {}
-        self.risk_models = {}
-        self.execution_models = {}
-        self.portfolio_constructors = {}
-    
-    def register_alpha_model(self, name: str, model: AlphaModel):
-        """Alpha models generate return predictions."""
-        self.alpha_models[name] = model
-    
-    def register_risk_model(self, name: str, model: RiskModel):
-        """Risk models estimate covariances and factor exposures."""
-        self.risk_models[name] = model
-    
-    def create_strategy(self, config: StrategyConfig) -> Strategy:
-        """
-        Compose a strategy from registered components.
-        """
-        alpha = self.alpha_models[config.alpha_model]
-        risk = self.risk_models[config.risk_model]
-        execution = self.execution_models[config.execution_model]
-        constructor = self.portfolio_constructors[config.portfolio_constructor]
-        
-        return ComposedStrategy(
-            alpha_model=alpha,
-            risk_model=risk,
-            execution_model=execution,
-            portfolio_constructor=constructor,
-            constraints=config.constraints,
-            risk_limits=config.risk_limits
-        )
-
-
-class ComposedStrategy:
-    """
-    A strategy composed from modular components.
-    """
-    
-    def __init__(self, alpha_model, risk_model, execution_model,
-                 portfolio_constructor, constraints, risk_limits):
-        self.alpha = alpha_model
-        self.risk = risk_model
-        self.execution = execution_model
-        self.constructor = portfolio_constructor
-        self.constraints = constraints
-        self.risk_limits = risk_limits
-    
-    def generate_trades(self, 
-                        current_positions: pd.Series,
-                        market_data: MarketData) -> List[Trade]:
-        """
-        Full strategy pipeline: alpha → portfolio → trades.
-        """
-        # 1. Generate alpha signals
-        alpha_scores = self.alpha.predict(market_data)
-        
-        # 2. Estimate risk
-        risk_estimate = self.risk.estimate(market_data)
-        
-        # 3. Construct optimal portfolio
-        target_positions = self.constructor.optimize(
-            alpha_scores=alpha_scores,
-            risk_model=risk_estimate,
-            current_positions=current_positions,
-            constraints=self.constraints,
-            risk_limits=self.risk_limits
-        )
-        
-        # 4. Generate trades to move from current to target
-        trades = self.calculate_trades(current_positions, target_positions)
-        
-        # 5. Optimize execution
-        scheduled_trades = self.execution.schedule(trades, market_data)
-        
-        return scheduled_trades
-```
-
-### Portfolio Optimization with Constraints
-
-```python
-class PortfolioOptimizer:
-    """
-    Mean-variance optimization with realistic constraints.
-    """
-    
-    def optimize(self,
-                 alpha: pd.Series,
-                 covariance: pd.DataFrame,
-                 current_positions: pd.Series,
-                 constraints: ConstraintSet) -> pd.Series:
-        """
-        Solve the quadratic programming problem:
-        
-        max: α'w - λ/2 * w'Σw - γ * ||w - w_0||^2
-        s.t.: constraints
-        """
-        n = len(alpha)
-        
-        # Objective: maximize alpha, minimize risk, minimize turnover
-        P = constraints.risk_aversion * covariance.values
-        P += constraints.turnover_aversion * np.eye(n)
-        q = -alpha.values + constraints.turnover_aversion * current_positions.values
-        
-        # Constraints
-        G, h = self.build_inequality_constraints(constraints, n)
-        A, b = self.build_equality_constraints(constraints, n)
-        
-        # Solve
-        solution = qp_solve(P, q, G, h, A, b)
-        
-        return pd.Series(solution, index=alpha.index)
-    
-    def build_inequality_constraints(self, constraints, n):
-        """
-        Build inequality constraints: Gx <= h
-        - Long-only: -w <= 0
-        - Position limits: w <= max_position
-        - Sector limits: Σw_sector <= max_sector
-        """
-        G_list = []
-        h_list = []
-        
-        if constraints.long_only:
-            G_list.append(-np.eye(n))
-            h_list.append(np.zeros(n))
-        
-        if constraints.max_position:
-            G_list.append(np.eye(n))
-            h_list.append(np.full(n, constraints.max_position))
-        
-        for sector, (assets, max_weight) in constraints.sector_limits.items():
-            row = np.zeros(n)
-            row[assets] = 1.0
-            G_list.append(row.reshape(1, -1))
-            h_list.append(np.array([max_weight]))
-        
-        return np.vstack(G_list), np.concatenate(h_list)
-    
-    def build_equality_constraints(self, constraints, n):
-        """
-        Build equality constraints: Ax = b
-        - Fully invested: Σw = 1
-        - Dollar neutral: Σw = 0
-        """
-        A_list = []
-        b_list = []
-        
-        if constraints.fully_invested:
-            A_list.append(np.ones((1, n)))
-            b_list.append(np.array([1.0]))
-        
-        if constraints.dollar_neutral:
-            A_list.append(np.ones((1, n)))
-            b_list.append(np.array([0.0]))
-        
-        if A_list:
-            return np.vstack(A_list), np.concatenate(b_list)
-        return None, None
-```
-
-## Mental Model
-
-D.E. Shaw approaches quantitative finance by asking:
-
-1. **Is this a testable hypothesis?** If not, reformulate
-2. **What's the null hypothesis?** What are we testing against?
-3. **What could go wrong?** Risk analysis before return analysis
-4. **Is it reproducible?** Can someone else replicate this result?
-5. **Will it scale?** Both computationally and economically
-
-## Signature D.E. Shaw Moves
-
-- Rigorous hypothesis testing framework
-- Multi-factor risk models
-- Modular strategy composition
-- Reproducible research pipelines
-- Extensive experiment tracking
-- Gradual position sizing and rollout
-- Cross-disciplinary hiring
-- Long-term infrastructure investment
+- High freedom:
+  Hypothesis generation, factor combinations, alternative hedges, and execution design. Explore broadly, but keep a written falsification rule and a live economics check.
+- Low freedom:
+  Timestamp handling, validation splits, borrow assumptions, cost accounting, and reporting claims. These are not creative surfaces. Use explicit gates and reject "close enough" shortcuts.

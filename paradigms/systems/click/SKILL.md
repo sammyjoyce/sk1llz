@@ -1,428 +1,122 @@
 ---
 name: click-jvm-optimization
-description: Design JIT compilers and optimize managed runtimes in the style of Cliff Click, architect of the HotSpot JVM C2 compiler and creator of sea-of-nodes IR. Emphasizes advanced compiler optimizations, intermediate representation design, and making dynamic languages fast. Use when building JIT compilers, VMs, or working on compiler backends.
-tags: jit, jvm, hotspot, optimization, compiler, garbage-collection, escape-analysis, inlining, performance, sea-of-nodes
+description: "Use for HotSpot JIT triage where C1/C2/Graal behavior, not generic Java code style, is the likely bottleneck. Applies when diagnosing deoptimization storms, code-cache saturation, tiered warmup cliffs, OSR pathologies, unstable inlining, or when deciding whether to use CompilerDirectives, CompileCommand, or source-shape changes. Keywords: click, hotspot, c1, c2, graal, deopt, osr, tiered, code cache, compiler directives, printcompilation, printinlining, logcompilation."
 ---
 
-# Cliff Click Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​​‌‌‌​‍​​​​‌‌‌​‍​​‌‌​‌​​‍​‌‌​​‌‌‌‍​​​​‌​​‌‍​‌‌​​​​‌⁠‍⁠
+# Click JVM Optimization
 
-## Overview
+This skill is for compiler economics and speculation failures. Do not use it for GC tuning, lock contention, allocator issues, socket stalls, or generic "speed up Java" work.
 
-Cliff Click was the chief architect of the HotSpot Server Compiler (C2), which made Java competitive with C++ for server workloads. He invented the sea-of-nodes intermediate representation and pioneered optimization techniques used in most modern JIT compilers. His work proved that dynamic languages could be fast.
+## Mandatory loading
 
-## Core Philosophy
+- Before changing inlining, escape-analysis behavior, deopt rate, or receiver shape, READ `references/hotspot-c2-pitfalls.md`.
+- Before discussing Sea-of-Nodes, IGVN, scheduling, or "should we build C2-like IR?" questions, READ `references/sea-of-nodes-tradeoffs.md`.
+- Do NOT load `references/sea-of-nodes-tradeoffs.md` for production incident triage. It burns context and rarely changes the first operational move.
+- Do NOT load `references/hotspot-c2-pitfalls.md` when the task is only "list active directives" or "remove a rollback flag."
 
-> "Optimization is about proving things don't happen."
+## Click mindset
 
-> "The best optimization is the one that removes code entirely."
+- Treat HotSpot as a market with four scarce resources: stable profile data, IR node budget, code-cache space, and compiler-thread time. Most regressions are one of those resources being converted into another at a loss.
+- Assume the first explanation is usually wrong. "Need more inlining" is often actually "receiver profile became megamorphic." "Need more compiler threads" is often actually "same bad speculation is being recompiled faster."
+- Optimize for reversibility first. Method-scoped control beats JVM-wide flags because it tells you which hypothesis was right without poisoning the whole process.
 
-> "A good IR makes optimizations fall out naturally."
+## Before touching anything, ask yourself
 
-Click believes that compiler optimization is fundamentally about building proofs—proving that code can be simplified, proving that operations can be reordered, proving that entire computations can be eliminated.
+### Before changing flags
 
-## Design Principles
+- Is the pain startup-only, OSR-only, or steady-state? The correct knob is different for each, and global warmup tuning often damages steady-state.
+- Is there one dominant method, or is the signal spread across many tiny methods? One hot method implies source-shape or method-scoped directives; many tiny methods usually implies code-cache or tiered-policy economics.
+- Am I debugging compilation behavior or execution behavior? If the answer is unclear, collect compile evidence first instead of editing source.
 
-1. **Sea of Nodes IR**: Data dependencies, not artificial instruction order.
+### Before changing code shape
 
-2. **Speculative Optimization**: Optimize for the common case, deoptimize when wrong.
+- Which speculation is probably failing: receiver type, nullability, range checks, uncommon branch rarity, or allocation non-escape?
+- If I "simplify" this code, will I also merge profiles that were previously separate? Manual refactors can accidentally destroy monomorphism.
+- Am I making one method hotter and more analyzable, or merely moving the same entropy around?
 
-3. **Type Speculation**: Dynamic types can be optimized like static types.
+## Path chooser
 
-4. **Escape Analysis**: Prove objects don't escape, eliminate allocations.
+- If `PrintCompilation`/JFR shows repeated invalidation or recompilation of the same method:
+  - Suspect unstable speculation or profile pollution first.
+  - First move: method-scoped logging/inlining directives, not global inlining flags.
+- If latency spikes line up with warmup, burst traffic, or loop entry:
+  - Suspect tiered/OSR behavior first.
+  - First move: determine whether the hot path is entered via normal invocation or backedge compilation.
+- If compiler queues back up or sweeper activity rises:
+  - Suspect code-cache economics first.
+  - First move: inspect cache occupancy, heap split, and sweep pressure before changing thresholds.
+- If allocation rate is high but CPU is not:
+  - Suspect failed EA or lost inlining chain.
+  - First move: verify the specific callsite or merge that killed scalar replacement.
 
-## When Building Compilers
+## The numbers that actually matter
 
-### Always
+- `CompileThreshold` is ignored when tiered compilation is enabled. Old tuning lore that starts with this flag is often targeting a JVM mode you are not running.
+- `ReservedCodeCacheSize` defaults to about `240M` with tiered compilation and about `48M` without it on modern server HotSpot builds. Segmented code cache is enabled by default only when tiering is on and the reserved cache is at least `240M`.
+- Segmented heaps are fixed-size. A small or constrained cache can shut compilation off even while another heap still has space. This is why "free code cache" is not one number.
+- `StartAggressiveSweepingAt` defaults to `10%` free space. If you only notice the issue when sweeping becomes aggressive, you are already late.
+- `BackEdgeThreshold` is tuning folklore on modern HotSpot. Oracle's code-cache guidance explicitly says it currently does nothing; if you are in a non-tiered or constrained-cache experiment, `OnStackReplacePercentage` is the OSR lever that actually matters.
+- For small codecaches, Oracle's tuning guidance treats `<5M` as a special regime where `CodeCacheMinimumFreeSpace` matters; do not push it below about `100K` unless you enjoy `VirtualMachineError` or rarer crashes.
+- `MaxInlineSize=35`, `FreqInlineSize=325`, `MaxTrivialSize=6`, and `MaxInlineLevel=9` are useful smell-test numbers, not portable truths. Confirm version-local reality with `-XX:+PrintFlagsFinal`.
+- `InlineSmallCode` is compiled native size, not bytecode size. This is the trap behind "small method, why did C2 stop inlining it on the second recompile?"
+- `MaxNodeLimit` is version-sensitive and directive-sensitive. Raising it is not a free lunch; bigger graphs make compile latency and spill behavior worse long before they help code quality.
 
-- Design IR for the optimizations you want
-- Preserve information needed for later passes
-- Make deoptimization fast and correct
-- Profile to guide optimization decisions
-- Inline aggressively (with limits)
-- Prove properties rather than assuming them
+## Preferred control surface
 
-### Never
+1. Use CompilerDirectives first for investigation or narrow mitigation.
+2. Use `CompileCommand` only when you need old-style compatibility or quick one-off repros.
+3. Use global JVM flags only when the problem is clearly process-wide.
 
-- Lose information during lowering too early
-- Optimize without profiling data
-- Make deoptimization expensive
-- Assume optimization order doesn't matter
-- Skip escape analysis for object languages
-- Ignore memory aliasing
+Why: JEP 165 makes directives runtime-manageable, method-dependent, and higher priority than `CompileCommand`, which itself overrides command-line flags. The first matching directive wins. If you mix all three layers casually, you can no longer trust the result.
 
-### Prefer
+Forced directives are not omnipotent. Even an explicit `inline` directive is still vetoed when IR growth, platform legality, or compiler safety checks say no. If a "forced" inline does not happen, suspect graph size or safety limits before assuming the directive failed to match.
 
-- Sea-of-nodes over linear IR for optimization
-- Speculative optimization with guards
-- Type feedback over static analysis alone
-- Global value numbering over local CSE
-- Loop transformations that enable vectorization
-- Incremental compilation over batch
+## Procedures experts actually use
 
-## Code Patterns
+### When the signal is noisy
 
-### Sea of Nodes IR
+1. Start with method-scoped evidence: directive `Log`, `PrintInlining`, `PrintAssembly`, or replay options on the suspect method only.
+2. Compare one warmup window and one steady-state window under the same workload shape.
+3. Only after the method stays dominant in both windows do you consider a source rewrite or wider flag.
 
-```java
-// Traditional: Linear IR with explicit order
-// t1 = load x
-// t2 = load y  
-// t3 = add t1, t2
-// store z, t3
+### When code cache is the suspect
 
-// Sea of Nodes: Graph with data dependencies only
-//
-//    Start
-//      |
-//   Memory
-//    /   \
-// Load x  Load y
-//    \   /
-//     Add
-//      |
-//    Store z
-//      |
-//     End
+1. Measure unconstrained `max_used` first; do not shrink by vibe.
+2. Then check whether pressure is in profiled or non-profiled heaps. With segmented cache, "plenty of cache left" can still mean "the heap this compilation needs is full."
+3. If the cache is intentionally small, remember that segmentation may strand space. Size heaps explicitly or reconsider segmentation before inventing new inlining folklore.
 
-class Node {
-    int opcode;
-    Node[] inputs;   // Data dependencies
-    Node[] outputs;  // Uses of this node
-    
-    // No explicit "next" instruction
-    // Order determined by dependencies
-}
+### When warmup is the complaint
 
-// Benefits:
-// - Reordering is free (just valid orderings)
-// - Dead code elimination is trivial (no outputs)
-// - Common subexpression elimination natural
-// - Control flow is just another dependency
-```
+1. Separate normal-entry compilation from OSR. They are not the same path and they do not respond equally to threshold changes.
+2. If the hot work arrives in bursts, be suspicious of background compilation lag rather than assuming the code is "cold."
+3. Prefer shaping the hot method or using scoped directives over globally lowering thresholds; otherwise you compile more junk earlier and pay in queue pressure and cache churn.
 
-### Global Value Numbering
+## Anti-patterns
 
-```java
-// Find redundant computations across entire method
+- NEVER raise global inlining limits first because the seductive story is "more inline means more optimization," but the real outcome is IR growth, longer compile times, and extra code-cache pressure that often turns a local win into a tail-latency loss. Instead do method-scoped investigation and fix the specific monomorphism or EA break.
+- NEVER tune `CompileThreshold` on a tiered production JVM because old blog posts make it look like the master heat knob, but with tiered compilation it is not driving the system you think it is. Instead inspect tiered behavior, OSR entry, and method-scoped directives.
+- NEVER disable `BackgroundCompilation` globally to "remove queue jitter" because it is seductive during debugging, but it converts compiler time directly into request latency and can manufacture p99 regressions that were not there before. Instead narrow the experiment to one method or capture compile logs.
+- NEVER shrink `ReservedCodeCacheSize` before measuring unconstrained `max_used` and heap behavior because the appealing idea is an easy footprint win, but segmented heaps can strand memory and disable compilers while another heap still has room. Instead baseline first, then constrain iteratively.
+- NEVER mix CompilerDirectives, `CompileCommand`, and global flags in the same unexplained experiment because the seductive part is "more control," but the first-match and precedence rules make attribution impossible. Instead pick one control layer per experiment and record it.
+- NEVER answer a deopt storm with more compiler threads first because queue growth makes it feel like a throughput problem, but recompiling bad speculation faster just burns cache and thread budget. Instead identify the unstable speculation and stop feeding it.
 
-class ValueNumbering {
-    Map<NodeKey, Node> valueNumbers = new HashMap<>();
-    
-    Node idealize(Node n) {
-        // Compute canonical form
-        NodeKey key = canonicalize(n);
-        
-        // Already computed this value?
-        Node existing = valueNumbers.get(key);
-        if (existing != null) {
-            return existing;  // Reuse existing computation
-        }
-        
-        valueNumbers.put(key, n);
-        return n;
-    }
-    
-    NodeKey canonicalize(Node n) {
-        // Commutative ops: sort operands
-        if (isCommutative(n.opcode)) {
-            sortInputs(n);
-        }
-        
-        // Algebraic identities
-        // x + 0 → x
-        // x * 1 → x  
-        // x & x → x
-        
-        return new NodeKey(n.opcode, n.inputs);
-    }
-}
+## Freedom calibration
 
-// In sea-of-nodes: value numbering IS the representation
-// Each unique computation exists exactly once
-```
+- High freedom: source-shape changes, specialization boundaries, manual profile separation, deciding whether Graal is a better fit than C2 for the workload.
+- Low freedom: cache sizing, global flags, compiler-thread changes, disabling background compilation, or anything that changes the entire JVM's economics.
+- If the proposed move is global and not trivially reversible, ask for approval after presenting the specific metric that justifies it.
 
-### Speculative Optimization with Guards
+## Decision heuristics that take years to internalize
 
-```java
-// Optimize for observed types, guard against others
+- If the same method keeps recompiling, do not ask "how do I make HotSpot optimize harder?" Ask "what assumption keeps becoming false?" The answer is usually outside the method body.
+- If code-cache pressure appears only after a successful warmup, suspect tiered leftovers or lifetime mismatch between profiled and non-profiled code, not just "too much code."
+- If a microbenchmark says an inlining tweak wins but production gets worse, suspect tenant-mix polymorphism or different branch rarity. Production profiles are often broader than lab profiles.
+- If C2 keeps losing on allocation-heavy functional code, the right answer may be Graal's partial escape analysis rather than more flag surgery on C2.
+- If a loop is hot only through OSR, source-shape cleanup is usually safer than aggressive threshold lowering; OSR wins can mask a poor normal-entry path and create misleading success.
 
-void compileCallSite(CallSite site, ProfileData profile) {
-    if (profile.isMonomorphic()) {
-        // 95% of calls go to one method
-        Class<?> observedType = profile.getObservedType();
-        
-        // Emit optimized code with guard
-        emitTypeCheck(observedType);      // Guard
-        emitDirectCall(observedType);     // Inline opportunity!
-        emitDeoptimize();                 // Uncommon trap
-        
-    } else if (profile.isBimorphic()) {
-        // Two types observed
-        emitTypeSwitch(profile.getTypes());
-        // Inline both paths
-        
-    } else {
-        // Megamorphic: fall back to virtual dispatch
-        emitVirtualCall();
-    }
-}
+## When to stop tuning and change strategy
 
-// Key insight: wrong guesses don't crash
-// They just deoptimize and continue in interpreter
-```
-
-### Escape Analysis
-
-```java
-// Prove object doesn't escape → eliminate allocation
-
-class EscapeAnalysis {
-    boolean canEliminate(AllocationNode alloc) {
-        // Track all uses of the allocation
-        Set<Node> uses = alloc.getTransitiveUses();
-        
-        for (Node use : uses) {
-            if (escapes(alloc, use)) {
-                return false;
-            }
-        }
-        
-        return true;  // Safe to scalar replace
-    }
-    
-    boolean escapes(AllocationNode alloc, Node use) {
-        // Escapes if:
-        // - Stored to heap (another object's field)
-        // - Passed to unknown method
-        // - Returned from method
-        // - Stored to static field
-        // - Used in synchronization
-        
-        if (use instanceof StoreField) {
-            StoreField sf = (StoreField) use;
-            return sf.getObject() != alloc;  // Storing TO another object
-        }
-        
-        if (use instanceof Call) {
-            Call call = (Call) use;
-            return !isInlinedCall(call);
-        }
-        
-        // ... other escape conditions
-        return false;
-    }
-}
-
-// Scalar replacement: object fields become local variables
-// Point p = new Point(x, y);
-// return p.x + p.y;
-// 
-// Becomes:
-// int p_x = x;
-// int p_y = y;
-// return p_x + p_y;
-// 
-// No allocation!
-```
-
-### Loop Optimizations
-
-```java
-// Loop transformations for performance
-
-class LoopOptimizations {
-    
-    void optimizeLoop(LoopNode loop) {
-        // 1. Loop invariant code motion
-        // Move computations out of loop if they don't change
-        for (Node n : loop.getBody()) {
-            if (isLoopInvariant(n, loop)) {
-                moveBeforeLoop(n, loop);
-            }
-        }
-        
-        // 2. Induction variable analysis
-        // Recognize i++, i += stride patterns
-        InductionVar iv = findInductionVariable(loop);
-        
-        // 3. Range check elimination
-        // array[i] where 0 <= i < array.length
-        // Hoist bounds check outside loop
-        if (canEliminateRangeCheck(loop, iv)) {
-            hoistRangeCheck(loop, iv);
-        }
-        
-        // 4. Loop unrolling
-        // Reduce loop overhead, enable more optimization
-        if (shouldUnroll(loop)) {
-            unroll(loop, UNROLL_FACTOR);
-        }
-        
-        // 5. Vectorization
-        // Process multiple iterations with SIMD
-        if (canVectorize(loop)) {
-            vectorize(loop);
-        }
-    }
-}
-```
-
-### Deoptimization Infrastructure
-
-```java
-// Fast path to slow path transition
-
-class Deoptimization {
-    // Deopt point: return to interpreter with correct state
-    
-    static class DeoptInfo {
-        int bci;                    // Bytecode index
-        Object[] locals;            // Local variable values
-        Object[] stack;             // Stack values  
-        Object[] monitors;          // Held locks
-    }
-    
-    void deoptimize(DeoptInfo info) {
-        // 1. Rebuild interpreter frame
-        InterpreterFrame frame = new InterpreterFrame();
-        frame.setBCI(info.bci);
-        frame.setLocals(info.locals);
-        frame.setStack(info.stack);
-        
-        // 2. Re-acquire monitors
-        for (Object monitor : info.monitors) {
-            monitorEnter(monitor);
-        }
-        
-        // 3. Resume in interpreter
-        // (Much slower, but correct)
-        interpreter.execute(frame);
-        
-        // 4. Maybe recompile with new profile info
-        // The failed speculation taught us something
-    }
-}
-
-// Key: compiled code can ALWAYS return to interpreter
-// This makes speculative optimization safe
-```
-
-### Type Feedback System
-
-```java
-// Collect runtime type information
-
-class TypeProfile {
-    // At each call site, track observed receiver types
-    TypeProfileEntry[] receivers = new TypeProfileEntry[2];
-    int count;
-    
-    void recordType(Class<?> type) {
-        for (int i = 0; i < count; i++) {
-            if (receivers[i].type == type) {
-                receivers[i].count++;
-                return;
-            }
-        }
-        
-        if (count < receivers.length) {
-            receivers[count++] = new TypeProfileEntry(type, 1);
-        } else {
-            // Too many types: mark megamorphic
-            morphism = MEGAMORPHIC;
-        }
-    }
-    
-    OptimizationHint getHint() {
-        if (count == 1 && receivers[0].count > THRESHOLD) {
-            return new Monomorphic(receivers[0].type);
-        }
-        if (count == 2) {
-            return new Bimorphic(receivers[0].type, receivers[1].type);
-        }
-        return MEGAMORPHIC;
-    }
-}
-
-// Profile-guided optimization:
-// 1. Run in interpreter, collect profiles
-// 2. Compile hot methods with profile data
-// 3. Speculate based on observed types
-// 4. Deoptimize if speculation wrong
-// 5. Recompile with updated profile
-```
-
-### Register Allocation
-
-```java
-// Graph coloring register allocation
-
-class RegisterAllocator {
-    void allocate(Graph graph) {
-        // Build interference graph
-        // Two values interfere if both live at same point
-        InterferenceGraph ig = buildInterferenceGraph(graph);
-        
-        // Color graph with K colors (K = register count)
-        // Adjacent nodes get different colors
-        Map<Node, Integer> coloring = colorGraph(ig);
-        
-        // Handle spills
-        // If can't color, spill some values to stack
-        while (coloring == null) {
-            Node toSpill = selectSpillCandidate(ig);
-            insertSpillCode(toSpill);
-            ig = rebuild(ig, toSpill);
-            coloring = colorGraph(ig);
-        }
-        
-        // Assign physical registers
-        for (Map.Entry<Node, Integer> e : coloring.entrySet()) {
-            e.getKey().setRegister(physicalRegister(e.getValue()));
-        }
-    }
-}
-```
-
-## JIT Compilation Philosophy
-
-```
-Tiered Compilation Strategy
-══════════════════════════════════════════════════════════════
-
-Tier    Compiler    Optimization    When Used
-────────────────────────────────────────────────────────────
-0       Interpreter None           First execution
-1       C1 (Client) Light          Moderate hotness
-2       C2 (Server) Aggressive     Very hot methods
-
-Compilation triggers:
-- Method entry count threshold
-- Loop back-edge count threshold
-- On-stack replacement for hot loops
-
-Key insight: Most code is cold
-            Compile only what matters
-            Quick startup, peak performance eventually
-```
-
-## Mental Model
-
-Click approaches compiler design by asking:
-
-1. **What can I prove?** Optimizations are proofs
-2. **What's the common case?** Speculate on it
-3. **What information do I need?** Preserve it in the IR
-4. **What can be eliminated?** The fastest code is no code
-5. **How do I recover when wrong?** Deoptimization must work
-
-## Signature Click Moves
-
-- **Sea-of-nodes IR**: Dependencies, not artificial order
-- **Speculative optimization**: Bet on the common case
-- **Escape analysis**: Eliminate allocations entirely
-- **Global value numbering**: One computation per value
-- **Profile-guided optimization**: Runtime feedback guides compilation
-- **Tiered compilation**: Quick startup, peak performance later
-- **Deoptimization**: Safe return to interpreter
-- **Loop optimizations**: Range checks, unrolling, vectorization
+- Stop and switch to source-shape work if the issue is one callsite becoming megamorphic or one merge killing EA.
+- Stop and switch to cache economics if multiple unrelated methods look fine individually but queues and sweeps stay unhealthy.
+- Stop and consider Graal if the dominant loss is flow-sensitive allocation elimination that C2 structurally does not do well.
+- Stop and revert if a change improves throughput but worsens recompile rate, queue depth, or p99. Click-style tuning treats those as real costs, not acceptable collateral.

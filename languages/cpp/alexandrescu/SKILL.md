@@ -1,235 +1,116 @@
 ---
 name: alexandrescu-modern-cpp-design
-description: Write C++ code following Andrei Alexandrescu's Modern C++ Design principles. Emphasizes policy-based design, template metaprogramming, and type-safe generic abstractions. Use when designing flexible, reusable libraries or when compile-time computation beats runtime overhead.
-tags: templates, metaprogramming, generic-programming, policy-design, smart-pointers, move-semantics, patterns
+description: "Write C++ in the Alexandrescu / Modern C++ Design tradition, but with the hard-won trade-offs experts use in C++20/23: when policy-based design is worth the API fracture, when it must be replaced by type erasure or named sibling types, and how to avoid the layout, ABI, propagation, and compile-time traps that policy-heavy libraries create. Use when designing generic libraries, deciding whether a behavior belongs in a template parameter, refactoring inheritance into orthogonal policies, reviewing Loki-style code, choosing between policies / CRTP / type erasure / `if constexpr`, or when the user mentions Alexandrescu, Loki, policy-based design, typelists, custom deleters, `[[no_unique_address]]`, or template metaprogramming trade-offs."
+tags: policy-based-design, templates, metaprogramming, generic-programming, c++20, c++23, concepts, ebco, type-erasure, crtp
 ---
 
-# Andrei Alexandrescu Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌​​‌‌​‍‌​​‌‌‌​‌‍‌​​‌‌‌‌‌‍‌‌​​​​‌​‍​​​​‌​‌​‍‌‌​​‌‌‌​⁠‍⁠
+# Alexandrescu — Policy-Based Design (C++)
 
-## Overview
+## Load map
 
-Andrei Alexandrescu's "Modern C++ Design" revolutionized how we think about C++ templates. His work on Loki library and policy-based design showed that templates are not just for containers—they're a compile-time programming language.
+- Stay in this file for: "should this even be a policy?", public-API triage, ABI/boundary review, and code-review comments.
+- Before refactoring a real class into policies, READ [`references/decomposing-policies.md`](references/decomposing-policies.md).
+- Before translating Loki-era machinery (`TypeList`, `Int2Type`, scatter hierarchies, SFINAE probes) into shipping C++20/23, READ [`references/modern-replacements.md`](references/modern-replacements.md).
+- Do NOT load either reference for a boundary question (`DLL`, plugin, module, stable SDK, serialized type, vocabulary type). Those decisions are made here, and the answer is usually "hide the policy."
 
-## Core Philosophy
+## Core law
 
-> "C++ templates are Turing-complete. Use this power wisely."
+Policy-based design is compile-time dependency injection for decisions that are already static inside one build. The win is not "flexibility"; the win is removing a runtime branch without making the user's type vocabulary explode.
 
-> "Policy-based design: assemble types from interchangeable parts."
+Every policy parameter creates four costs at once:
 
-Alexandrescu believes in **pushing computation to compile time** and **using the type system as a design tool**, not just a safety mechanism.
+1. A new type identity.
+2. A new instantiation family.
+3. A new layout/ABI possibility.
+4. A new support matrix entry.
 
-## Design Principles
+If the generated code gets faster but the public API becomes a set of incompatible islands, you did not get zero-cost abstraction. You moved the cost onto every caller.
 
-1. **Policy-Based Design**: Build classes from interchangeable policy classes that customize behavior without inheritance overhead.
+## Choose the weapon before you write a template parameter
 
-2. **Compile-Time over Runtime**: What can be computed at compile time should be.
+Use this decision ladder:
 
-3. **Type Lists and Metaprogramming**: Types themselves become first-class citizens that can be manipulated.
+- Need the choice to vary at runtime per object or per request? Use runtime configuration, virtual dispatch, or type erasure. Not a policy.
+- Need a local compile-time branch inside one implementation, but not a public type distinction? Use a tag + `if constexpr`.
+- Need to mix behavior into an internal implementation type where the host never crosses an API boundary? A policy may be appropriate.
+- Need open-ended extension across DLLs/plugins/teams? Use type erasure or a stable interface. Template identity is the wrong currency.
+- Need self-referential static mixins on a closed hierarchy? CRTP. Do not dress CRTP up as a policy just because both use templates.
 
-4. **Design Patterns in Types**: Classic GoF patterns implemented with zero runtime overhead.
+Counterintuitive rule: if the hot path already pays for heap allocation, I/O, RPC, or an indirect call, the public template parameter is usually wasted. Erase the variation and keep the type stable.
 
-## When Writing Code
+## Before adding a policy, ask yourself
 
-### Always
+1. Does this vary inside one shipping binary, or only between builds? If only between builds, hardcode/configure it and stop.
+2. Are there at least two implementations in-tree today? If not, delete the parameter. "Someday" is not an axis.
+3. Will values of this host cross a public boundary: DLL/plugin, shared library ABI, module interface, serialized format, or team-to-team SDK? If yes, the policy must not leak.
+4. Is the host a vocabulary type (`optional`, `variant`, handle, string-like, span-like, result/expected, smart pointer)? If yes, assume policy exposure is a mistake until proven otherwise.
+5. Does this axis change layout, exception guarantees, allocator propagation, or move-cost? If yes, it is not "just an implementation detail"; callers will feel it.
+6. Do you already have more than 3 orthogonal axes, or more than about 8 supported combinations? If yes, you are designing a product matrix, not a class.
+7. Can the same effect be achieved by a trait that maps `T -> canonical policy`? If yes, prefer the trait. It prevents `Foo<A>` and `Foo<B>` from coexisting for the same logical `T`.
 
-- Consider if behavior can be a compile-time policy
-- Use `static_assert` to document and enforce requirements
-- Prefer tag dispatching over runtime branching for type-based logic
-- Make templates SFINAE-friendly (C++11/14) or use concepts (C++20)
-- Document template requirements explicitly
+## Where policy-based design still pays
 
-### Never
+- Internal containers, parsers, allocators, and ownership kernels where the host never becomes a shared vocabulary type.
+- Storage/layout policies where branch removal changes codegen materially.
+- Checking, threading, or error-reporting strategies on types that stay inside one subsystem.
+- Fixed, closed sets of combinations that you can benchmark, assert on, and explicitly support.
 
-- Use runtime polymorphism when static polymorphism suffices
-- Write duplicate code that differs only in types
-- Ignore compile-time computation opportunities
-- Leave template errors to become cryptic instantiation failures
+## Where it usually loses
 
-### Prefer
+- Public vocabulary types. `basic_optional<T, Policy>` and `basic_variant<Ts..., Policy>` fracture every API boundary they touch.
+- Custom deleter/allocator choices on public smart-pointer or container APIs. `std::unique_ptr<T, D>` is the cautionary example: the deleter is part of the type, unlike `shared_ptr<T>`.
+- ABI boundaries. Policy-heavy headers are hostile to stable SDKs and plugin systems.
+- Large codebases with many teams. Once callers start templating on your policy-composed type, you have exported your implementation matrix.
 
-- Policy classes over strategy pattern (no vtable)
-- Type traits over runtime type checking
-- `constexpr` functions over template metafunctions (modern C++)
-- Concepts over SFINAE (C++20)
-- Variadic templates over recursive type lists (modern C++)
+## Operating procedure when a policy is justified
 
-## Code Patterns
+1. First classify the axis as static-per-build, static-per-type, or runtime-per-object. Only the middle bucket is policy territory.
+2. If you are decomposing an existing class, READ [`references/decomposing-policies.md`](references/decomposing-policies.md) before you sketch the first template parameter.
+3. Write down the public consequences of the axis: type identity, layout, `sizeof`, `noexcept` move/copy, and whether values with different choices must interoperate.
+4. Write the concept from the call site outward. If the concept exposes details of your first implementation, you have already overfit the policy.
+5. Implement the cheapest stateless policy first. Then assert the invariants you are selling: `sizeof`, alignment, and `noexcept` move if those matter.
+6. If the type will be instantiated in many TUs, count actual combinations used in production. For a small fixed set, ship named aliases and consider explicit/`extern template` instantiation for the hot combinations. For an open set, erase the boundary instead.
+7. If the task is syntax modernization rather than design triage, READ [`references/modern-replacements.md`](references/modern-replacements.md). Do not spend main-skill tokens on typelist archaeology.
 
-### Policy-Based Design
+## Advanced heuristics practitioners actually use
 
-```cpp
-// Traditional OOP: Runtime overhead, fixed at compile time anyway
-class Widget : public ICreationPolicy, public IThreadingPolicy { /* ... */ };
+- A policy is only "orthogonal" if swapping it does not force a different choice elsewhere. If `ThreadingModel` constrains iterator invalidation or allocator rules, you do not have two axes; you have one larger policy.
+- The moment a policy changes observable move behavior, it stops being cosmetic. `std::pmr` is the canonical trap: one static type, but allocator propagation rules can make move-assignment copy/throw and make swap on unequal resources undefined.
+- For custom deleters, measure object size before you debate elegance. On 64-bit, a function-pointer deleter typically makes `unique_ptr` two machine words; a `std::function` deleter is commonly around 40 bytes. A stateless function object can stay pointer-sized.
+- `[[no_unique_address]]` is a layout hint, not a portable ABI promise. It may reuse tail padding, two same-type empty roles still need distinct identity, and MSVC historically accepts the standard spelling while only the vendor spelling has effect.
+- If you can describe one axis only as "implementation detail users might want to override," you are probably looking at a trait or a private helper, not a policy.
 
-// Policy-Based: Zero overhead, infinitely configurable
-template <
-    class CreationPolicy,
-    class ThreadingPolicy = SingleThreaded,
-    class CheckingPolicy = NoChecking
->
-class SmartPtr : public CreationPolicy, 
-                 public ThreadingPolicy,
-                 public CheckingPolicy {
-    // Policies are mixed in, no vtable
-};
+## NEVER list
 
-// Usage: Configure at compile time
-using ThreadSafePtr = SmartPtr<HeapCreation, MultiThreaded, AssertCheck>;
-using FastPtr = SmartPtr<HeapCreation, SingleThreaded, NoChecking>;
+- NEVER expose a policy parameter on a vocabulary type because the seductive "someone may need a custom allocator/checker later" turns one concept into multiple incompatible types. Instead do one of: hardcode the implementation, ship 2-3 explicitly named sibling types, or erase the variation behind a stable facade.
 
-// Policies are just classes with required interface
-struct HeapCreation {
-    template<class T>
-    static T* Create() { return new T; }
-    
-    template<class T>
-    static void Destroy(T* p) { delete p; }
-};
+- NEVER ship a policy-composed type across DLL, plugin, or stable-SDK boundaries because template identity and layout are compiler- and flag-dependent, which makes ABI drift a release-management problem. Instead do PIMPL, a C-like handle, or type erasure at the boundary and keep policies inside the implementation.
 
-struct SingleThreaded {
-    struct Lock {
-        Lock() = default;  // No-op
-    };
-};
+- NEVER treat `std::pmr` as a free cure for allocator-policy fracture because the static type becomes uniform while allocator propagation semantics still leak into move/swap behavior, so "cheap move" can quietly become copy-and-throw. Instead do `pmr` only when that propagation model matches the subsystem, or define a named allocator-aware type whose static and dynamic rules are explicit.
 
-struct MultiThreaded {
-    struct Lock {
-        Lock() { /* acquire mutex */ }
-        ~Lock() { /* release mutex */ }
-    };
-};
-```
+- NEVER inherit from policies in new C++20/23 code because EBCO-by-inheritance is seductive but fails on `final` policies, collides on duplicate empty roles, and drags base-class semantics into traits and diagnostics. Instead do `[[no_unique_address]]` members behind a portability macro and give duplicate roles distinct wrapper tags.
 
-### Type Traits and SFINAE
+- NEVER build a policy-based owning pointer that auto-upcasts between unrelated deletion contracts because it feels flexible but recreates the exact `unique_ptr` hazard WG21 is still tightening: deleting through a base without a safe deletion contract, plus incomplete-type edge cases. Instead do conversion only when a delete-safety concept is satisfied, or erase/share ownership at the boundary.
 
-```cpp
-// Type trait: Does T have a serialize() method?
-template<typename T, typename = void>
-struct has_serialize : std::false_type {};
+- NEVER add a policy that has only one real implementation because speculative flexibility is seductive and permanent, while the concrete consequence is longer diagnostics, more instantiations, and an API break when you later try to remove it. Instead hardcode it and add the parameter only when implementation #2 ships.
 
-template<typename T>
-struct has_serialize<T, 
-    std::void_t<decltype(std::declval<T>().serialize())>
-> : std::true_type {};
+- NEVER assume empty policies are free because same-type empty subobjects must still have distinct identity and "small" runtime state in a policy often destroys the layout guarantees you were counting on. Instead measure `sizeof`, add `static_assert`s for the stateless cases you support, and move real state either into the host or into a runtime-erased strategy object.
 
-// Use it for conditional behavior
-template<typename T>
-auto save(const T& obj) -> std::enable_if_t<has_serialize<T>::value> {
-    obj.serialize();
-}
+- NEVER promise exact object layout when `[[no_unique_address]]` is involved because the attribute is intentionally permissive and implementations differ, especially on MSVC. Instead promise only the properties you verify in CI: size ceilings, alignment, and move/noexcept invariants.
 
-template<typename T>
-auto save(const T& obj) -> std::enable_if_t<!has_serialize<T>::value> {
-    default_serialize(obj);
-}
+## Failure signature -> likely fix
 
-// C++20: Much cleaner with concepts
-template<typename T>
-concept Serializable = requires(T t) {
-    { t.serialize() } -> std::convertible_to<std::string>;
-};
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Callers template every function on your host type | Policy leaked into vocabulary/API space | Accept via views, iterators, handles, or erase the boundary |
+| `3 x 3 x 3 x 3` axes already exist on paper | You are in combinatorial hell before `T` even enters the picture | Collapse coupled axes, hardcode one, or expose named variants instead of all combinations |
+| `sizeof(Foo)` jumps on one compiler or after a user-supplied policy | EBCO collapsed (`final`, duplicate empty role, or ignored `[[no_unique_address]]`) | Use member storage + portability macro + tagged roles + size asserts |
+| Move assignment of allocator-aware objects copies or can throw unexpectedly | `pmr`/propagation semantics, not type identity, are now the bottleneck | Pre-seed compatible allocators, or stop using `pmr` as the public customization surface |
+| Build times or debug-info size spike after "just one more policy" | Instantiation matrix went nonlinear | Alias the supported combos, explicitly instantiate hot ones, erase the rest |
+| Diagnostics are unreadable | Concepts were replaced by SFINAE or the concept names implementation trivia | Rewrite the contract as a small named concept that reflects the axis, not the first policy |
 
-void save(Serializable auto const& obj) {
-    obj.serialize();
-}
-```
+## Final gut check
 
-### Compile-Time Type Lists (Classic Alexandrescu)
-
-```cpp
-// Type list: A compile-time list of types
-template<typename... Ts>
-struct TypeList {};
-
-// Operations on type lists
-template<typename List>
-struct Length;
-
-template<typename... Ts>
-struct Length<TypeList<Ts...>> {
-    static constexpr size_t value = sizeof...(Ts);
-};
-
-// Get type at index
-template<size_t I, typename List>
-struct TypeAt;
-
-template<typename Head, typename... Tail>
-struct TypeAt<0, TypeList<Head, Tail...>> {
-    using type = Head;
-};
-
-template<size_t I, typename Head, typename... Tail>
-struct TypeAt<I, TypeList<Head, Tail...>> {
-    using type = typename TypeAt<I - 1, TypeList<Tail...>>::type;
-};
-
-// Usage
-using MyTypes = TypeList<int, double, std::string>;
-static_assert(Length<MyTypes>::value == 3);
-using Second = TypeAt<1, MyTypes>::type;  // double
-```
-
-### Visitor Pattern via Templates
-
-```cpp
-// Traditional visitor: Virtual dispatch at every node
-// Alexandrescu approach: Static visitor with type list
-
-template<typename... Types>
-class Variant;
-
-template<typename Visitor, typename Variant>
-auto visit(Visitor&& v, Variant&& var) {
-    return var.visit(std::forward<Visitor>(v));
-}
-
-// Modern C++ (std::variant does this)
-using Value = std::variant<int, double, std::string>;
-
-auto result = std::visit(overloaded{
-    [](int i) { return std::to_string(i); },
-    [](double d) { return std::to_string(d); },
-    [](const std::string& s) { return s; }
-}, value);
-
-// The 'overloaded' helper (Alexandrescu-style)
-template<class... Ts> 
-struct overloaded : Ts... { 
-    using Ts::operator()...; 
-};
-template<class... Ts> 
-overloaded(Ts...) -> overloaded<Ts...>;
-```
-
-## Mental Model
-
-Alexandrescu thinks of C++ templates as a **compile-time functional language**:
-
-1. **Types as values**: Types can be computed, stored, and transformed
-2. **Templates as functions**: Template instantiation is function application
-3. **Specialization as pattern matching**: Like case statements on types
-4. **Recursion for iteration**: Compile-time loops via recursive templates
-
-## The D Language Connection
-
-Alexandrescu later co-designed D, which incorporates many C++ template lessons:
-- Built-in compile-time function execution
-- String mixins for code generation
-- Better error messages for templates
-
-These ideas now appear in modern C++ (`constexpr`, `if constexpr`, concepts).
-
-## When to Apply
-
-Use Alexandrescu's techniques when:
-- You need maximum performance (zero runtime overhead)
-- Behavior variations are known at compile time
-- You're building a library with many configuration options
-- Type-based dispatch is frequent
-
-Avoid when:
-- Runtime polymorphism is genuinely needed
-- Compile times are already problematic
-- Team isn't comfortable with template metaprogramming
-
+- If deleting one template parameter keeps the tests green, delete it.
+- If two policy choices are never mixed in one process, prefer separate named types over one mega-template.
+- If callers need interoperability more than they need branch-free codegen, choose stable type identity over policy purity.

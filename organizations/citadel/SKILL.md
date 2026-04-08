@@ -1,380 +1,87 @@
 ---
 name: citadel-low-latency-systems
-description: Build trading systems in the style of Citadel Securities, the world's largest market maker. Emphasizes ultra-low latency, deterministic execution, kernel bypass networking, and high-frequency trading infrastructure. Use when building latency-critical systems, market making engines, or high-performance trading platforms.
-tags: trading, low-latency, market-making, hft, fpga, networking, systems, performance, finance, real-time
+description: Engineer trading and market-data paths for tail-latency rather than benchmark vanity metrics. Use when requests mention sub-microsecond or jitter-sensitive systems, market making, order gateways, feed handlers, DPDK, Onload, AF_XDP, busy polling, NUMA pinning, interrupt coalescing, or NIC/CPU topology.
+tags: trading, low-latency, market-making, hft, dpdk, onload, af-xdp, numa, networking, real-time
 ---
 
-# Citadel Securities Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​​​​‌​‍‌​​‌‌‌‌‌‍‌‌​​​‌‌‌‍​‌​‌​​‌‌‍​​​​‌​‌​‍​​‌​​‌​‌⁠‍⁠
+# Citadel Low Latency Systems
 
-## Overview
+This skill is for systems where `p99.99` matters more than average throughput. Default stance: assume the first regression is topology or coherency, not algorithmic complexity.
 
-Citadel Securities is the world's largest market maker, handling ~25% of all U.S. equity volume and ~40% of retail order flow. They execute millions of trades daily with sub-microsecond latency requirements. Their infrastructure represents the pinnacle of low-latency systems engineering.
+## Mandatory Context
 
-## Core Philosophy
+- Before changing NIC queues, coalescing, or busy polling, read the vendor NIC tuning guide and Linux NAPI busy-poll docs for that exact stack.
+- Before changing C-state or isolation policy, read the kernel docs for `nohz_full`, `rcu_nocbs`, and PM QoS.
+- Before using Solarflare/Onload `latency-best` profiles, read the vendor warning: copy the profile, rename it, and tune the copy; the shipped profile can change between releases.
+- Do not load generic HFT explainers, "what is DPDK" material, or textbook lock-free primers for this task. They add almost no decision value.
 
-> "Every microsecond is a competitive advantage."
+## Operating Mindset
 
-> "Determinism is more important than average performance."
+Before touching code, ask yourself:
 
-> "The fastest system is the one that doesn't do unnecessary work."
+- **Budget ownership:** Where does each `100 ns` go: NIC DMA, cache miss, queue handoff, wakeup, serialization, or risk check?
+- **Topology first:** Is the NIC, IRQ, polling thread, and memory on the same socket? If not, you are usually benchmarking UPI traffic, not your code.
+- **Tail source:** Is the problem constant overhead or rare spikes? Constant overhead wants cache and branch work; spikes want power, firmware, paging, and IRQ analysis.
+- **Wait strategy:** Is this path supposed to spin, busy-poll, or sleep? Mixing strategies usually creates bimodal latency.
+- **Coherency path:** Which cache line is bouncing between core and core, or device and core? "Lock-free" is irrelevant if producer and consumer indexes share a line.
+- **Freedom rule:** For architecture, reason from principles. For production tuning, change one knob per run and hold traffic shape, core placement, and message size constant.
 
-Citadel believes that in market making, consistent low latency beats occasionally fast. Jitter is the enemy. Every component must be predictable and measurable.
+## Decision Tree
 
-## Design Principles
+1. If `p50` and `p99` are fine but `p99.99` has millisecond spikes, suspect firmware or memory management before rewriting hot code.
+   Check SMIs with `hwlat`, THP/compaction, package C-states, thermal throttling, and stray housekeeping threads.
+2. If throughput is acceptable but latency explodes under load, suspect batching.
+   Shrink burst sizes, coalescing windows, and queue depths before touching parsing logic.
+3. If one socket performs well and another is bad, stop.
+   Move the NIC, IRQ affinity, thread pinning, and memory allocation to the same socket before any micro-optimization.
+4. If Linux sockets are mandatory and socket count is modest, prefer selective busy-poll over full kernel bypass.
+   Kernel `busy_read=50` is the documented starting point; for several hundred sockets `busy_poll=100` is reasonable, and beyond that you usually want epoll with NAPI-aware placement.
+5. If you already spin in user space, do not also chase zero interrupt moderation blindly.
+   Onload's own spinning guidance pairs `EF_POLL_USEC=100000` with `rx-usecs 60 adaptive-rx off` specifically to avoid interrupt floods while user space is already polling.
+6. If ideal locality is impossible in production, do not pretend software can hide it.
+   Fall back to the simplest stable model: fixed interrupt moderation plus explicit queue affinity. Accept the median hit instead of shipping a fragile half-spin system with worse tails.
 
-1. **Latency is King**: Measure in microseconds, optimize in nanoseconds.
+## Heuristics That Actually Matter
 
-2. **Determinism Over Speed**: Predictable performance beats variable performance.
+- DPDK default burst sizes hide MMIO cost, but the first packet waits for the rest of the burst. `burst=1` lowers latency because the TX tail is advanced immediately; `burst=16` is a throughput play.
+- Same-socket DDIO locality is not optional. Intel's published example shows local forwarding at about `112 ns` inbound PCIe read latency and `135 ns` write latency, versus `320 ns` and `240 ns` when the forwarding core runs on the wrong socket, with throughput dropping from `21.1` to `17.1 Mpps` and `12.6 GB/s` of wasted UPI traffic.
+- Bigger rings are not "safer" by default. They reduce drops, but they also lengthen queueing time and can evict hot DDIO lines. When `rx_dropped` rises, first ask whether CPU is actually saturated; if not, lower interrupt moderation or shorten the burst before inflating ring depth.
+- Mempool recycling is a cache policy, not just an allocator detail. Disabling DPDK mempool cache (`--mbcache=0`) raised inbound PCIe write latency from `135 ns` to `178 ns` and reduced throughput in Intel's test because the NIC stopped landing into warm packet-ring cache lines.
+- `mlockall()` is necessary but insufficient. You also need prefaulting. Otherwise the first live packet pays the page-fault tax and page-table population cost, which shows up as "random" warmup jitter.
+- Transparent Huge Pages are hostile to low-latency hot paths when the working set is fragmented or short-lived. Red Hat documents cases where large allocations normally below `0.8 s` spiked to `90 s`, and separate NUMA-node slowdowns of about `10%`, because THP scanning and compaction kicked in. Use explicit hugepages for pinned, long-lived rings; set THP to `never` on trading hosts unless you have hard evidence it helps.
+- `isolcpus` alone is not isolation. `nohz_full` and `rcu_nocbs` are what stop scheduler ticks and RCU callbacks from landing on your trading cores. Also remember `nohz_full` cannot keep the boot CPU isolated, so plan a housekeeping core on purpose.
+- `idle=poll` is a trap of last resort. Kernel docs explicitly warn it can overheat the CPU, induce thermal throttling, and even disable Turbo, which can leave tail latency worse than dynticks. Prefer PM QoS via `/dev/cpu_dma_latency` or `intel_idle.max_cstate` limits first. Also remember PM QoS disappears when the file descriptor closes.
+- RDTSC is not ordered. If you time tiny code sections with raw `rdtsc`, you are often timing speculation. Use `rdtscp` or fenced `rdtsc`, verify invariant TSC, and do not compare measurements across sockets or VMs until clock behavior is proven.
+- Seqlocks are only for rarely-written, pointer-free snapshots. Under heavy reader pressure they can starve or deadlock writers on RT-style scheduling, and any embedded pointer can become invalid mid-read. For market-data snapshots, use fixed-size POD copies with one writer, or RCU-style indirection if pointers are unavoidable.
+- False sharing hides inside "embarrassingly parallel" code. Intel's example shows a `512 B` object with `59 cycles` average access latency because `64 B` per-thread elements crossed cacheline boundaries. Align the array base, not just the struct type.
+- Busy-poll epoll only works if all FDs in that epoll instance share a NAPI ID. If you scatter flows arbitrarily across workers, the kernel cannot keep the polling loop local. Use `SO_INCOMING_NAPI_ID`, `SO_REUSEPORT`, or BPF flow steering to preserve queue/thread affinity.
+- `gro_flush_timeout` is a balancing knob, not a free win. Too large improves batching but adds unloaded latency; too small lets hardware IRQs fight the user-space busy-poll loop. Tune it only while observing both tail latency and CPU interference.
 
-3. **Kernel Bypass**: The OS is too slow; go around it.
+## NEVER Rules
 
-4. **Lock-Free Everything**: Locks are latency landmines.
+- NEVER optimize average latency before tail latency because trading losses come from the rare queue stall, not the pretty median. Instead instrument `p50/p99/p99.9/p99.99`, drops, IRQ rate, and temperature on every run.
+- NEVER move only the thread and forget the memory because remote packet rings turn every DMA completion into coherency traffic. Instead pin thread, IRQ, hugepages, and NIC to the same socket as a unit.
+- NEVER copy vendor `latency-best` profiles directly into production because they can be experimental and may change between releases. Instead clone, rename, and benchmark your own pinned version.
+- NEVER disable all interrupt moderation just because a benchmark got faster because once a spinning stack starts flood-interrupting, CPU time disappears into IRQ churn. Instead decide whether the stack is interrupt-driven or spin-driven, then tune coalescing for that single model.
+- NEVER trust a lock-free queue that shares producer/consumer counters or status bits on the same cache line because coherency traffic recreates the lock you thought you removed. Instead separate hot writer-owned and reader-owned fields by cache line and verify with hardware counters.
+- NEVER use THP as a blanket "bigger pages are faster" rule because compaction and NUMA balancing can inject multi-millisecond stalls far away from the allocation site. Instead use explicit hugepages only for preallocated buffers whose lifetime and placement you control.
+- NEVER blame application code first when you see isolated millisecond spikes because SMIs run below the kernel and are invisible to normal profilers. Instead reproduce on an idle host and check with `hwlat` off-production.
+- NEVER present TSC numbers as nanoseconds without verifying clock invariance and serialization because the result is numerically precise but physically false. Instead report both cycles and the exact conversion assumption.
 
-5. **Mechanical Sympathy**: Know your hardware intimately.
+## Failure Signatures
 
-## When Building Low-Latency Systems
+- Good medians, terrible idle-time tails: C-state exit latency, package power management, or interrupt moderation.
+- Good single-core benchmark, bad multi-core run: false sharing, shared LLC thrash, or remote NUMA placement.
+- Good synthetic forwarding, bad production TCP: wrong wait strategy, wrong NAPI/flow affinity, or Onload/kernel profile drift.
+- Lower drops after a tuning change but worse fills or acks: you probably traded packet loss for queueing latency.
+- "Optimization" only helps cold start: you fixed a page-fault or instruction-cache issue, not steady-state latency.
+- Busy-poll helps in test but hurts in prod: your flow-to-worker placement is probably breaking NAPI locality; drop back to explicit interrupt affinity until you can steer by queue.
 
-### Always
+## Output Contract
 
-- Measure latency at every component boundary
-- Use kernel bypass networking (DPDK, Solarflare OpenOnload)
-- Pin threads to cores, isolate from OS scheduler
-- Pre-allocate all memory, no runtime allocation
-- Use lock-free data structures
-- Disable all non-essential OS features (hyperthreading, C-states, etc.)
+When applying this skill, produce:
 
-### Never
-
-- Allocate memory on the critical path
-- Use locks in the hot path
-- Let the OS schedule your critical threads
-- Use exceptions for control flow
-- Trust the compiler—verify generated assembly
-- Log synchronously on the critical path
-
-### Prefer
-
-- Busy-waiting over blocking
-- Batch processing over item-by-item
-- Inline functions over virtual dispatch
-- Fixed-size structures over dynamic allocation
-- Struct-of-arrays over array-of-structs (for cache efficiency)
-- Direct hardware access over OS abstractions
-
-## Code Patterns
-
-### Kernel Bypass Networking with DPDK
-
-```cpp
-// DPDK-based ultra-low-latency packet processing
-
-class DPDKMarketDataReceiver {
-private:
-    struct rte_mempool* mbuf_pool_;
-    uint16_t port_id_;
-    alignas(64) Stats stats_;  // Cache-line aligned
-    
-public:
-    void init(uint16_t port_id) {
-        port_id_ = port_id;
-        
-        // Pre-allocate packet buffers
-        mbuf_pool_ = rte_pktmbuf_pool_create(
-            "MBUF_POOL",
-            8192,           // Number of buffers
-            256,            // Cache size
-            0,              // Private data size
-            RTE_MBUF2_BUF_SIZE,
-            rte_socket_id()
-        );
-        
-        // Configure port for low latency
-        struct rte_eth_conf port_conf = {};
-        port_conf.rxmode.mq_mode = ETH_MQ_RX_NONE;
-        port_conf.txmode.mq_mode = ETH_MQ_TX_NONE;
-        
-        // Disable all offloads for minimum latency
-        port_conf.rxmode.offloads = 0;
-        port_conf.txmode.offloads = 0;
-        
-        rte_eth_dev_configure(port_id_, 1, 0, &port_conf);
-    }
-    
-    // Hot path: called millions of times per second
-    __attribute__((always_inline, hot))
-    void poll_packets(PacketHandler& handler) {
-        struct rte_mbuf* bufs[32];
-        
-        // Busy-poll: no syscalls, no context switches
-        uint16_t nb_rx = rte_eth_rx_burst(port_id_, 0, bufs, 32);
-        
-        // Prefetch next batch while processing current
-        if (likely(nb_rx > 0)) {
-            rte_prefetch0(rte_pktmbuf_mtod(bufs[0], void*));
-        }
-        
-        for (uint16_t i = 0; i < nb_rx; i++) {
-            // Prefetch next packet
-            if (i + 1 < nb_rx) {
-                rte_prefetch0(rte_pktmbuf_mtod(bufs[i + 1], void*));
-            }
-            
-            // Process packet inline
-            char* data = rte_pktmbuf_mtod(bufs[i], char*);
-            uint16_t len = rte_pktmbuf_data_len(bufs[i]);
-            
-            handler.process(data, len);
-            
-            rte_pktmbuf_free(bufs[i]);
-        }
-        
-        stats_.packets_received += nb_rx;
-    }
-};
-```
-
-### Lock-Free Order Book
-
-```cpp
-// Lock-free order book for maximum throughput
-
-template<size_t MAX_LEVELS = 256>
-class alignas(64) LockFreeOrderBook {
-private:
-    struct PriceLevel {
-        std::atomic<int64_t> price;
-        std::atomic<int64_t> quantity;
-    };
-    
-    // Separate cache lines for bids and asks
-    alignas(64) std::array<PriceLevel, MAX_LEVELS> bids_;
-    alignas(64) std::array<PriceLevel, MAX_LEVELS> asks_;
-    alignas(64) std::atomic<uint64_t> sequence_;
-    
-public:
-    // Update from market data (single writer)
-    __attribute__((always_inline))
-    void update_bid(size_t level, int64_t price, int64_t qty) {
-        // Relaxed store is fine for single writer
-        bids_[level].price.store(price, std::memory_order_relaxed);
-        bids_[level].quantity.store(qty, std::memory_order_relaxed);
-        
-        // Release fence ensures all updates visible before sequence bump
-        std::atomic_thread_fence(std::memory_order_release);
-        sequence_.fetch_add(1, std::memory_order_relaxed);
-    }
-    
-    // Read snapshot (multiple readers)
-    __attribute__((always_inline))
-    bool read_bbo(int64_t& bid, int64_t& ask, int64_t& bid_qty, int64_t& ask_qty) {
-        uint64_t seq1, seq2;
-        
-        // Seqlock pattern: retry if writer was active
-        do {
-            seq1 = sequence_.load(std::memory_order_acquire);
-            
-            // Read all values
-            bid = bids_[0].price.load(std::memory_order_relaxed);
-            bid_qty = bids_[0].quantity.load(std::memory_order_relaxed);
-            ask = asks_[0].price.load(std::memory_order_relaxed);
-            ask_qty = asks_[0].quantity.load(std::memory_order_relaxed);
-            
-            std::atomic_thread_fence(std::memory_order_acquire);
-            seq2 = sequence_.load(std::memory_order_relaxed);
-            
-        } while (seq1 != seq2 || (seq1 & 1));  // Retry if sequence changed or odd (write in progress)
-        
-        return true;
-    }
-};
-```
-
-### CPU Pinning and Isolation
-
-```cpp
-// Thread pinning for deterministic latency
-
-class LatencyCriticalThread {
-public:
-    void configure_for_low_latency(int cpu_core) {
-        // Pin to specific CPU core
-        cpu_set_t cpuset;
-        CPU_ZERO(&cpuset);
-        CPU_SET(cpu_core, &cpuset);
-        pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-        
-        // Set real-time priority
-        struct sched_param param;
-        param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-        pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-        
-        // Lock memory to prevent page faults
-        mlockall(MCL_CURRENT | MCL_FUTURE);
-        
-        // Disable transparent huge pages for this process
-        prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0);
-    }
-};
-
-// System configuration (run at boot)
-/*
-# Isolate CPUs from kernel scheduler
-GRUB_CMDLINE_LINUX="isolcpus=2,3,4,5 nohz_full=2,3,4,5 rcu_nocbs=2,3,4,5"
-
-# Disable hyperthreading
-echo off > /sys/devices/system/cpu/smt/control
-
-# Disable C-states (CPU power saving)
-for cpu in /sys/devices/system/cpu/cpu*/cpuidle/state*/disable; do
-    echo 1 > $cpu
-done
-
-# Set CPU frequency to maximum
-for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-    echo performance > $cpu
-done
-*/
-```
-
-### Memory Pool with Zero Allocation
-
-```cpp
-// Pre-allocated object pool for zero-allocation hot path
-
-template<typename T, size_t POOL_SIZE = 65536>
-class alignas(64) ObjectPool {
-private:
-    struct alignas(64) Slot {
-        std::aligned_storage_t<sizeof(T), alignof(T)> storage;
-        std::atomic<Slot*> next;
-    };
-    
-    std::array<Slot, POOL_SIZE> slots_;
-    alignas(64) std::atomic<Slot*> free_list_;
-    
-public:
-    ObjectPool() {
-        // Pre-construct free list
-        for (size_t i = 0; i < POOL_SIZE - 1; i++) {
-            slots_[i].next.store(&slots_[i + 1], std::memory_order_relaxed);
-        }
-        slots_[POOL_SIZE - 1].next.store(nullptr, std::memory_order_relaxed);
-        free_list_.store(&slots_[0], std::memory_order_release);
-        
-        // Pre-fault all pages
-        volatile char* ptr = reinterpret_cast<volatile char*>(slots_.data());
-        for (size_t i = 0; i < sizeof(slots_); i += 4096) {
-            ptr[i] = 0;
-        }
-    }
-    
-    __attribute__((always_inline))
-    T* allocate() {
-        Slot* slot;
-        do {
-            slot = free_list_.load(std::memory_order_acquire);
-            if (!slot) return nullptr;  // Pool exhausted
-        } while (!free_list_.compare_exchange_weak(
-            slot, slot->next.load(std::memory_order_relaxed),
-            std::memory_order_release, std::memory_order_relaxed));
-        
-        return reinterpret_cast<T*>(&slot->storage);
-    }
-    
-    __attribute__((always_inline))
-    void deallocate(T* ptr) {
-        Slot* slot = reinterpret_cast<Slot*>(ptr);
-        Slot* head;
-        do {
-            head = free_list_.load(std::memory_order_relaxed);
-            slot->next.store(head, std::memory_order_relaxed);
-        } while (!free_list_.compare_exchange_weak(
-            head, slot,
-            std::memory_order_release, std::memory_order_relaxed));
-    }
-};
-```
-
-### Latency Measurement
-
-```cpp
-// Nanosecond-precision latency measurement
-
-class LatencyHistogram {
-private:
-    static constexpr size_t BUCKETS = 1000;  // 0-999 microseconds
-    alignas(64) std::array<std::atomic<uint64_t>, BUCKETS> histogram_;
-    std::atomic<uint64_t> overflow_;
-    
-public:
-    __attribute__((always_inline))
-    void record(uint64_t latency_ns) {
-        uint64_t bucket = latency_ns / 1000;  // Convert to microseconds
-        if (bucket < BUCKETS) {
-            histogram_[bucket].fetch_add(1, std::memory_order_relaxed);
-        } else {
-            overflow_.fetch_add(1, std::memory_order_relaxed);
-        }
-    }
-    
-    LatencyStats get_stats() const {
-        uint64_t total = 0;
-        uint64_t count = 0;
-        uint64_t p50_bucket = 0, p99_bucket = 0, p999_bucket = 0;
-        
-        // Calculate percentiles
-        for (size_t i = 0; i < BUCKETS; i++) {
-            uint64_t bucket_count = histogram_[i].load(std::memory_order_relaxed);
-            count += bucket_count;
-            total += bucket_count * i;
-        }
-        
-        uint64_t running = 0;
-        for (size_t i = 0; i < BUCKETS; i++) {
-            running += histogram_[i].load(std::memory_order_relaxed);
-            if (p50_bucket == 0 && running >= count * 0.50) p50_bucket = i;
-            if (p99_bucket == 0 && running >= count * 0.99) p99_bucket = i;
-            if (p999_bucket == 0 && running >= count * 0.999) p999_bucket = i;
-        }
-        
-        return {
-            .mean_us = static_cast<double>(total) / count,
-            .p50_us = p50_bucket,
-            .p99_us = p99_bucket,
-            .p999_us = p999_bucket,
-            .count = count
-        };
-    }
-};
-
-// RDTSC for sub-nanosecond timing
-__attribute__((always_inline))
-inline uint64_t rdtsc() {
-    uint32_t lo, hi;
-    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    return ((uint64_t)hi << 32) | lo;
-}
-```
-
-## Mental Model
-
-Citadel approaches low-latency systems by asking:
-
-1. **What's the latency budget?** Allocate nanoseconds to each component
-2. **Where are the syscalls?** Eliminate them from the hot path
-3. **Where are the locks?** Replace with lock-free alternatives
-4. **Where are the allocations?** Pre-allocate everything
-5. **What's the worst case?** Optimize for tail latency, not average
-
-## Signature Citadel Moves
-
-- Kernel bypass with DPDK/OpenOnload
-- Lock-free data structures everywhere
-- CPU pinning and isolation
-- Pre-allocated memory pools
-- Busy-polling over blocking
-- RDTSC for timing
-- Cache-line alignment
-- Disabled OS features (HT, C-states, THP)
-- Assembly-level verification
-- Nanosecond-precision measurement
+- the latency budget and which hop owns the tail,
+- the chosen wait model: `interrupt`, `busy-poll`, or `full bypass`,
+- the topology plan: socket, IRQ, queue, and memory placement,
+- the single next experiment, its expected failure mode, and the metric that invalidates the hypothesis.

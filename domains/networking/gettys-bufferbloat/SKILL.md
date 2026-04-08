@@ -1,594 +1,127 @@
 ---
 name: gettys-bufferbloat
-description: Engineer low-latency networks in the style of Jim Gettys, discoverer of bufferbloat. Emphasizes understanding excessive buffering, queue management, latency under load, and the fq_codel solution. Use when diagnosing network latency issues, optimizing for real-time applications, or implementing queue management.
-tags: networking, latency, bufferbloat, tcp, congestion, aqm, queuing, real-time, bandwidth, packet-loss
+description: >-
+  Diagnose and fix latency under load by locating the real queue, selecting the
+  right AQM/FQ strategy, and avoiding dark-buffer traps across DOCSIS, DSL,
+  Wi-Fi, tunnels, containers, and Linux qdiscs. Use when loaded RTT, jitter,
+  or game/video-call lag appears only during traffic; when tuning fq_codel,
+  CAKE, SQM, BQL, AQL, or tc qdiscs; or when fq_codel/CAKE "should help" but
+  does not. Triggers: bufferbloat, latency under load, fq_codel, CAKE, SQM,
+  AQM, BQL, AQL, DOCSIS, Wi-Fi lag, tc qdisc, dark buffer, jitter, loaded RTT.
 ---
 
-# Jim Gettys Bufferbloat Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌​‌‌​‌‍​‌​‌​​‌​‍​​‌​​​​‌‍​​​​​‌​‌‍​​​​‌​​‌‍​‌​​‌‌‌‌⁠‍⁠
+# Gettys Bufferbloat
 
-## Overview
+## Load Policy
 
-Jim Gettys, while working at Bell Labs and later on the One Laptop per Child project, discovered and named "bufferbloat"—the phenomenon where excessive buffering in network equipment causes massive latency spikes. Modern networks often have seconds of buffering, destroying interactive performance even when bandwidth is plentiful. Gettys' crusade to fix bufferbloat led to fq_codel and the understanding that network latency under load is the true measure of network quality.
+This skill is self-contained for diagnosis and tuning.
 
-## Core Philosophy
+- **MANDATORY**: Before touching Wi-Fi settings, get a wired under-load baseline first.
+- **MANDATORY**: Before touching DOCSIS or DSL overhead/RTT knobs, read current `tc -s qdisc` output and confirm the actual access technology.
+- Do NOT load generic QoS tutorials or TCP primers for this task; they dilute the real question, which is queue ownership.
+- Do NOT load Wi-Fi-specific material if wired RRUL is still bad; the queue is probably not in Wi-Fi yet.
 
-> "Latency is the new bandwidth. We have plenty of bandwidth; what we lack is low latency."
+## Operator Frame
 
-> "The buffer is full of lies. Every packet in that buffer is a broken promise about when it will arrive."
+The job is not "enable smart queueing." The job is to make the first queue that fills be a queue you control.
 
-> "Good networks feel fast. Bufferbloated networks feel like wading through molasses."
+Before changing anything, ask yourself:
 
-Gettys realized that optimizing for throughput while ignoring latency creates terrible user experience. A network with 100ms idle RTT that spikes to 2000ms under load is fundamentally broken, even if it achieves high throughput. The solution is to keep queues short and managed.
+- **Where is the bottleneck right now?** If the bottleneck moved, yesterday's AQM fix is now irrelevant.
+- **Does the qdisc see the backlog?** If app latency is huge while qdisc delay stays low, the real queue is below or beside the qdisc.
+- **Am I measuring under enough load to saturate the link?** Single-flow tests often miss cable, Wi-Fi, and ACK-path pathologies.
+- **What fairness am I trying to enforce?** Per-flow, per-host, per-subscriber, or per-station lead to different modes.
 
-## Design Principles
+## Fast Triage
 
-1. **Latency Under Load Matters**: Measure RTT while the network is busy, not idle.
+| What you see | Most likely truth | First move | If it still fails |
+|---|---|---|---|
+| Wired and Wi-Fi both bloat | WAN/CPE, tunnel, or CPU is the queue owner | Run bidirectional RRUL, inspect `tc -s qdisc` on WAN | Check driver rings, modem/CMTS behavior, CPU saturation |
+| Wired is clean, Wi-Fi is awful | Wi-Fi firmware/mac80211 queues, not WAN | Inspect airtime fairness and AQL support | Reduce aggregation only as a last resort; upgrade AP/driver |
+| `tc` shows tiny backlog but user latency spikes | Dark buffer below qdisc | Check BQL/rings/offloads/tunnel path | Move shaping closer to hardware or use integrated shaper |
+| fq_codel/CAKE helps upload but not download | Downlink queue is upstream of you | Lower ingress shaping rate and confirm framing compensation | Push AQM to sender/upstream; local ingress shaping is only damage control |
+| VPN path is unfair even with fq_codel | Inner flows collapsed into one outer flow | Shape on the tunnel interface/endpoints | Change fairness domain; outer 5-tuple fairness is not enough |
+| Containers/veth bloat despite fq_codel | veth ring is hiding backlog | Suspect missing BQL/driver queue ownership | Use shaper/AQM where bytes become visible, or upgrade kernel/driver |
 
-2. **Buffers Lie About Bandwidth**: Large buffers mask congestion, delaying feedback.
+## Measure Like an Operator
 
-3. **Queues Should Be Short**: Aim for milliseconds of buffering, not seconds.
+- Use RRUL-class testing, not idle ping plus one speed test. RRUL's 4 up + 4 down flows exist because one flow often fails to saturate real bottlenecks and can hide ACK-path artifacts.
+- Always compare `idle_min_rtt` to `loaded_rtt` in both directions. Upload bloat is often the first failure on asymmetric links.
+- Minimum evidence set:
+  - `tc -s qdisc show dev $WAN`
+  - `ethtool -g $DEV` and `ethtool -k $DEV | egrep 'gro|gso|tso'`
+  - Wi-Fi only: `iw list` plus mac80211 airtime/AQL state if exposed
+- Read the qdisc stats, not just the grade:
+  - Low `pk_delay`/`av_delay`, high app latency: wrong queue.
+  - Rising `marks` with few `drops`: ECN is working.
+  - High `overlimits` but no latency improvement: shaping above the true bottleneck or CPU bound.
+  - In CAKE, `ack_drop` increasing can be good only when egress asymmetry is the problem.
 
-4. **Flow Isolation**: One greedy flow shouldn't destroy latency for others.
+## If the Graph Does Not Move
 
-5. **Active Queue Management**: Don't just drop when full—manage proactively.
+- High qdisc delay and high loaded RTT: you found the right queue, but the rate or overhead is wrong. Lower shaped rate a few percent and fix link-layer compensation before touching CoDel timers.
+- Low qdisc delay and high loaded RTT: wrong queue. Go looking below the qdisc, not for new fq_codel parameters.
+- Lower latency but collapsed throughput on slow or cable links: your target/RTT assumptions are too aggressive for serialization or MAC scheduling.
+- Good latency but unfair multi-user behavior: switch fairness domain before touching AQM. This is usually a host-isolation problem, not a drop-policy problem.
 
-## The Bufferbloat Problem
+## Dark Queues People Miss
 
-```
-Without Bufferbloat (healthy network):
-─────────────────────────────────────
-Idle RTT:    20ms
-Load RTT:    25ms  (slight increase)
-Difference:   5ms  ✓ Good!
+- **Driver and hardware rings**: fq_codel only controls what it can see. RFC 8290 calls out lower-layer queues explicitly; BQL exists to push bytes back up into qdisc-visible space.
+- **veth/virtual rings**: recent veth BQL work showed a 256-entry hidden ring adding about 22-24 ms RTT under load; moving buffering into the qdisc cut that to about 1.3-1.5 ms without throughput loss.
+- **GSO/GRO/TSO super-packets**: fq_codel's quantum is 1514 bytes, but offloads can create 25-64 KB "packets" that monopolize dequeue time and inflate latency for competing sparse flows.
+- **Wi-Fi airtime queues**: the queue is measured in airtime, not packets. A WAN shaper can look perfect on Ethernet while Wi-Fi still delivers second-scale delay.
+- **CMTS/DSLAM scheduling**: DOCSIS request-grant delay and ISP metering can dominate. Your home qdisc may be innocent.
 
-With Bufferbloat (broken network):
-──────────────────────────────────
-Idle RTT:    20ms
-Load RTT:  2000ms  (100x increase!)
-Difference: 1980ms ✗ Terrible!
+## Tuning Rules That Matter
 
+### fq_codel
 
-Why does this happen?
+- Default `target 5ms` is wrong when one MTU takes longer than that to serialize. RFC 8290 says target should be at least one MTU serialization time and otherwise about 5-10% of `interval`; at 1 Mbit/s, one 1500-byte packet already costs roughly 12-15 ms.
+- `limit` is a hard memory safety rail, not the control knob. Linux defaults to 10240 packets and expects CoDel to act long before the limit is hit.
+- If lower layers are unmanaged, fq_codel alone is not enough. RFC 8290 explicitly recommends BQL or a software shaper such as HTB/HFSC when the queue is not at the qdisc.
 
-┌─────────────────────────────────────────────────────────────┐
-│                                                              │
-│   Sender                    Router                Receiver   │
-│   ──────                    ──────                ────────   │
-│                                                              │
-│   100 Mbps  ─────────►  ┌─────────┐  ─────────►  10 Mbps    │
-│                         │ BUFFER  │                          │
-│                         │█████████│ ← 2 seconds of packets! │
-│                         │█████████│                          │
-│                         │█████████│                          │
-│                         └─────────┘                          │
-│                                                              │
-│   Packets queue up waiting for the slow link.               │
-│   TCP doesn't know—it sees ACKs arriving (eventually).      │
-│   User sees lag, even with "good bandwidth."                │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
+### CAKE
 
-## When Engineering Low-Latency Networks
+- Use CAKE when you need shaping and queue control in the same place. That removes the HTB burst problem and keeps the owning queue simpler.
+- On DOCSIS, the non-obvious question is "what size does the head-end meter?" not "what hits the wire?" CAKE's `docsis` keyword encodes `overhead 18 mpu 64 noatm` because CMTS metering semantics matter more than coax framing minutiae.
+- On PTM/VDSL2, `ptm` is effectively a 64/65 derate. If you hand-roll a parent shaper, that 0.984 factor is the floor, not a guess.
+- `lan` and `datacentre` RTT presets are easy to misuse. CAKE's own man page warns that `lan`-class time constants are near kernel jitter, so congestion gets signaled prematurely and flows go sparse; for most local shaping, `metro` is the safer floor unless you control the kernel and path precisely.
+- In ingress mode CAKE deliberately keeps at least two packets queued per flow because retransmits are more expensive after the bottleneck has already been crossed. Do not chase zero queue on ingress.
+- `ack-filter` is an egress-only tool for heavily asymmetric links. Conservative mode is the default reasoned choice; aggressive mode has bitten SACK/reordering edge cases and can damage ramp-up behavior.
+- Keep `split-gso` unless the link is above roughly 10 Gbit/s and throughput, not latency, is the limiting problem. Below that, leaving super-packets intact is usually just queue inflation with a nicer CPU profile.
+- `nat` only improves fairness if NAT happens on the same host running CAKE. If translation occurs elsewhere, it buys nothing.
+- `wash` is a defensive choice on inbound traffic when you cannot trust DSCP markings. CAKE's own guidance calls out providers like Comcast; use `besteffort + wash` if inbound markings are polluted.
+- `memlimit` is a memory ceiling, not a bandwidth-delay product calculator. CAKE documentation explicitly says not to size it from BDP.
 
-### Always
+### DOCSIS and Cable
 
-- Measure latency UNDER LOAD, not just idle
-- Use fq_codel or similar AQM on bottleneck queues
-- Size buffers based on BDP, not maximum possible
-- Test with realistic traffic patterns
-- Monitor queue depth, not just throughput
-- Prioritize latency for interactive traffic
+- CableLabs had to retune CoDel for DOCSIS because request-grant latency makes empty queues look "late." Their early DOCSIS experiments raised CoDel `target` to 10 ms just to avoid dropping packets that were only waiting on the MAC scheduler.
+- CableLabs also explored SFQ-CoDel at much larger `target/interval` values such as 50/200 ms in modem simulations to preserve TCP throughput despite DOCSIS scheduling. That is a modem-side trade-off, not a home-router preset to cargo-cult into Linux fq_codel.
 
-### Never
+### Wi-Fi
 
-- Assume more buffering is better
-- Measure only idle RTT as "ping time"
-- Optimize only for throughput benchmarks
-- Use deep buffers "just in case"
-- Ignore latency complaints with "bandwidth is fine"
-- Conflate bandwidth with network quality
+- Treat Wi-Fi as airtime contention, not bandwidth contention. One slow station can consume everyone else's airtime while byte counters still look fair.
+- The mac80211 fix is a stack, not one knob: per-station fq, airtime fairness, and AQL. If any one is missing, WAN SQM will hide little.
+- The default AQL thinking is "keep only a few milliseconds of airtime in hardware." If the driver does not expose AQL/airtime features, stop pretending WAN CAKE is the whole answer.
 
-### Prefer
+### Tunnels and Virtualization
 
-- Shallow queues over deep buffers
-- Fair queuing over FIFO
-- AQM over tail-drop
-- Latency metrics over throughput
-- Per-flow isolation
-- Measuring under load
+- FQ fairness breaks when many inner flows collapse into one opaque outer flow. RFC 8290 calls this out explicitly for encrypted VPNs: you still get shorter queues, but not inner-flow prioritization.
+- If the tunnel endpoint owns the bottleneck, shape the tunnel device or the endpoint egress. Shaping only the outer underlay after encapsulation is often the wrong fairness domain.
 
-## Code Patterns
+## NEVER
 
-### Bufferbloat Detection
+- NEVER shrink `txqueuelen` or NIC rings blindly because "smaller queue must mean less bloat." That is seductive because it sometimes helps instantly, but Bufferbloat's own Linux notes warn it can merely move loss into the driver or make some systems catatonic. Instead use BQL or a shaper/AQM that owns the bottleneck.
+- NEVER declare victory from idle ping or a single TCP flow because those tests often fail to saturate the true bottleneck and miss ACK-path effects. Instead use bidirectional RRUL-class load and read qdisc stats while the link is actually full.
+- NEVER copy fq_codel defaults onto very slow links because CoDel will punish serialization delay as if it were queue abuse. Instead ensure `target` is at least one MTU serialization time and keep it within about 5-10% of `interval`.
+- NEVER paste DOCSIS simulation values such as 50/200 into a home fq_codel config because those values were chosen to tolerate modem MAC scheduling and 32-queue silicon trade-offs, not to optimize your router. Instead start from the actual bottleneck technology and measured RTT floor.
+- NEVER use `ack-filter` on ingress because the ACKs already crossed the bottleneck before you saw them. Instead use conservative `ack-filter` on egress only when down/up asymmetry is the real limiter.
+- NEVER disable offloads first just because you spotted giant packets. That is seductive because it makes graphs look cleaner, but it can turn CPU into the new bottleneck. Instead keep CAKE `split-gso`, and disable offloads only when you have proved the qdisc cannot otherwise see or split the bursts.
+- NEVER use flow fairness when the real policy target is hosts or subscribers. That is seductive because `flows` is the classic fq_codel model, but it rewards the user who opens the most connections. Instead use CAKE host isolation modes such as `dual-srchost`, `dual-dsthost`, or `triple-isolate`.
+- NEVER keep retuning CAKE/fq_codel when qdisc delay is low and user latency is high. That means the queue you are tuning is not the queue that hurts. Instead go hunting for dark buffers: rings, firmware, tunnels, modem scheduling, or CPU starvation.
 
-```python
-class BufferbloatDetector:
-    """
-    Detect bufferbloat by comparing idle vs loaded RTT.
-    Gettys' insight: the difference tells you everything.
-    """
-    
-    def __init__(self, target_host: str):
-        self.target = target_host
-        self.idle_samples = []
-        self.loaded_samples = []
-    
-    def measure_idle_rtt(self, samples: int = 20) -> float:
-        """
-        Measure RTT when network is idle.
-        """
-        rtts = []
-        for _ in range(samples):
-            rtt = self._ping(self.target)
-            if rtt is not None:
-                rtts.append(rtt)
-            time.sleep(0.1)
-        
-        self.idle_samples = rtts
-        return min(rtts) if rtts else None
-    
-    def measure_loaded_rtt(self, 
-                            samples: int = 20,
-                            load_generator: Callable = None) -> float:
-        """
-        Measure RTT while generating load.
-        """
-        # Start background load
-        if load_generator:
-            load_thread = threading.Thread(target=load_generator)
-            load_thread.start()
-        
-        time.sleep(1)  # Let load stabilize
-        
-        rtts = []
-        for _ in range(samples):
-            rtt = self._ping(self.target)
-            if rtt is not None:
-                rtts.append(rtt)
-            time.sleep(0.1)
-        
-        self.loaded_samples = rtts
-        return sum(rtts) / len(rtts) if rtts else None
-    
-    def diagnose(self) -> BufferbloatDiagnosis:
-        """
-        Diagnose bufferbloat severity.
-        """
-        if not self.idle_samples or not self.loaded_samples:
-            return BufferbloatDiagnosis(status='insufficient_data')
-        
-        baseline = min(self.idle_samples)
-        loaded_avg = sum(self.loaded_samples) / len(self.loaded_samples)
-        loaded_max = max(self.loaded_samples)
-        
-        bloat = loaded_avg - baseline
-        bloat_ratio = loaded_avg / baseline if baseline > 0 else float('inf')
-        
-        # Gettys' thresholds
-        if bloat < 5:
-            grade = 'A'
-            status = 'excellent'
-            recommendation = 'Network is well-tuned'
-        elif bloat < 30:
-            grade = 'B'
-            status = 'good'
-            recommendation = 'Minor bufferbloat, acceptable for most uses'
-        elif bloat < 100:
-            grade = 'C'
-            status = 'moderate'
-            recommendation = 'Noticeable lag under load, enable fq_codel'
-        elif bloat < 300:
-            grade = 'D'
-            status = 'poor'
-            recommendation = 'Significant bufferbloat, enable AQM immediately'
-        else:
-            grade = 'F'
-            status = 'severe'
-            recommendation = 'Severe bufferbloat, network unusable for interactive use'
-        
-        return BufferbloatDiagnosis(
-            grade=grade,
-            status=status,
-            baseline_rtt=baseline,
-            loaded_rtt=loaded_avg,
-            bloat_ms=bloat,
-            bloat_ratio=bloat_ratio,
-            recommendation=recommendation,
-        )
-    
-    def _ping(self, host: str) -> Optional[float]:
-        """Send ICMP ping and return RTT in ms."""
-        try:
-            result = subprocess.run(
-                ['ping', '-c', '1', '-W', '1', host],
-                capture_output=True,
-                text=True
-            )
-            # Parse RTT from ping output
-            match = re.search(r'time=(\d+\.?\d*)', result.stdout)
-            if match:
-                return float(match.group(1))
-        except Exception:
-            pass
-        return None
+## Fallbacks
 
-
-def run_bufferbloat_test(target: str = '8.8.8.8') -> BufferbloatDiagnosis:
-    """
-    Run a complete bufferbloat test.
-    """
-    detector = BufferbloatDetector(target)
-    
-    print("Measuring idle RTT...")
-    detector.measure_idle_rtt()
-    
-    print("Measuring RTT under load...")
-    
-    def generate_load():
-        # Download something large
-        subprocess.run(
-            ['curl', '-o', '/dev/null', '-s', 
-             'http://speedtest.tele2.net/100MB.zip'],
-            timeout=30
-        )
-    
-    detector.measure_loaded_rtt(load_generator=generate_load)
-    
-    return detector.diagnose()
-```
-
-### fq_codel Implementation
-
-```python
-class FQCoDel:
-    """
-    Fair Queuing with Controlled Delay (fq_codel).
-    The solution to bufferbloat: per-flow fair queuing + CoDel AQM.
-    
-    Key innovations:
-    1. Flow isolation: one flow can't bloat another
-    2. Per-flow AQM: CoDel applied to each flow
-    3. Fair sharing: all flows get equal share of bandwidth
-    """
-    
-    def __init__(self,
-                 num_queues: int = 1024,
-                 target_ms: float = 5.0,
-                 interval_ms: float = 100.0,
-                 quantum: int = 1514):
-        self.num_queues = num_queues
-        self.target = target_ms
-        self.interval = interval_ms
-        self.quantum = quantum  # Bytes per round
-        
-        self.queues = [FlowQueue(target_ms, interval_ms) 
-                       for _ in range(num_queues)]
-        self.active_list = []  # Flows with packets
-        self.flow_states = {}  # Per-flow state
-    
-    def hash_flow(self, packet: Packet) -> int:
-        """
-        Hash packet to a queue based on flow (5-tuple).
-        """
-        flow_id = (
-            packet.src_ip,
-            packet.dst_ip,
-            packet.src_port,
-            packet.dst_port,
-            packet.protocol
-        )
-        return hash(flow_id) % self.num_queues
-    
-    def enqueue(self, packet: Packet, now_ms: float) -> bool:
-        """
-        Enqueue a packet to its flow's queue.
-        """
-        queue_idx = self.hash_flow(packet)
-        queue = self.queues[queue_idx]
-        
-        packet.enqueue_time = now_ms
-        
-        was_empty = queue.is_empty()
-        success = queue.enqueue(packet)
-        
-        if success and was_empty:
-            # Flow became active, add to round-robin
-            self.active_list.append(queue_idx)
-        
-        return success
-    
-    def dequeue(self, now_ms: float) -> Optional[Packet]:
-        """
-        Dequeue using deficit round-robin with CoDel.
-        """
-        if not self.active_list:
-            return None
-        
-        # Try each active queue in round-robin order
-        for _ in range(len(self.active_list)):
-            queue_idx = self.active_list[0]
-            queue = self.queues[queue_idx]
-            
-            # Apply CoDel to this flow's queue
-            packet = queue.codel_dequeue(now_ms)
-            
-            if packet is not None:
-                # Got a packet, update deficit
-                queue.deficit += self.quantum
-                queue.deficit -= len(packet.data)
-                
-                if queue.deficit < 0:
-                    # Exhausted quantum, move to back of active list
-                    self.active_list.append(self.active_list.pop(0))
-                    queue.deficit = 0
-                
-                return packet
-            else:
-                # Queue empty, remove from active list
-                self.active_list.pop(0)
-                queue.deficit = 0
-        
-        return None
-
-
-class FlowQueue:
-    """
-    Per-flow queue with CoDel.
-    """
-    
-    def __init__(self, target_ms: float, interval_ms: float, max_size: int = 10240):
-        self.packets = deque()
-        self.max_size = max_size
-        self.deficit = 0
-        
-        # CoDel state
-        self.target = target_ms
-        self.interval = interval_ms
-        self.first_above_time = None
-        self.drop_next = 0
-        self.count = 0
-        self.dropping = False
-    
-    def is_empty(self) -> bool:
-        return len(self.packets) == 0
-    
-    def enqueue(self, packet: Packet) -> bool:
-        if len(self.packets) >= self.max_size:
-            return False
-        self.packets.append(packet)
-        return True
-    
-    def codel_dequeue(self, now_ms: float) -> Optional[Packet]:
-        """
-        Dequeue with CoDel logic.
-        """
-        if not self.packets:
-            self.dropping = False
-            return None
-        
-        packet = self.packets[0]
-        sojourn_time = now_ms - packet.enqueue_time
-        
-        if sojourn_time < self.target:
-            # Good: below target
-            self.first_above_time = None
-        else:
-            if self.first_above_time is None:
-                self.first_above_time = now_ms + self.interval
-            elif now_ms >= self.first_above_time:
-                # Persistent delay: consider dropping
-                pass
-        
-        if self.dropping:
-            if sojourn_time < self.target:
-                # Delay recovered, stop dropping
-                self.dropping = False
-            elif now_ms >= self.drop_next:
-                # Time to drop
-                self.packets.popleft()  # Drop
-                self.count += 1
-                self.drop_next = now_ms + self.interval / (self.count ** 0.5)
-                return self.codel_dequeue(now_ms)  # Try next
-        elif self.first_above_time and now_ms >= self.first_above_time:
-            # Start dropping
-            self.dropping = True
-            self.count = 1
-            self.drop_next = now_ms + self.interval
-            self.packets.popleft()  # Drop
-            return self.codel_dequeue(now_ms)  # Try next
-        
-        return self.packets.popleft()
-```
-
-### Network Quality Score
-
-```python
-class NetworkQualityScore:
-    """
-    Score network quality the Gettys way: latency under load.
-    """
-    
-    @staticmethod
-    def calculate_score(measurements: NetworkMeasurements) -> QualityScore:
-        """
-        Calculate a network quality score.
-        
-        Key insight: combine baseline latency, bloat, and jitter.
-        """
-        baseline = measurements.baseline_rtt
-        loaded = measurements.loaded_rtt
-        jitter = measurements.jitter
-        loss = measurements.packet_loss
-        
-        # Bloat penalty
-        bloat = loaded - baseline
-        bloat_factor = 1.0 / (1.0 + bloat / 50.0)  # Penalize heavily
-        
-        # Baseline penalty (prefer low latency)
-        baseline_factor = 1.0 / (1.0 + baseline / 100.0)
-        
-        # Jitter penalty
-        jitter_factor = 1.0 / (1.0 + jitter / 20.0)
-        
-        # Loss penalty (severe)
-        loss_factor = (1.0 - loss) ** 2
-        
-        # Combined score (0-100)
-        raw_score = (bloat_factor * 0.5 + 
-                     baseline_factor * 0.2 + 
-                     jitter_factor * 0.2 + 
-                     loss_factor * 0.1)
-        
-        score = int(raw_score * 100)
-        
-        # Grade
-        if score >= 90:
-            grade = 'A'
-        elif score >= 75:
-            grade = 'B'
-        elif score >= 60:
-            grade = 'C'
-        elif score >= 40:
-            grade = 'D'
-        else:
-            grade = 'F'
-        
-        return QualityScore(
-            score=score,
-            grade=grade,
-            baseline_rtt=baseline,
-            bloat=bloat,
-            jitter=jitter,
-            loss=loss,
-            bottleneck=identify_bottleneck(measurements),
-        )
-
-
-def identify_bottleneck(measurements: NetworkMeasurements) -> str:
-    """
-    Identify what's hurting network quality most.
-    """
-    bloat = measurements.loaded_rtt - measurements.baseline_rtt
-    
-    if bloat > 100:
-        return 'bufferbloat'
-    elif measurements.baseline_rtt > 100:
-        return 'high_base_latency'
-    elif measurements.jitter > 30:
-        return 'jitter'
-    elif measurements.packet_loss > 0.01:
-        return 'packet_loss'
-    else:
-        return 'none'
-```
-
-### Buffer Sizing
-
-```python
-class BufferSizing:
-    """
-    Size buffers correctly to avoid bloat while maintaining throughput.
-    """
-    
-    @staticmethod
-    def calculate_optimal_buffer(bandwidth_mbps: float,
-                                  rtt_ms: float,
-                                  num_flows: int = 1) -> BufferRecommendation:
-        """
-        Calculate optimal buffer size.
-        
-        Rule of thumb (for N flows):
-            Buffer = BDP / sqrt(N)
-        
-        Where BDP = Bandwidth × RTT
-        """
-        # Bandwidth-Delay Product
-        bandwidth_bytes_per_sec = bandwidth_mbps * 1_000_000 / 8
-        rtt_sec = rtt_ms / 1000
-        bdp_bytes = bandwidth_bytes_per_sec * rtt_sec
-        
-        # Buffer size
-        if num_flows == 1:
-            buffer_bytes = bdp_bytes
-        else:
-            # Appenzeller et al: BDP / sqrt(N)
-            buffer_bytes = bdp_bytes / (num_flows ** 0.5)
-        
-        # Convert to practical units
-        buffer_packets = int(buffer_bytes / 1500)  # MTU
-        buffer_ms = rtt_ms / (num_flows ** 0.5) if num_flows > 1 else rtt_ms
-        
-        return BufferRecommendation(
-            bdp_bytes=int(bdp_bytes),
-            recommended_bytes=int(buffer_bytes),
-            recommended_packets=buffer_packets,
-            recommended_ms=buffer_ms,
-            explanation=(
-                f"For {bandwidth_mbps} Mbps link with {rtt_ms}ms RTT "
-                f"and ~{num_flows} flows, buffer {buffer_packets} packets "
-                f"(~{buffer_ms:.1f}ms of data)"
-            )
-        )
-    
-    @staticmethod
-    def linux_buffer_settings(buffer_bytes: int) -> dict:
-        """
-        Generate Linux sysctl settings for buffer sizes.
-        """
-        return {
-            'net.core.rmem_max': buffer_bytes,
-            'net.core.wmem_max': buffer_bytes,
-            'net.ipv4.tcp_rmem': f'4096 87380 {buffer_bytes}',
-            'net.ipv4.tcp_wmem': f'4096 65536 {buffer_bytes}',
-            'net.core.netdev_max_backlog': 1000,  # Reduce from default
-        }
-    
-    @staticmethod
-    def enable_fq_codel(interface: str) -> str:
-        """
-        Generate command to enable fq_codel on an interface.
-        """
-        return f"""
-# Enable fq_codel on {interface}
-tc qdisc del dev {interface} root 2>/dev/null
-tc qdisc add dev {interface} root fq_codel
-
-# Verify
-tc -s qdisc show dev {interface}
-"""
-```
-
-## Mental Model
-
-Gettys approaches network performance by asking:
-
-1. **What's the RTT under load?** That's the true latency
-2. **How deep are the buffers?** Seconds of buffering = seconds of lag
-3. **Is there flow isolation?** One flow shouldn't ruin others
-4. **Is AQM enabled?** fq_codel should be everywhere
-5. **Would I notice lag?** User experience is the metric
-
-## The Bufferbloat Checklist
-
-```
-□ Measure RTT under load, not idle
-□ Compare loaded RTT to baseline (>10x = severe bloat)
-□ Enable fq_codel on all bottleneck queues
-□ Size buffers based on BDP, not maximum
-□ Test with interactive + bulk traffic together
-□ Monitor queue depth, not just throughput
-□ Grade with dslreports.com/speedtest or similar
-□ Check router, modem, AND ISP equipment
-```
-
-## Signature Gettys Moves
-
-- Bufferbloat diagnosis (idle vs loaded RTT)
-- fq_codel as the universal solution
-- "Latency is the new bandwidth"
-- Flow isolation requirement
-- Queue depth monitoring
-- BDP-based buffer sizing
-- User experience as the metric
-- Crusading for AQM everywhere
+- If CAKE fixes latency but costs too much CPU, verify CPU saturation before blaming the algorithm. The new bottleneck may be the shaper core, not the link.
+- If Ethernet is clean and Wi-Fi is not, stop WAN tuning and switch to airtime/AQL work.
+- If ingress shaping still wastes too much bandwidth, remember that local ingress control is inherently sacrificial; the real fix is AQM at the sender's egress or provider edge.

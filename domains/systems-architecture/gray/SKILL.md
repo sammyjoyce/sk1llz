@@ -1,356 +1,92 @@
 ---
 name: gray-transaction-systems
-description: Design data systems using Jim Gray's principles of transaction processing and fault tolerance. Emphasizes ACID properties, recovery mechanisms, and the science of making systems reliable. Use when building databases, payment systems, or any system where data integrity is paramount.
-tags: transactions, acid, recovery, fault-tolerance, two-phase-commit, databases, reliability, distributed, logging
+description: "Design and review transaction-processing systems the Jim Gray way: recovery-first logging, anomaly-aware isolation, replica/2PC tradeoffs, long-lived workflow compensation, and durability contracts that survive real failures. Use when building or auditing WAL and crash recovery, ledgers or payments, idempotent retries, prepared transactions, checkpointing, replica topologies, or any code that claims a write is \"durable\". Triggers: transaction, WAL, fsync, checkpoint, group commit, isolation level, snapshot isolation, SSI, write skew, 2PC, prepared transaction, idempotency key, compensation, replica, failover, crash recovery, durability."
 ---
 
-# Jim Gray Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌​‌‌‌‌‌‍‌​​​‌​‌‌‍​​​​‌‌‌​‍‌​​‌​​​​‍​​​​‌​‌​‍​‌‌‌​​‌​⁠‍⁠
+# gray-transaction-systems
 
-## Overview
+Gray's useful lesson is not "remember ACID." It is "treat failures, retries, and recovery as the normal execution path, then make the happy path a fast special case."
 
-Jim Gray (1944–2007) was the father of transaction processing. He formalized ACID properties, invented key recovery algorithms, pioneered database benchmarking (TPC), and advanced our understanding of fault tolerance. Turing Award winner (1998). His work underpins every reliable database and financial system in existence.
+## Start By Classifying The Problem
 
-## Core Philosophy
+If the task is a short OLTP write path, optimize around conflict shape and commit latency.
 
-> "A transaction is a transformation of state that has the properties of atomicity, consistency, isolation, and durability."
+If the task crosses human think time, third-party systems, or hours of wall-clock time, stop calling it a database transaction and model it as a workflow with savepoints, scratchpad state, and compensations.
 
-> "Simplicity does not precede complexity, but follows it."
+If the task spans nodes and must commit atomically, the real question is not "can we do 2PC?" but "what happens to prepared state when the coordinator dies?"
 
-> "The key to performance is elegance, not battalions of special cases."
+If the task touches durability, the contract is defined by the exact point where the caller hears "committed" and by what is guaranteed to be stable at that moment.
 
-## Design Principles
+If the task is serializable analytics on top of hot OLTP, your main problem is often lock memory and abort behavior, not SQL syntax.
 
-1. **ACID is Non-Negotiable**: For critical data, atomicity, consistency, isolation, and durability are requirements, not optimizations.
+## Before Touching Code, Ask Yourself
 
-2. **Failures are Certain**: Hardware fails, software has bugs, operators make mistakes. Design for recovery, not just operation.
+- Where is the exact acknowledgment boundary? Name the line of code after which the client is entitled to believe the result survives process death, machine death, and retry ambiguity.
+- Which anomaly is acceptable here: lost update, write skew, stale read, fractured read, or none? "We use SERIALIZABLE" is not an answer until you map it to the engine and version.
+- If recovery replays this record twice, or replays it after another transaction touched the same entity, do the operations commute or corrupt state?
+- What happens if the first attempt committed, the response was lost, and the caller retries with a fresh connection?
+- If a prepared or in-flight transaction is stranded for an hour, who notices, who resolves it, and what resource stays pinned in the meantime?
 
-3. **Measure Everything**: You can't improve what you can't measure. Benchmarks reveal truth.
+If any answer is vague, pause and load the task-specific reference file before changing code.
 
-4. **Modularity Enables Reliability**: Separate concerns cleanly. Each component should be independently testable and replaceable.
+## Design Order
 
-5. **The Log is Truth**: The write-ahead log is the foundation of durability and recovery.
+1. Lock down the recovery transcript first: log record types, page or object identifiers, checksum strategy, commit record, and the restart rule for each failure point.
+2. Define the unknown-outcome boundary next: every caller-visible side effect after that line needs a client-generated idempotency key or an explicit compensator.
+3. Pick isolation only after you know the invariants. Choose by anomaly budget and conflict geometry, not by copying a vendor default.
+4. Choose replication and distributed commit last. The wrong topology can dominate deadlocks and operator pain even when local code is perfect.
+5. Add crash and restart tests before tuning throughput. If the system has never been killed mid-commit, its recovery story is a guess.
 
-## The ACID Properties
+## High-Signal Heuristics
 
-```text
-ATOMICITY:    All or nothing. A transaction either completes entirely or has no effect.
-CONSISTENCY:  Transactions transform the database from one valid state to another.
-ISOLATION:    Concurrent transactions appear to execute serially.
-DURABILITY:   Once committed, data survives any subsequent failure.
-```
+- Snapshot Isolation is strong for short, sparse-conflict updates and excellent for read-heavy workloads, but it is the wrong default for predicate-based invariants. Berenson et al. showed that SI allows write skew while forbidding classic ANSI phantoms; every multi-row "at least one remains true" rule is suspicious under SI.
+- PostgreSQL-style SSI is not "SI but a bit stricter." Its win is that it preserves serializability without blocking readers, but its cost is aborts and SIREAD state. Long read-only reports should use `READ ONLY DEFERRABLE` when available so they wait for a safe snapshot instead of pinning read dependencies; the production PostgreSQL SSI paper reports safe snapshots usually appear in 1-6 seconds under heavy load and stayed under 20 seconds in their benchmark.
+- Long-lived workflows should be modeled as visible progress plus compensation, not hidden locks. Gray's 1981 guidance still holds: store scratchpad or work-area state durably, checkpoint savepoints, and log the compensator name plus arguments for every externally visible action.
+- For long-lived workflows that touch shared entities, prefer delta-style operations that commute under replay and compensation. `balance += 5` and `balance -= 5` can be undone around concurrent work; `balance = 10` cannot. This is why ledgers age better than mutable balance rows.
+- Tight checkpoints shorten restart time but increase post-checkpoint full-page-image traffic. On PostgreSQL-style systems, frequent checkpoints often make WAL volume worse, not better, because the first write to each page after a checkpoint logs the whole page again.
+- Group commit is only tunable if you measure flush cost first. PostgreSQL's practical rule is to start `commit_delay` at about half the average single-flush time from `pg_test_fsync`; on kernels with 10 ms sleep granularity, any nonzero delay from 1 to 10000 microseconds behaves like 10 ms and becomes a latency trap.
+- If WAL insertion is forced to write buffers while holding page locks, the bottleneck is often WAL buffer pressure, not the storage device. Increase WAL buffer headroom before you blame the disk.
+- File-system semantics are part of the transaction protocol. Rename, delete, truncate, and file growth are not abstract metadata operations; they define what survives power loss. SQLite's rollback-journal notes are worth internalizing: safe-append, powersafe-overwrite, and hot-journal behavior change what is actually durable, and on many systems `PERSIST` is faster and safer than delete-or-truncate churn because it reuses the journal without forcing directory updates.
 
-### Isolation Levels (from weakest to strongest)
+## Distributed Commit And Replication
 
-```text
-READ UNCOMMITTED:  See uncommitted changes (dirty reads possible)
-READ COMMITTED:    Only see committed changes (non-repeatable reads possible)
-REPEATABLE READ:   Same query returns same rows (phantom reads possible)
-SERIALIZABLE:      Full isolation (no anomalies, but limits concurrency)
-```
+- Eager update-everywhere is rarely a scaling plan for OLTP. The Gray/Helland/O'Neil/Shasha deadlock formula grows with `nodes^3` and `actions^5`; doubling writes per transaction can multiply deadlocks by 32, and a 10x node increase can multiply them by 1000. If you cannot explain why your workload escapes that geometry, you do not have a multi-writer design.
+- Primary-copy ownership is the default for mutable data. Multi-primary needs a proof, not confidence.
+- Classic 2PC is acceptable only when blocked prepared state is operationally survivable. Gray and Lamport's Paxos Commit result is the clean reminder: 2PC is the `F = 0` case. If coordinator failure must not block progress, you need consensus-backed commit and the extra coordinators and delay that come with it.
+- Presumed Abort is the normal OLTP default because "no record means abort" removes force-writes on aborts and lets read-only participants vote read-only and disappear. Presumed Commit only wins when committed distributed updates dominate enough to justify an extra coordinator force-write so workers can commit with less forcing.
+- Prepared transactions are a storage and operations feature, not just a protocol feature. In PostgreSQL, forgotten prepared transactions keep locks, interfere with VACUUM, and can drive transaction ID wraparound shutdown. Leave `max_prepared_transactions=0` unless an external transaction manager and sweeper are genuinely in place.
 
-## When Designing Systems
+## NEVER
 
-### Always
+- NEVER call a write "durable" because the code reached `write()` or because one replica received the bytes; the seductive shortcut is lower benchmark latency, but the consequence is unknown-outcome retries and double effects. Instead define durability at the first stable log or quorum that can recover the write without client help.
+- NEVER retry a timed-out commit blindly because the seductive mental model is binary `{committed, not committed}`; the real third state is `{committed, reply lost}`. Instead require a client-generated idempotency key whose result row is stored in the same transaction as the business effect.
+- NEVER trust isolation level names across engines because the seductive shortcut is vendor-name matching; the consequence is shipping write skew or lost updates under a false sense of safety. Instead enumerate tolerated anomalies per engine and version, then add locks or serialization exactly where the invariant lives.
+- NEVER hold database transactions across human think time, partner APIs, or slow queues because the seductive path is "keep it atomic end to end"; the consequence is square-law deadlock growth, impossible restart semantics, and abandoned in-flight work. Instead persist workflow state, commit short steps, and compensate visible actions.
+- NEVER treat `fsync()` failure as retryable because the seductive story is "just flush again"; on several kernels, a writeback error may be reported once and later `fsync()` can succeed even though dirty data was discarded. Instead treat commit-path `fsync` EIO or ENOSPC as fatal and recover from WAL after restart.
+- NEVER delete or rename journals, manifests, or recycled WAL files out of band because the seductive belief is "the transaction is done, the file is garbage"; the consequence is corrupting a hot journal or losing the metadata that makes recovery deterministic. Instead let the engine's own mode transition or segment recycling remove them.
+- NEVER enable prepared transactions "just in case" because the seductive benefit is future flexibility; the concrete consequence is pinned locks and garbage-collection or vacuum blockers that appear only during incidents. Instead keep the feature off until you also have monitoring, aging alerts, and an automated resolver.
 
-- Use write-ahead logging (WAL) for durability
-- Design idempotent operations where possible
-- Plan for crash recovery from the start
-- Test failure scenarios explicitly
-- Measure transaction throughput AND latency
-- Document consistency guarantees clearly
-- Use timeouts on all distributed operations
+## Freedom Calibration
 
-### Never
+Low freedom: commit sequence, WAL ordering, fsync error handling, prepared-state transitions, and file-durability rules. Do not improvise here.
 
-- Assume commits are durable without fsync
-- Mix transaction boundaries with business logic haphazardly
-- Ignore the difference between isolation levels
-- Design recovery as an afterthought
-- Trust in-memory state without persistence guarantees
-- Assume network operations will succeed
+Medium freedom: isolation choice, lock strategy, group-commit tuning, and replica topology. Use the heuristics above and validate with workload-specific tests.
 
-### Prefer
+High freedom: compensation semantics, workflow boundaries, and domain-level recovery UX. The business meaning matters more than the storage engine here, but it still must be logged and replayable.
 
-- Pessimistic locking over optimistic when conflicts are common
-- Shorter transactions over longer ones
-- Explicit transaction boundaries over implicit
-- Simple recovery mechanisms over clever optimizations
-- Proven algorithms over novel approaches for critical paths
+## Mandatory Loading Triggers
 
-## Key Concepts
+- Replication topology, active-active design, or multi-primary discussion: read `references/deadlock-scaling.md` first. Do not load `references/wal-durability.md` unless the task also changes commit or flush behavior.
+- WAL, `fsync`, checkpoints, file rotation, journaling mode, or crash recovery: read `references/wal-durability.md` first. Do not load `references/isolation-anomalies.md` for purely storage-path work.
+- Isolation levels, read-modify-write correctness, lost updates, write skew, or SSI behavior: read `references/isolation-anomalies.md` first. Do not load `references/deadlock-scaling.md` unless replicas can write concurrently.
+- Retry logic, failover, process supervision, or fault taxonomy: read `references/failure-taxonomy.md` first, then `references/code-patterns.md` if you need implementation patterns.
+- Transaction manager, idempotent executor, outbox, or compensation workflow code: read `references/code-patterns.md` first. Do not load `references.md` during an incident; it is for paper lookup, not fast decision support.
+- Paper citations or broader Gray background for a design memo: load `references.md` only after you already know the sub-problem. Do not load `philosophy.md` for implementation or incident response work.
 
-### Write-Ahead Logging (WAL)
+## Fallbacks When The Ideal Design Is Off The Table
 
-```text
-The fundamental rule: WRITE THE LOG BEFORE THE DATA
-
-1. Before modifying data, write the intended change to the log
-2. Ensure the log record is durable (fsync)
-3. Only then apply the change to the data pages
-4. Periodically checkpoint (flush dirty pages, truncate log)
-
-Recovery:
-1. Read the log from last checkpoint
-2. REDO all committed transactions
-3. UNDO all uncommitted transactions
-```
-
-### The Five-Minute Rule (1987, updated over time)
-
-```text
-Original insight: There's a break-even point for caching
-
-If data is accessed more frequently than once per break-even interval,
-keep it in memory. Otherwise, fetch from disk.
-
-The rule: Break-even interval ≈ (Price per MB of disk) / (Price per MB of RAM × disk accesses/sec)
-
-In 1987: ~5 minutes
-In 2007: Still ~5 minutes (both got cheaper proportionally)
-Today: SSD changes the math, but the principle remains
-```
-
-### Transaction States
-
-```text
-          ┌─────────────────────────┐
-          ▼                         │
-    ┌──────────┐    ┌──────────┐    │
-    │  ACTIVE  │───▶│ PARTIALLY│────┘
-    └──────────┘    │ COMMITTED│
-          │         └──────────┘
-          │               │
-          ▼               ▼
-    ┌──────────┐    ┌──────────┐
-    │  FAILED  │    │COMMITTED │
-    └──────────┘    └──────────┘
-          │
-          ▼
-    ┌──────────┐
-    │ ABORTED  │
-    └──────────┘
-```
-
-### Two-Phase Commit (2PC)
-
-```text
-Coordinator                    Participants
-     │                              │
-     │──── PREPARE ────────────────▶│
-     │                              │ (write to log, lock resources)
-     │◀─── VOTE (YES/NO) ──────────│
-     │                              │
-     │ (if all YES)                 │
-     │──── COMMIT ─────────────────▶│
-     │                              │ (commit, release locks)
-     │◀─── ACK ────────────────────│
-     │                              │
-     
-If any participant votes NO, or timeout: ABORT all.
-```
-
-## Code Patterns
-
-### Implementing WAL in Principle
-
-```python
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any
-import os
-
-class LogRecordType(Enum):
-    BEGIN = "BEGIN"
-    UPDATE = "UPDATE"
-    COMMIT = "COMMIT"
-    ABORT = "ABORT"
-    CHECKPOINT = "CHECKPOINT"
-
-@dataclass
-class LogRecord:
-    lsn: int              # Log Sequence Number
-    txn_id: int
-    record_type: LogRecordType
-    table: str = ""
-    key: Any = None
-    before_value: Any = None  # For UNDO
-    after_value: Any = None   # For REDO
-
-class WriteAheadLog:
-    """
-    Jim Gray's WAL protocol: Log before data.
-    """
-    
-    def __init__(self, log_path: str):
-        self.log_path = log_path
-        self.lsn = 0
-        self.log_file = open(log_path, 'a+b')
-    
-    def append(self, record: LogRecord) -> int:
-        """Append record to log and force to disk."""
-        self.lsn += 1
-        record.lsn = self.lsn
-        
-        # Serialize and write
-        data = self._serialize(record)
-        self.log_file.write(data)
-        
-        # CRITICAL: Force to stable storage
-        self.log_file.flush()
-        os.fsync(self.log_file.fileno())
-        
-        return self.lsn
-    
-    def _serialize(self, record: LogRecord) -> bytes:
-        # Implementation detail
-        pass
-```
-
-### Transaction Manager Pattern
-
-```python
-from contextlib import contextmanager
-from threading import Lock
-from typing import Generator
-
-class TransactionManager:
-    """
-    Manages transaction lifecycle with ACID guarantees.
-    """
-    
-    def __init__(self, wal: WriteAheadLog, storage: Storage):
-        self.wal = wal
-        self.storage = storage
-        self.active_txns: dict[int, Transaction] = {}
-        self.lock = Lock()
-        self.next_txn_id = 0
-    
-    @contextmanager
-    def transaction(self) -> Generator[Transaction, None, None]:
-        """
-        Context manager for transaction scope.
-        
-        Usage:
-            with tm.transaction() as txn:
-                txn.update('accounts', 'alice', balance=100)
-                txn.update('accounts', 'bob', balance=200)
-            # Auto-commit on success, auto-abort on exception
-        """
-        txn = self._begin()
-        try:
-            yield txn
-            self._commit(txn)
-        except Exception:
-            self._abort(txn)
-            raise
-    
-    def _begin(self) -> Transaction:
-        with self.lock:
-            txn_id = self.next_txn_id
-            self.next_txn_id += 1
-        
-        # Log the begin FIRST
-        self.wal.append(LogRecord(
-            lsn=0, txn_id=txn_id, record_type=LogRecordType.BEGIN
-        ))
-        
-        txn = Transaction(txn_id, self.wal, self.storage)
-        self.active_txns[txn_id] = txn
-        return txn
-    
-    def _commit(self, txn: Transaction) -> None:
-        # Log commit record
-        self.wal.append(LogRecord(
-            lsn=0, txn_id=txn.txn_id, record_type=LogRecordType.COMMIT
-        ))
-        # Release locks, clean up
-        txn.release_locks()
-        del self.active_txns[txn.txn_id]
-    
-    def _abort(self, txn: Transaction) -> None:
-        # UNDO all changes using log records
-        txn.rollback()
-        self.wal.append(LogRecord(
-            lsn=0, txn_id=txn.txn_id, record_type=LogRecordType.ABORT
-        ))
-        txn.release_locks()
-        del self.active_txns[txn.txn_id]
-```
-
-### Idempotent Operations
-
-```python
-from hashlib import sha256
-from datetime import datetime, timedelta
-
-class IdempotentExecutor:
-    """
-    Ensure operations execute exactly once, even with retries.
-    
-    Gray's insight: Idempotency transforms "at-least-once" 
-    into "exactly-once" semantics.
-    """
-    
-    def __init__(self, storage):
-        self.storage = storage
-        self.executed_ops: dict[str, tuple[datetime, Any]] = {}
-    
-    def execute(
-        self, 
-        idempotency_key: str, 
-        operation: callable,
-        ttl: timedelta = timedelta(hours=24)
-    ) -> Any:
-        """
-        Execute operation exactly once for given key.
-        """
-        # Check if already executed
-        if idempotency_key in self.executed_ops:
-            timestamp, result = self.executed_ops[idempotency_key]
-            if datetime.now() - timestamp < ttl:
-                return result  # Return cached result
-        
-        # Execute and store result
-        result = operation()
-        self.executed_ops[idempotency_key] = (datetime.now(), result)
-        
-        return result
-```
-
-## Mental Model
-
-Jim Gray approached systems as a scientist:
-
-1. **Define the invariants**: What must always be true?
-2. **Identify failure modes**: What can go wrong?
-3. **Design recovery**: How do we get back to a valid state?
-4. **Measure and benchmark**: Quantify performance precisely
-5. **Simplify**: Remove complexity until it breaks, then add back only what's needed
-
-### The Failure Model
-
-```text
-Types of failures (increasingly severe):
-1. Transaction failure  → Abort and undo
-2. System failure       → Restart and recover from log
-3. Media failure        → Restore from backup + log
-4. Disaster             → Failover to remote site
-
-Design for all of them.
-```
-
-## Warning Signs
-
-You're violating Gray's principles if:
-
-- You don't know your system's durability guarantees
-- Transactions span user think time (long-held locks)
-- Recovery is "we'll figure it out if it happens"
-- You can't explain your isolation level choice
-- You assume fsync is called when it isn't
-- Your benchmarks don't include failure scenarios
-
-## Additional Resources
-
-- For detailed philosophy, see [philosophy.md](philosophy.md)
-- For references (papers, books), see [references.md](references.md)
+- Inherited multi-writer replication and cannot re-architect this quarter: shrink transaction write sets aggressively, move cross-node effects to append-only inbox or outbox tables, and assign ownership of hot keys to one writer. The `actions^5` term means reducing writes per transaction pays back immediately.
+- Cannot change the global isolation level: add a sentinel row lock or advisory lock exactly around the invariant, not around the whole workload.
+- Long read-only serializable reports keep aborting or consuming memory: run them on safe or deferrable snapshots, or move them to a replica with an explicit staleness contract.
+- Sync commit cost dominates but data loss of a short window is acceptable: use asynchronous commit with an explicit written loss budget, never `fsync=off`. PostgreSQL's documented risk window is up to three times `wal_writer_delay`.
+- You cannot make an external side effect undoable: defer it until after durable commit and pair it with an outbox plus operator-visible reconciliation, rather than pretending it is part of one atomic transaction.

@@ -1,572 +1,110 @@
 ---
 name: google-search-architecture
-description: Build search systems informed by Google's internal architecture as revealed in the May 2024 API Content Warehouse leak. Covers Ascorer ranking, NavBoost click signals, Twiddler re-ranking, index tiering, and entity-based retrieval. Use when designing large-scale search engines, ranking systems, or understanding how modern search actually works.
-tags: search, indexing, ranking, crawling, information-retrieval, pagerank, distributed, scale, query, text
+description: Design and debug multi-stage search ranking systems using leak-confirmed Google patterns for stage placement, twiddlers, click signals, sitechunk quality, and ranking failure isolation. Use when building or tuning retrieval/ranking stacks, placing a new signal, debugging ranking regressions, designing click-based rerankers, implementing diversity constraints, or separating retrieval failures from trust or packing failures. Triggers include ranking pipeline, retrieval vs ranking, twiddler, NavBoost, click signals, sliceTag, sitechunk, NSR, siteAuthority, freshness, hostAge, official page, quality demotion, packing, search regression.
 ---
 
-# Google Search Architecture Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​‌​‌‌​‍‌​​​​‌​​‍​‌​‌​​​​‍​‌​​‌​‌‌‍​​​​‌​​‌‍‌‌​‌‌‌‌‌⁠‍⁠
+# Google Search Architecture
 
-## Overview
+This skill is for one question: **where does this signal belong, and what failure mode will it create if you place it wrong?**
 
-In May 2024, Google accidentally published internal documentation for their "API Content Warehouse" on GitHub — 2,500+ pages describing 14,014 ranking attributes. This leak provides the most detailed public view into how Google Search actually works, contradicting years of public statements and revealing the true complexity of modern search.
-
-This skill encodes the architectural patterns, ranking systems, and design principles inferred from this documentation.
-
-## Core Philosophy
-
-> "Search is not one algorithm. It's a pipeline of microservices where features are preprocessed and composed at runtime."
-
-> "Clicks are the ground truth. User behavior is the ultimate signal."
-
-> "Trust is earned over time. New sites start in a sandbox until they prove themselves."
-
-Google's search is not a single ranking function with weighted factors. It's a **multi-stage pipeline** where documents pass through retrieval, scoring, re-ranking (Twiddlers), and final composition.
-
-## The Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         QUERY PROCESSING                            │
-│  Query Understanding → Intent Classification → Entity Recognition   │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         INDEX TIERS                                 │
-│  ┌──────────┐    ┌──────────────┐    ┌──────────────┐              │
-│  │   Base   │    │  Zeppelins   │    │  Landfills   │              │
-│  │ (Fresh)  │    │  (Standard)  │    │   (Archive)  │              │
-│  └──────────┘    └──────────────┘    └──────────────┘              │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         ASCORER (Primary Ranking)                   │
-│  PageRank + Content Signals + Entity Scores + Link Quality          │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         NAVBOOST (Click Signals)                    │
-│  13 months of click data → CRAPS processing → Engagement signals    │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         TWIDDLERS (Re-ranking)                      │
-│  FreshnessTwiddler │ QualityBoost │ RealTimeBoost │ NavBoost        │
-│  (Adjust top 20-30 results based on signals)                        │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         SERP COMPOSITION                            │
-│  Snippet generation, Featured snippets, Knowledge panels, Ads       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-## Key Systems
-
-### 1. Ascorer — The Primary Ranking Algorithm
-
-The main scoring function that evaluates document relevance. Incorporates:
-
-- **PageRank variants** (rawPagerank, pagerank2) — Link authority
-- **Content quality signals** — Originality, depth, E-E-A-T
-- **Entity scores** — How well the document covers relevant entities
-- **Site authority** (siteAuthority) — Domain-level trust
-
-```python
-# Conceptual Ascorer scoring
-class Ascorer:
-    def score(self, query, document):
-        """
-        Primary ranking score combining multiple signal families.
-        """
-        return (
-            self.relevance_score(query, document) *
-            self.quality_score(document) *
-            self.authority_score(document) *
-            self.freshness_modifier(query, document)
-        )
-    
-    def authority_score(self, document):
-        """
-        Combines page-level and site-level authority.
-        """
-        page_authority = self.get_pagerank(document.url)
-        site_authority = self.get_site_authority(document.domain)
-        
-        # Site authority acts as a ceiling/floor
-        return blend(page_authority, site_authority)
-```
-
-### 2. NavBoost — Click Signals Are Real
-
-Google denied using clicks for years. The leak confirms **NavBoost** — a system that:
-
-- Collects **13 months of click data**
-- Tracks click-through rates, dwell time, bounces
-- Feeds into **CRAPS** (Click and Results Prediction System)
-- Directly influences rankings
-
-```python
-class NavBoost:
-    """
-    User behavior signals from search interactions.
-    """
-    
-    def __init__(self):
-        self.click_window = timedelta(days=395)  # ~13 months
-    
-    def compute_signals(self, url, query_class):
-        """
-        Aggregate click signals for a URL within a query class.
-        """
-        clicks = self.get_clicks(url, query_class, self.click_window)
-        
-        return {
-            'click_through_rate': self.ctr(clicks),
-            'long_clicks': self.count_long_clicks(clicks),  # Dwell > 30s
-            'short_clicks': self.count_short_clicks(clicks),  # Bounce < 10s
-            'last_longest_clicks': self.recent_engagement(clicks),
-            'squashed_clicks': self.diminishing_returns(clicks),
-        }
-    
-    def count_long_clicks(self, clicks):
-        """
-        Long clicks (high dwell time) are strong positive signals.
-        Short clicks (quick bounces) are negative signals.
-        """
-        return sum(1 for c in clicks if c.dwell_time > 30)
-```
-
-### 3. Twiddlers — Post-Retrieval Re-ranking
-
-**Twiddlers** are re-ranking functions applied after initial scoring. They adjust the top 20-30 results based on specific signals:
-
-| Twiddler | Function |
-|----------|----------|
-| **NavBoost** | Boost based on click engagement |
-| **QualityBoost** | Boost based on quality signals |
-| **FreshnessTwiddler** | Boost newer content for time-sensitive queries |
-| **RealTimeBoost** | Boost breaking news/trending content |
-| **DemotionTwiddler** | Demote low-quality or policy-violating content |
-
-```python
-class TwiddlerPipeline:
-    """
-    Twiddlers run after Ascorer, adjusting the final ranking.
-    They operate on the top N results (typically 20-30).
-    """
-    
-    def __init__(self):
-        self.twiddlers = [
-            NavBoostTwiddler(),
-            QualityBoostTwiddler(),
-            FreshnessTwiddler(),
-            RealTimeBoostTwiddler(),
-            DemotionTwiddler(),
-        ]
-    
-    def apply(self, query, results):
-        """
-        Apply twiddlers sequentially to re-rank results.
-        """
-        for twiddler in self.twiddlers:
-            if twiddler.should_apply(query):
-                results = twiddler.rerank(query, results)
-        return results
-
-
-class FreshnessTwiddler:
-    """
-    Boost fresh content for queries with freshness intent.
-    """
-    
-    def should_apply(self, query):
-        return query.has_freshness_intent()
-    
-    def rerank(self, query, results):
-        for result in results:
-            age = now() - result.publish_date
-            if age < timedelta(hours=24):
-                result.score *= 1.3  # Strong boost for very fresh
-            elif age < timedelta(days=7):
-                result.score *= 1.1  # Moderate boost for recent
-        return sorted(results, key=lambda r: r.score, reverse=True)
-```
-
-### 4. Index Tiers — Not All Pages Are Equal
-
-Google maintains multiple index tiers with different freshness and quality thresholds:
-
-| Tier | Description | Crawl Frequency |
-|------|-------------|-----------------|
-| **Base** | High-quality, fresh content | Frequent |
-| **Zeppelins** | Standard content | Moderate |
-| **Landfills** | Low-quality, archive content | Rare |
-
-```python
-class IndexTierAssignment:
-    """
-    Assign documents to index tiers based on quality signals.
-    """
-    
-    def assign_tier(self, document):
-        quality = self.compute_quality(document)
-        freshness_need = self.freshness_importance(document)
-        
-        if quality > 0.8 and freshness_need > 0.7:
-            return 'base'  # Premium tier, frequent updates
-        elif quality > 0.4:
-            return 'zeppelins'  # Standard tier
-        else:
-            return 'landfills'  # Archive tier, rarely re-crawled
-```
-
-### 5. Site Authority — Domain Trust Is Real
-
-Despite public denials, Google uses **siteAuthority** — a domain-level trust metric:
-
-```python
-class SiteAuthority:
-    """
-    Domain-level authority score used in the Q* system.
-    """
-    
-    def compute(self, domain):
-        return {
-            'topicality_concentration': self.topic_focus(domain),
-            'link_authority': self.aggregate_pagerank(domain),
-            'brand_signals': self.brand_recognition(domain),
-            'historical_quality': self.quality_history(domain),
-            'chrome_data': self.chrome_engagement(domain),
-        }
-    
-    def topic_focus(self, domain):
-        """
-        Higher concentration on specific topics = higher authority
-        in those topics. Generalist sites have diluted authority.
-        """
-        topics = self.get_topic_distribution(domain)
-        return self.concentration_score(topics)
-```
-
-### 6. The Sandbox — New Sites Are Held Back
-
-The leak confirms new sites face a **sandbox period**:
-
-```python
-class SandboxEvaluator:
-    """
-    New sites are held back until they establish trust.
-    """
-    
-    def __init__(self):
-        self.min_age = timedelta(days=180)  # ~6 months minimum
-    
-    def apply_sandbox(self, document, site_info):
-        site_age = now() - site_info.first_indexed
-        
-        if site_age < self.min_age:
-            # Apply dampening factor to new sites
-            dampening = site_age / self.min_age  # 0.0 to 1.0
-            document.score *= dampening
-        
-        return document
-```
-
-### 7. Chrome Data Integration
-
-Google uses Chrome browser data for ranking signals:
-
-```python
-class ChromeSignals:
-    """
-    Signals derived from Chrome browser usage.
-    """
-    
-    def get_signals(self, url):
-        return {
-            'site_engagement': self.engagement_score(url.domain),
-            'direct_navigation': self.direct_visit_rate(url.domain),
-            'bookmarks': self.bookmark_frequency(url),
-            'time_on_site': self.average_session_duration(url.domain),
-        }
-```
-
-## Design Principles
-
-### 1. Multi-Stage Pipeline
-
-Don't build a single ranking function. Build a **pipeline**:
-
-```
-Retrieval → Scoring → Re-ranking → Composition
-```
-
-Each stage has different latency budgets and can use different signal types.
-
-### 2. Clicks Are Ground Truth
-
-User behavior is the ultimate signal. Build systems to:
-- Collect click data at scale
-- Distinguish long clicks (engagement) from short clicks (bounces)
-- Use click patterns to validate other signals
-
-### 3. Trust Is Earned Over Time
-
-New content/sites should face a probation period:
-- Historical quality matters
-- Consistency builds trust
-- Sudden changes trigger re-evaluation
-
-### 4. Entities, Not Just Keywords
-
-Modern search is entity-centric:
-- Recognize entities in queries and documents
-- Score entity coverage and relevance
-- Use knowledge graphs to understand relationships
-
-### 5. Quality Has Multiple Dimensions
-
-Quality signals include:
-- **Content quality** — Originality, depth, accuracy
-- **Site quality** — Authority, trust, history
-- **Page quality** — UX, speed, mobile-friendliness
-- **Author quality** — E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness)
-
-## Code Patterns
-
-### Building a Twiddler System
-
-```python
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List
-
-@dataclass
-class SearchResult:
-    url: str
-    score: float
-    metadata: dict
-
-class Twiddler(ABC):
-    """
-    Base class for re-ranking functions.
-    """
-    
-    @abstractmethod
-    def should_apply(self, query: str, context: dict) -> bool:
-        """Determine if this twiddler should run for this query."""
-        pass
-    
-    @abstractmethod
-    def rerank(self, query: str, results: List[SearchResult]) -> List[SearchResult]:
-        """Re-rank the results."""
-        pass
-
-
-class TwiddlerPipeline:
-    def __init__(self, twiddlers: List[Twiddler]):
-        self.twiddlers = twiddlers
-    
-    def apply(self, query: str, results: List[SearchResult], context: dict) -> List[SearchResult]:
-        for twiddler in self.twiddlers:
-            if twiddler.should_apply(query, context):
-                results = twiddler.rerank(query, results)
-        return results
-
-
-# Example: Freshness Twiddler
-class FreshnessTwiddler(Twiddler):
-    def __init__(self, freshness_queries: set):
-        self.freshness_queries = freshness_queries
-    
-    def should_apply(self, query: str, context: dict) -> bool:
-        # Apply for news, events, or queries with time indicators
-        return (
-            context.get('query_type') == 'news' or
-            any(term in query.lower() for term in ['today', 'latest', 'new', '2024'])
-        )
-    
-    def rerank(self, query: str, results: List[SearchResult]) -> List[SearchResult]:
-        from datetime import datetime, timedelta
-        now = datetime.utcnow()
-        
-        for result in results:
-            pub_date = result.metadata.get('publish_date')
-            if pub_date:
-                age = now - pub_date
-                if age < timedelta(hours=24):
-                    result.score *= 1.5
-                elif age < timedelta(days=7):
-                    result.score *= 1.2
-        
-        return sorted(results, key=lambda r: r.score, reverse=True)
-```
-
-### Building a Click Signal System
-
-```python
-from collections import defaultdict
-from datetime import datetime, timedelta
-
-class ClickSignalCollector:
-    """
-    Collect and aggregate click signals (NavBoost-style).
-    """
-    
-    def __init__(self, window_days: int = 395):
-        self.window = timedelta(days=window_days)
-        self.clicks = defaultdict(list)  # url -> [Click]
-    
-    def record_click(self, query: str, url: str, dwell_time: float, position: int):
-        """Record a click event."""
-        self.clicks[url].append({
-            'query': query,
-            'timestamp': datetime.utcnow(),
-            'dwell_time': dwell_time,
-            'position': position,
-        })
-    
-    def get_signals(self, url: str) -> dict:
-        """Compute aggregate signals for a URL."""
-        cutoff = datetime.utcnow() - self.window
-        recent_clicks = [c for c in self.clicks[url] if c['timestamp'] > cutoff]
-        
-        if not recent_clicks:
-            return {'has_data': False}
-        
-        long_clicks = sum(1 for c in recent_clicks if c['dwell_time'] > 30)
-        short_clicks = sum(1 for c in recent_clicks if c['dwell_time'] < 10)
-        
-        return {
-            'has_data': True,
-            'total_clicks': len(recent_clicks),
-            'long_click_rate': long_clicks / len(recent_clicks),
-            'short_click_rate': short_clicks / len(recent_clicks),
-            'avg_dwell_time': sum(c['dwell_time'] for c in recent_clicks) / len(recent_clicks),
-            'position_weighted_ctr': self._position_weighted_ctr(recent_clicks),
-        }
-    
-    def _position_weighted_ctr(self, clicks):
-        """
-        Weight clicks by position — clicking result #10 is more
-        meaningful than clicking result #1.
-        """
-        weights = {1: 1.0, 2: 1.2, 3: 1.4, 4: 1.6, 5: 1.8}
-        weighted_sum = sum(weights.get(c['position'], 2.0) for c in clicks)
-        return weighted_sum / len(clicks) if clicks else 0
-```
-
-### Index Tier Management
-
-```python
-class IndexTierManager:
-    """
-    Manage document assignment to index tiers.
-    """
-    
-    TIERS = ['base', 'zeppelins', 'landfills']
-    
-    def __init__(self):
-        self.tier_thresholds = {
-            'base': {'quality': 0.8, 'freshness_need': 0.7},
-            'zeppelins': {'quality': 0.4, 'freshness_need': 0.3},
-            'landfills': {'quality': 0.0, 'freshness_need': 0.0},
-        }
-        self.crawl_intervals = {
-            'base': timedelta(hours=1),
-            'zeppelins': timedelta(days=7),
-            'landfills': timedelta(days=30),
-        }
-    
-    def assign_tier(self, document) -> str:
-        quality = self.compute_quality(document)
-        freshness = self.compute_freshness_need(document)
-        
-        for tier in self.TIERS:
-            thresholds = self.tier_thresholds[tier]
-            if quality >= thresholds['quality']:
-                return tier
-        
-        return 'landfills'
-    
-    def get_crawl_interval(self, tier: str) -> timedelta:
-        return self.crawl_intervals.get(tier, timedelta(days=30))
-```
-
-## Mental Model
-
-Think of Google Search as a **trust and relevance machine**:
-
-1. **Retrieval**: Find candidate documents (index tiers matter)
-2. **Scoring**: Ascorer computes base relevance + authority
-3. **Behavioral validation**: NavBoost adjusts based on user engagement
-4. **Re-ranking**: Twiddlers apply query-specific adjustments
-5. **Composition**: Build the final SERP with snippets, features, etc.
-
-**Trust flows through the system:**
-- Sites earn trust over time (sandbox → established)
-- Pages inherit site trust but can exceed or fall below it
-- Links from trusted sources transfer more trust
-- User behavior (clicks, engagement) validates or contradicts other signals
-
-## Common Mistakes
-
-### Ignoring the Pipeline
-
-```python
-# BAD: Single monolithic scoring function
-def rank(query, documents):
-    return sorted(documents, key=lambda d: compute_score(query, d))
-
-# GOOD: Multi-stage pipeline with different concerns
-def rank(query, documents):
-    candidates = retrieve(query, documents)      # Fast, recall-focused
-    scored = score(query, candidates)            # Relevance + authority
-    reranked = apply_twiddlers(query, scored)    # Query-specific adjustments
-    return compose_serp(query, reranked)         # Final presentation
-```
-
-### Ignoring Click Signals
-
-```python
-# BAD: Ranking purely on content signals
-score = content_relevance * pagerank
-
-# GOOD: Incorporate behavioral signals
-score = content_relevance * pagerank * navboost_modifier(click_signals)
-```
-
-### Treating All Content Equally
-
-```python
-# BAD: Same crawl frequency for everything
-crawl_all_pages(interval=timedelta(days=1))
-
-# GOOD: Tier-based crawling
-for page in pages:
-    tier = assign_tier(page)
-    schedule_crawl(page, interval=tier_intervals[tier])
-```
-
-## Debugging Questions
-
-When your search system isn't working:
-
-1. **What stage is failing?** Retrieval? Scoring? Re-ranking?
-2. **Do I have behavioral signals?** Click data is the ground truth.
-3. **How old is this content/site?** New sites face natural dampening.
-4. **What tier is this content in?** Lower tiers get less attention.
-5. **Are twiddlers helping or hurting?** Check each re-ranker's impact.
-
-## References
-
-- [Google API Content Warehouse Leak Analysis (iPullRank)](https://ipullrank.com/google-algo-leak)
-- [Search Engine Land: Document Leak Reveals Ranking Algorithm](https://searchengineland.com/google-search-document-leak-ranking-442617)
-- [Twiddler Framework Deep Dive (Resoneo)](https://www.resoneo.com/google-leak-part-2-understanding-the-twiddler-framework/)
-- [NavBoost and CRAPS Analysis (Hobo)](https://www.hobo-web.co.uk/evidence-based-mapping-of-google-updates-to-leaked-internal-ranking-signals/)
-- [Google Search Quality Rater Guidelines](https://guidelines.raterhub.com/) — Official human evaluation criteria
+## Before You Change Ranking Logic
+
+Ask yourself, in order:
+
+1. **Is this a recall problem, a score problem, a packing problem, or a trust-contamination problem?**
+   If the document never enters the candidate set, no reranker fixes it.
+2. **Am I expressing score semantics, position semantics, or quota semantics?**
+   Score semantics belong in `Boost`/Ascorer. Position semantics belong in `BoostAboveResult` or `SetRelativeOrder`. Quota/diversity semantics belong in category constraints.
+3. **Does this signal vary by query slice or by document identity?**
+   Slice-varying signals stay query-time; stable doc signals move left toward index-time.
+4. **Will this change be run on thin results, fat results, or sitechunks?**
+   Thin-result logic is cheap. Fat-result logic triggers docinfo fetches and retry loops. Sitechunk logic can contaminate whole sections.
+
+If you cannot answer all four, stop and load the relevant reference before editing code.
+
+## Mandatory Loading Triggers
+
+- **Before placing a signal or changing twiddler behavior, READ** [references/pipeline-stages.md](references/pipeline-stages.md).
+- **Before touching clicks, dwell, CTR, or slice logic, READ** [references/click-signals.md](references/click-signals.md).
+- **Before touching site authority, site quality, demotions, or new-site suppression, READ** [references/quality-and-trust.md](references/quality-and-trust.md).
+- **Do NOT load** `click-signals.md` for pure retrieval/index-tier work.
+- **Do NOT load** `quality-and-trust.md` for a twiddler-only packing bug.
+- **Do NOT load** `pipeline-stages.md` if the task is only about sitechunk contamination or demotions.
+
+## Placement Heuristics That Matter
+
+- **Push stable monotonic signals left.** If a feature is known at index time and should change slowly, store it in per-doc data and let the primary scorer consume it. Query-time code is for volatile, slice-sensitive, or experimental logic.
+- **Keep score features and ordering features separate.** The twiddler guide explicitly warns that if you routinely need `Boost > 5-10`, you are probably forcing position semantics into score space. Use `BoostAboveResult` or a constraint instead.
+- **Legal/policy removals are not diversity constraints.** Category packers relax soft constraints under stress. Hard removals must use `Filter` or `Hide`, never `max_total`, `stride`, or a giant negative boost.
+- **Anything that needs snippets/body is automatically a lazy-cost decision.** Lazy twiddlers can cause refetch-and-retwiddle loops when they remove or shove too many results below the fetched prefix. Treat lazy logic as a latency tax, not as free expressiveness.
+- **Clicks can only rerank retrieved candidates.** NavBoost runs after retrieval; it cannot save recall mistakes. Spend retrieval budget on recall, not on pretending later stages can resurrect missed documents.
+- **Site quality is chunked, not global.** NSR is computed per sitechunk, not per domain, and fallback can substitute the average of other host chunks when a chunk lacks data. That means chunk design is an architecture decision, not an analytics detail.
+
+## Working Decision Tree
+
+### When adding a new signal
+
+- If it is a stable per-document feature and you expect it to survive reindex cadence, place it in index-time storage and consume it in primary scoring.
+- If it is query-class-specific or needs rapid iteration, prototype it as a predoc twiddler.
+- If it needs body/snippet/docinfo, make it lazy only after you prove the latency budget survives worst-case refetches.
+- If it is about composition across corpora, it belongs in the packer layer, not the web twiddler layer.
+- If it is about trust, authority, or section contamination, model it at sitechunk granularity, not per-result reranking.
+
+### When debugging a ranking regression
+
+- **Not retrieved at all:** inspect tier placement, truncation, canonicalization, and index-time feature population first.
+- **Retrieved but obviously misordered:** decide whether the mistake is score-space or order-space before editing boosts.
+- **Looks good in lab, bad in production:** inspect slice partitioning. Google stores click signals by `sliceTag`; desktop, mobile, geo, and locale signals are not interchangeable.
+- **One bad section drags the rest of the site:** inspect sitechunk selection and fallback inheritance before touching page-level quality.
+- **New host never gets traction:** inspect host-age and trust gates before chasing content tweaks.
+
+## Numbers And Thresholds Worth Remembering
+
+- **Boost factor sanity check:** if you routinely need a factor above `5-10`, you are probably using the wrong API.
+- **`uacSpamScore`:** 7-bit score `0-127`; `>= 64` is spam. Treat thresholded spam features as gates, not soft quality nudges.
+- **`OriginalContentScore`:** encoded `0-512`. Do not pretend that a single originality scalar generalizes cleanly across short and long documents.
+- **`TagPageScore`:** 7-bit `0-100`; the comment says smaller values mean worse tag pages. Read field docs before assuming monotonic direction from the name.
+- **`ScaledIndyRank`:** 16-bit encoding with actual max typically around `0.84`. Beware of comparing raw encoded values across features.
+- **`nsrSitechunk`:** if the chunk key exceeds the population max length (default `100`), it is not populated. Long, path-derived chunk schemes silently collapse into coarser behavior.
+- **`hostAge`:** 16-bit day number after `2005-12-31`; older history collapses to `0`. Do not overinterpret the raw number as precise trust age.
+- **Official-page status:** `queriesForWhichOfficial` is keyed by `(query, country, language)`, not by domain alone. “Official” is slice-specific.
+- **Long-tail evaluation:** long-tail queries are roughly `90%` of distinct queries and about `1/3` of volume in Google’s own materials. A head-only eval is a fake win.
+
+## Counterintuitive Practitioner Rules
+
+- **Homepage distance matters twice.** `onsiteProminence` is propagated from the homepage and high-click pages. A strong document can lose before quality scoring if your internal structure makes it an orphan.
+- **Constraint interactions are not additive.** In the twiddler framework, `SetRelativeOrder` can override `max_position`, and `Filtered()` does not reflect same-round filters from other twiddlers. Design each twiddler to be locally correct without reading peer state.
+- **Soft diversity needs slack.** The guide recommends `predoc_limit` somewhat larger than `max_total`; otherwise you waste docinfo fetches on results you already know cannot survive packing.
+- **Overconstraint is resolved politically, not mathematically.** Category priorities live on a `0..1` scale; when packing is stressed, lower-priority constraints are the first to bend. If a rule must never bend, it is not a category constraint.
+- **Slice bugs masquerade as quality bugs.** Unsliced clicks make mobile boost desktop, US boost UK, and bot-heavy cohorts look like genuine engagement. Partition at write time, not at query time.
+- **Chunk fallback makes “unknown” look average, not neutral.** If you do not compute a chunk-specific NSR, Google can substitute the mean of sibling chunks. That is why a neglected UGC subtree can quietly depress editorial sections.
+- **Scale changes experimentation strategy.** Google’s own court record emphasizes that query volume buys simultaneous experiments, not just better models. If you lack scale, reserve scarce click data for tail and slice-specific validation, not for endless head-query A/Bs.
+
+## NEVER Do These
+
+- **NEVER force position intent through giant boosts because it is seductive to “just make it rank higher.”** The non-obvious failure is that score-space composition interacts with other boosts multiplicatively and produces unstable order. **Instead use** `BoostAboveResult`, `SetRelativeOrder`, or `max_position`, depending on whether you mean pairwise order or hard ceilings.
+- **NEVER encode hard policy in soft packer constraints because it feels cheaper than a dedicated removal path.** Under stress, soft constraints relax; legal, safety, and confirmed-spam removals must not. **Instead use** `Filter`/`Hide` for absolute exclusions and reserve category constraints for diversity.
+- **NEVER put freshness or other query-intent logic into index-time scoring because it feels like “just another feature.”** The consequence is stale behavior until the next rebuild and no slice-aware experimentation. **Instead use** a query-time twiddler gated by freshness intent and slice.
+- **NEVER read raw CTR without `voterTokenCount`, squashing, and slice partitioning because raw counts are the easiest metric to query.** The consequence is bot amplification, cross-device contamination, and false confidence on low-support queries. **Instead require** distinct-user thresholds, transform counts non-linearly, and key storage by `(query, url, slice, distinct_user)`.
+- **NEVER design sitechunks from arbitrary long path taxonomies because it feels like better isolation.** The non-obvious consequence is that overlong keys are not populated, so you silently fall back to coarser or averaged host behavior. **Instead keep** chunk keys short, stable, and semantically durable.
+- **NEVER debug a missing result by editing rerankers first because clicks and twiddlers are the most visible layer.** The consequence is weeks spent tuning later stages for a recall or tier-placement bug they can never fix. **Instead verify** retrieval presence, truncation, canonical selection, and tier assignment before touching query-time logic.
+
+## Fallback Strategy When The Leak Does Not Expose Coefficients
+
+When the schema reveals architecture but not weights:
+
+- Preserve **monotonicity** first: stronger evidence must not reduce score.
+- Preserve **isolation** second: a twiddler should remain correct even if peers fire differently.
+- Use **hard thresholds only for gates** (spam, legal, privacy minima), not for general quality blending.
+- Evaluate separately on **head / torso / tail** and by **slice**, or you will optimize the wrong traffic.
+- Prefer **decomposed debug outputs** over one composite score so regressions can be localized to retrieval, scoring, packing, or trust.
+
+## What “Done” Looks Like
+
+You are done when you can state, for the change under review:
+
+- which stage owns the signal,
+- what data the stage already has loaded,
+- what latency or contamination failure mode is being accepted,
+- what slice or sitechunk boundaries the signal respects,
+- and what earlier stage you ruled out before changing ranking logic.

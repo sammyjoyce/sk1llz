@@ -1,256 +1,98 @@
 ---
 name: crockford-good-parts
-description: 'Write JavaScript code in the style of Douglas Crockford, author of "JavaScript: The Good Parts". Emphasizes using only the reliable subset of JavaScript, avoiding problematic features, and writing clear, maintainable code. Use when writing robust, quality JavaScript.'
-tags: closures, prototypes, objects, functions, scope, json, patterns, clean-code, browser, web
+description: >-
+  Write or refactor JavaScript in Douglas Crockford's later defensive subset:
+  class-free, this-free, semicolon-full, JSLint-clean code for long-lived,
+  browser-exposed, JSON-heavy, or security-sensitive modules. Use when auditing
+  or rewriting code with coercion, ASI, prototype leakage, ambient authority,
+  frozen-object, `for...in`, `eval`, or unsafe-number bugs, and when the user
+  mentions Crockford, Good Parts, JSLint, ADsafe, capability security, frozen
+  factories, or class-free JavaScript.
 ---
 
-# Douglas Crockford Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​‌​​‌​‍​​‌‌‌‌‌​‍​​​‌‌‌‌‌‍​​‌​‌​​​‍​​​​‌​​‌‍​‌​​​​​‌⁠‍⁠
+# Crockford After The Book
 
-## Overview
+Treat Crockford as a risk-control doctrine, not a nostalgia act. The point is not to look old-fashioned; the point is to stay out of the parts of JavaScript where parser ambiguity, capability leakage, prototype tricks, and silent coercion hide bugs for years.
 
-Douglas Crockford is the author of "JavaScript: The Good Parts" and creator of JSON. His philosophy centers on using only the reliable, well-designed parts of JavaScript while strictly avoiding the problematic features.
+This skill is strongest for code that crosses trust boundaries, gets embedded in hostile pages, consumes attacker-controlled JSON, or must remain understandable after frameworks churn. It is too strict for framework-owned glue unless you deliberately confine the non-Crockford code to a thin adapter.
 
-## Core Philosophy
+## Pick The Lane First
 
-> "JavaScript has some extraordinarily good parts. In JavaScript, there is a beautiful, elegant, highly expressive language that is buried under a steaming pile of good intentions and blunders."
+| Situation | Default | Why | Allowed deviation |
+|---|---|---|---|
+| Browser widget, third-party embed, sandbox, plugin host, JSON boundary | Full Crockford subset | Ambient authority and prototype surprises are the real enemy | None without a written reason |
+| Legacy class/framework integration | Quarantine `this`/`class` in an adapter; keep domain logic Crockford-clean | Rewriting framework-owned surfaces is churn, not risk reduction | Thin outer shim may use framework conventions |
+| Performance-critical hot loop | Keep the semantic bans, relax `freeze` only if profiling proves object creation is the bottleneck | `Object.freeze` and per-instance closures cost real throughput | Prefer typed arrays or data-oriented structures before reintroducing classes |
+| Routine app code with no trust boundary | Keep the hard bans (`eval`, `==`, ASI reliance, boxed primitives, unsafe numbers) | Those bugs stay expensive even in internal code | Full class-free style is optional if it fights the framework |
 
-> "It is better to be clear than clever."
+## Before You Touch Code, Ask Yourself
 
-Crockford believes that JavaScript, despite its flaws, contains a powerful and beautiful language—if you know which parts to use.
+- **Authority:** Does this function really need a global, clock, random source, logger, DOM handle, or service singleton, or should that capability be passed in explicitly?
+- **Prototype behavior:** If `Object.prototype` is polluted, or the value comes from another realm/iframe, will this code still behave the same?
+- **Parser ambiguity:** Would a newline, concatenation boundary, or formatter rewrite change the parse?
+- **Value model:** Is this value truly arithmetic, or is it an opaque identifier that must never become a `Number`?
+- **API shape:** Am I exposing a message-oriented object, or just leaking a mutable property bag with getters/setters?
 
-## Design Principles
+## What Modern Crockford Actually Means
 
-1. **Use the Good Parts**: Stick to the reliable subset of the language.
+- Later Crockford is more anti-`this` and more anti-inheritance than the 2008 book. The security reason matters: detached methods and implicit receivers leak authority in ways closures do not.
+- `Object.freeze` is only loud in strict code. In sloppy mode, writes to frozen properties can fail silently. If the file is not an ES module, strictness is part of the pattern, not a garnish.
+- Prototypes and freezing do not mix well. Using `Object.create(proto)` as a "cheap copy" looks elegant until `proto` is frozen: writes can throw, and inserting a new property forces ancestor checks up the entire chain.
+- `Object.create(null)` is for dictionaries, not ordinary records. It avoids prototype leakage and the frozen-prototype insertion scan, but it also removes conveniences like `toString`, `instanceof Object`, and `obj.hasOwnProperty`.
+- Treat JSON text and arbitrary objects differently. Copying a general object with spread or `Object.assign` runs getters; copying `JSON.parse` output does not. The shortcut is safe for parsed JSON, not for arbitrary host objects.
+- Crockford-style public APIs should be verbs, not field toggles. If callers mostly call `set_x`, `set_y`, `set_z`, you have exposed representation, not behavior.
 
-2. **Avoid the Bad Parts**: Don't use features that are error-prone or confusing.
+## Non-Obvious Heuristics
 
-3. **Clarity Over Cleverness**: Code should be immediately understandable.
+- Prefer a lowercase factory that returns `Object.freeze({...})`. Capitalized names imply `new`; lowercase is a defense against accidental constructor calls.
+- For attacker-controlled string keys, choose `Map` when key identity matters, choose `Object.create(null)` when you need JSON-like serialization, and choose a plain object only when the key set is trusted.
+- Use `typeof` only for primitive-ish checks: `"undefined"`, `"string"`, `"number"`, `"boolean"`, `"function"`. For everything else, assume `typeof` is trying to trick you.
+- Treat all values above `2^53 - 1` as already corrupt if they passed through `Number`. Database IDs, snowflakes, and nanosecond timestamps belong in strings or `BigInt`, not doubles.
+- If a line begins with `(` or `[`, assume concatenation can misparse it unless the previous statement is terminated. Defensive leading semicolons are a parser guard, not a style tic.
 
-4. **Lint Everything**: Use tools like JSLint to enforce quality.
+## Never Trade Clarity For Cleverness
 
-## When Writing Code
+- **NEVER use direct `eval`, `new Function`, or string-based `setTimeout`/`setInterval`** because the seductive shortcut is "I can interpret this little DSL later", but the real consequence is caller-scope access, CSP breakage, disabled inlining, and runtime name lookups. Instead parse data, dispatch on an allowlist, or pass explicit capabilities into a predeclared function.
+- **NEVER traverse records with bare `for...in`** because the seductive part is the one-line loop, but the consequence is inherited keys, prototype-pollution surprises, and guards that explode when data contains its own `hasOwnProperty`. Instead use `Object.keys`, `Object.entries`, `Map`, or `Object.create(null)` plus explicit copying.
+- **NEVER build "immutable copies" by inheriting from frozen prototypes** because it feels cheaper than copying, but the consequence is write exceptions and slower property insertion due to ancestor scans. Instead copy own data into a fresh object and freeze that result.
+- **NEVER store money or opaque IDs in `Number`** because one numeric type looks convenient, but the consequence is silent rounding for decimals and false equality above `9007199254740991`. Instead use minor units or `BigInt` for arithmetic, and strings for identifiers.
+- **NEVER rely on automatic semicolon insertion** because formatters and line wraps make it look harmless, but the consequence is `return`-newline-object bugs, accidental call continuations, and hard-to-see parse changes at bundle boundaries. Instead terminate every statement and keep the returned/thrown expression on the same line as the keyword.
+- **NEVER put function expressions in loops or block-scoped function statements in lint-clean code** because the inline callback feels local and tidy, but the consequence is JSLint rejection, closure capture mistakes, and anonymous stack traces. Instead declare helpers outside the loop or bind the current value explicitly before creating the function.
+- **NEVER use boxed primitives or "generic object checks"** because `new Boolean(false)` and `typeof x === "object"` feel object-oriented, but the consequence is truthy false values, `typeof null === "object"`, arrays passing as objects, and `NaN` passing as a number. Instead use literals, `value === null`, `Array.isArray`, `Number.isNaN`, and `Number.isFinite`.
+- **NEVER give business logic ambient access to `Date.now`, `Math.random`, globals, or mutable service singletons** because it is faster to code once than to inject capabilities, but the consequence is non-reproducible tests, hidden nondeterminism, and authority leaks in sandboxes. Instead pass clock, RNG, storage, and I/O in explicitly.
 
-### Always
+## JSLint Rules That Still Surprise Experienced Developers
 
-- Use `===` and `!==` (strict equality)
-- Declare variables at the top of their scope
-- Use a single `var`/`let`/`const` statement per scope (Crockford's older style)
-- Put braces on the same line as control statements
-- Use JSLint/ESLint and fix all warnings
-- Prefer named functions over anonymous functions
+- JSLint expects expression statements to be assignments or calls. A stray object literal, ternary, or comma expression in statement position is treated as a bug, not an aesthetic choice.
+- JSLint accepts function statements at file/function-body scope, not inside blocks. This matters because block function semantics were historically divergent across engines.
+- JSLint allows arrow functions only in the expression-body form when you are chasing strict lint cleanliness; block-bodied arrows are rejected to avoid ambiguity.
+- JSLint treats `+ +x`, `a+++b`, and similar plus/minus adjacency as bug magnets. If numeric coercion is intended, write `Number(x)` or add parentheses.
+- JSLint distrusts `for` itself, not just `for...in`. If the loop body is a collection transform, expect the more Crockford answer to be `forEach`, `map`, `reduce`, or a purpose-built helper.
 
-### Never
+## Operating Procedure
 
-- Use `==` or `!=` (type coercion equality)
-- Use `eval()` or `Function()` constructor
-- Use `with` statement
-- Use `++` or `--` (prefer `+= 1`)
-- Rely on automatic semicolon insertion
-- Use bitwise operators for non-bitwise operations
-- Use `new` for primitives (`new String`, `new Number`, `new Boolean`)
+1. Classify the code path: boundary, adapter, hot path, or routine app code.
+2. Remove ambient authority first. Pass dependencies in before touching syntax.
+3. Choose the object model deliberately:
+   - Message-oriented frozen factory for most modules.
+   - `Map` or null-prototype dictionary for attacker-controlled keys.
+   - Typed arrays or data tables before classes for hot paths.
+4. Eliminate parser and value traps before style cleanup:
+   - `==`, ASI, `for...in`, boxed primitives, `Number` IDs, string eval.
+5. Only then normalize the surface shape: lowercase factories, explicit semicolons, no `this`, no inheritance-driven reuse.
 
-### Prefer
+## Loading Triggers
 
-- `Object.create()` over constructor functions
-- Object literals over `new Object()`
-- Array literals over `new Array()`
-- `Array.isArray()` over `instanceof Array`
-- Explicit returns over implicit
-- Named functions over arrow functions for methods
+**MANDATORY:** Before designing or refactoring sandboxed code, capability-based APIs, or any module where the question is "can this code be given less power?", read [`references/philosophy.md`](references/philosophy.md) for the ADsafe and POLA context behind the subset.
 
-## Code Patterns
+**Do NOT load** [`references/philosophy.md`](references/philosophy.md) for routine one-file cleanups, equality fixes, ASI fixes, or frozen-factory refactors. The checklist in this file is enough.
 
-### Object Creation
+**MANDATORY:** Before claiming a file is Crockford-clean, run:
 
-```javascript
-// BAD: Constructor function with new
-function Person(name, age) {
-    this.name = name;
-    this.age = age;
-}
-Person.prototype.greet = function () {
-    return 'Hello, ' + this.name;
-};
-var person = new Person('Alice', 30);
-
-// GOOD: Factory function (no new required)
-function createPerson(name, age) {
-    return {
-        name: name,
-        age: age,
-        greet: function () {
-            return 'Hello, ' + name;  // Closure for privacy
-        }
-    };
-}
-var person = createPerson('Alice', 30);
-
-
-// BETTER: Object.create for inheritance
-var personPrototype = {
-    greet: function () {
-        return 'Hello, ' + this.name;
-    }
-};
-
-function createPerson(name, age) {
-    var person = Object.create(personPrototype);
-    person.name = name;
-    person.age = age;
-    return person;
-}
+```bash
+node languages/javascript/crockford/scripts/jslint_check.js path/to/file.js
 ```
 
-### Module Pattern
+Treat the bundled checker as a preflight, not the final judge. It does not catch restricted-production ASI traps, function-in-loop issues, or the stricter arrow/function-position rules from upstream JSLint.
 
-```javascript
-// The module pattern for encapsulation
-var counter = (function () {
-    var count = 0;  // Private variable
-
-    return {
-        increment: function () {
-            count += 1;
-            return count;
-        },
-        decrement: function () {
-            count -= 1;
-            return count;
-        },
-        getCount: function () {
-            return count;
-        }
-    };
-}());
-
-counter.increment();  // 1
-counter.getCount();   // 1
-// count is not accessible directly
-```
-
-### Strict Equality
-
-```javascript
-// BAD: Type coercion surprises
-'' == false      // true (!)
-0 == ''          // true (!)
-null == undefined  // true (!)
-
-// GOOD: Strict equality, no surprises
-'' === false     // false
-0 === ''         // false
-null === undefined  // false
-
-// Always use strict equality
-if (value === null) {
-    // handle null
-}
-
-if (typeof value === 'undefined') {
-    // handle undefined
-}
-```
-
-### Function Best Practices
-
-```javascript
-// BAD: Anonymous function
-var numbers = [1, 2, 3];
-numbers.map(function (n) {
-    return n * 2;
-});
-
-// GOOD: Named function (better stack traces, self-documenting)
-function double(n) {
-    return n * 2;
-}
-numbers.map(double);
-
-
-// BAD: Relying on hoisting
-greet('Alice');
-function greet(name) {
-    return 'Hello, ' + name;
-}
-
-// GOOD: Define before use
-function greet(name) {
-    return 'Hello, ' + name;
-}
-greet('Alice');
-```
-
-### Array and Object Literals
-
-```javascript
-// BAD: Constructor forms
-var arr = new Array();
-var obj = new Object();
-var str = new String('hello');
-
-// GOOD: Literal forms
-var arr = [];
-var obj = {};
-var str = 'hello';
-
-
-// BAD: Array constructor ambiguity
-var a = new Array(3);     // [undefined, undefined, undefined]
-var b = new Array(1, 2);  // [1, 2]
-
-// GOOD: Always predictable
-var a = [undefined, undefined, undefined];
-var b = [1, 2];
-```
-
-### Error Handling
-
-```javascript
-// Proper try-catch usage
-function parseJSON(text) {
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        console.error('Invalid JSON:', e.message);
-        return null;
-    }
-}
-
-// Throw with Error objects, not strings
-// BAD:
-throw 'Something went wrong';
-
-// GOOD:
-throw new Error('Something went wrong');
-```
-
-## The Bad Parts to Avoid
-
-1. **Global Variables**: Pollute the namespace, cause conflicts
-2. **`eval()`**: Security risk, performance killer
-3. **`with`**: Ambiguous scope, deprecated
-4. **`==` and `!=`**: Type coercion causes bugs
-5. **`++` and `--`**: Encourage trickery
-6. **Bitwise Operators**: Rarely needed, often misused
-7. **`void`**: Confusing and unnecessary
-8. **Typed Wrappers**: `new String()`, `new Number()`, `new Boolean()`
-9. **`arguments`**: Use rest parameters instead
-10. **Automatic Semicolon Insertion**: Be explicit
-
-## Mental Model
-
-Crockford approaches JavaScript by asking:
-
-1. **Is this a good part?** If not, avoid it entirely
-2. **Would a bug here be obvious?** If not, use a safer pattern
-3. **Can this be linted?** If JSLint complains, fix it
-4. **Is this clear to readers?** Clarity trumps cleverness
-
-## Signature Crockford Moves
-
-- Factory functions instead of constructors
-- IIFE module pattern for encapsulation
-- Strict equality everywhere
-- Object literals for all object creation
-- Named functions for debuggability
-- JSLint compliance as non-negotiable
+**If the change touches parser-sensitive code, loop-created closures, sandboxing, or security boundaries:** also run upstream JSLint if it is available in the environment. A green result from the local script alone is not enough for those cases.

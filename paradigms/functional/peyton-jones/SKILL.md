@@ -1,269 +1,128 @@
 ---
 name: peyton-jones-practical-haskell
-description: Write functional code in the style of Simon Peyton Jones, lead architect of GHC. Emphasizes practical laziness, compiler-friendly code, and making functional programming work in the real world. Use when writing performant Haskell or understanding evaluation strategies.
-tags: haskell, monads, type-classes, lazy-evaluation, purity, ghc, compiler, type-system, functional, academic
+description: "Practical GHC-facing Haskell guidance for diagnosing space leaks, specialization failures, RULES misfires, and unsafe sharing bugs without cargo-cult pragmas. Use when tuning hot Haskell paths, reading Core or demand output, setting `INLINE`/`INLINABLE`/`SPECIALIZE`, or debugging `foldl'`, `StrictData`, `Data.Map.Strict`, `SpecConstr`, `unsafePerformIO`, heap profiles, and worker-wrapper behavior. Keywords: Haskell, GHC, strictness, space leak, RULES, specialization, Core, profiling, unsafePerformIO."
+tags: haskell, ghc, optimization, strictness, laziness, profiling, rewrite-rules, specialization
 ---
 
-# Simon Peyton Jones Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌‌​​‌‍​‌‌​‌​​​‍‌‌‌‌​​‌‌‍‌​​‌​‌‌‌‍​​​​‌​‌​‍‌‌​‌​‌​‌⁠‍⁠
+# Peyton Jones Practical Haskell
 
-## Overview
+This is a process skill for Haskell code where semantics, sharing, and compiler transforms interact. The goal is not "make GHC optimize harder"; it is "choose a representation and pragma story that GHC can exploit without changing retention or code size in the wrong direction."
 
-Simon Peyton Jones is the principal architect of the Glasgow Haskell Compiler (GHC) and has spent decades making functional programming practical. He bridges the gap between theory and implementation, showing that pure functional programming can be efficient.
+## Before touching code or flags
 
-## Core Philosophy
+Ask yourself, in order:
 
-> "Laziness keeps you honest."
+1. **What is the symptom shape?**
+   - High RSS with normal latency is a different problem from high allocation with stable RSS.
+   - A RULE not firing is a different problem from a function failing to specialise.
 
-> "Purity is the key to reasoning about programs."
+2. **What is the first artifact that can falsify my story?**
+   - Strictness story: read `-ddump-dmd-signatures`.
+   - RULES story: read `-ddump-rule-firings`, `-ddump-rule-rewrites`, and `-ddump-simpl-stats`.
+   - Space-leak story: read `+RTS -s` and one heap profile breakdown before any pragma edits.
 
-> "The best programs are written by people who know what the compiler will do."
+3. **Is this local or cross-module?**
+   - Imported overloaded code has a completely different specialization gate from local code.
+   - Library-facing fixes usually need unfolding exposure, not just a `SPECIALIZE` at the call site.
 
-SPJ believes that laziness and purity, while seeming like constraints, actually unlock powerful reasoning and optimization opportunities.
+4. **Am I about to trade allocation for code size or register pressure?**
+   - GHC has real budgets: `-fmax-worker-args=10`, `-fdmd-unbox-width=3`, `-fspec-constr-count=3`, `-fspec-constr-threshold=2000`, `-fsimplifier-phases=2`, `-fmax-simplifier-iterations=4`, `-fsimpl-tick-factor=100`.
+   - Late lambda lifting defaults to 5 args for both recursive and non-recursive functions because that matches x86_64 parameter registers; pushing past that often stops paying.
 
-## Design Principles
+## Symptom routing
 
-1. **Laziness by Default**: Evaluate only what's needed, when it's needed.
+### If RSS is much larger than live heap
 
-2. **Purity Enables Optimization**: The compiler can transform pure code freely.
+Do not call it a leak yet. GHC's copying old generation can need about `3L` memory for `L` live bytes, and with the default `-F 2` the RTS may retain up to roughly `4x` live data after a major GC. Profiling itself adds about 30% space overhead. If the shape is "live heap steady, RSS scary", compare collector settings before rewriting code; compacting (`-c`) or nonmoving (`-xn`) old-gen strategies change the memory multiple materially.
 
-3. **Types Prevent Bugs**: Strong static typing catches errors at compile time.
+### If `foldl'`, `BangPatterns`, or `Data.Map.Strict` did not fix the leak
 
-4. **Understand the Runtime**: Know how your code executes to write it well.
+Assume WHNF fooled you. `foldl'` forces the accumulator only to WHNF. `BangPatterns` force to WHNF, and a bang on a constructor pattern adds nothing because constructor matching already forces WHNF. `StrictData` merely rewrites fields defined in the current module to strict fields. `Data.Map.Strict` promises that stored values are in WHNF once the map is evaluated; it does not give you deep normal form. If your accumulator is a tuple, record, `Map`, or custom tree whose fields remain lazy, you can still build a perfectly profiled space leak while every surface API says "strict".
 
-## When Writing Code
+### If an imported overloaded function will not specialise
 
-### Always
+The usual failure is not "GHC is stubborn"; it is "the unfolding is unavailable". Cross-module specialization needs `-fspecialise` plus `-fcross-module-specialise`, and by default imported functions only specialise when they are `INLINABLE` or `INLINE`. Since GHC 9.12, `-fexpose-overloaded-unfoldings` is the cheaper knob for library code, but it only exposes functions whose types visibly contain constraints; if the constraint is hidden under a `newtype`, the unfolding is still not exposed.
 
-- Understand strictness and laziness in your code
-- Use bang patterns when strictness matters
-- Profile before optimizing
-- Write small, composable functions
-- Let the compiler inline and specialize
-- Use Core output to understand performance
+### If a RULE is not firing
 
-### Never
+Treat this as an ordering bug first. RULES and inlining happen in the same optimizer, so early inlining can erase the redex before the rule sees it. `-Winline-rule-shadowing` exists because this is common. Phase-control the producer with `NOINLINE [n]` or `INLINE [n]`, then prove the story with firings and rewrites dumps.
 
-- Build up large lazy thunks accidentally
-- Ignore space leaks
-- Fight the garbage collector
-- Assume laziness is always good (or bad)
-- Micro-optimize without profiling
+### If compile time or Core size explodes after "optimization"
 
-### Prefer
+Assume you crossed a budget, not that more flags are needed. SpecConstr is cheap until it is not. Imported aggressive specialization and unfolding exposure can massively increase code size. Simplifier tick failures usually mean a rewrite or inlining loop, not "please raise the tick factor and continue".
 
-- Strict data fields for accumulators
-- Fusion-friendly operations (map, filter, fold)
-- Stream processing over building lists
-- Newtypes for zero-cost abstraction
-- GHC pragmas for performance hints
+### If `unsafePerformIO` behaves once, twice, or globally
 
-## Code Patterns
+Assume float-out and CSE before assuming runtime weirdness. A lambda-invariant `unsafePerformIO (newIORef [])` can float out and become one shared cell for all calls. Inlining can duplicate effects. CSE can merge distinct effects. Polymorphic references remain type-unsafe and can segfault-level fail, not just "act oddly".
 
-### Understanding Laziness
+## Hard-won invariants
 
-```haskell
--- Lazy: this list is never fully in memory
-naturals :: [Integer]
-naturals = [1..]
+- Read demand output as interval facts, not an execution trace. `A` means absent, `M` means used at most once, `1` means exactly once, `S` means strict and possibly many. Tiny refactors that preserve source meaning can change these cardinalities enough to alter worker-wrapper, eta expansion, and thunk creation.
+- Worker-wrapper will refuse a split if the resulting worker exceeds both the original arity and `-fmax-worker-args`. That means "unbox everything" can silently disable the transformation you were chasing.
+- `SPEC` is not folklore. It is a compiler-recognized contract for SpecConstr. If you use it, bang or `seq` the `SPEC` argument or the aggressive specialization you wanted often never materializes.
+- `-fspecialise-aggressively` only changes imported-function specialization. It does not magically improve local polymorphic code; it just broadens when imported unfoldings are consumed, often at painful code-size cost.
+- `-fkeep-auto-rules` matters when the same specialization keeps reappearing across modules. By default, auto-generated rules can be dropped when they are the only thing keeping a function alive, which reduces bloat but can cause the same work to be redone downstream.
+- `-fno-full-laziness` is sometimes the correct performance flag, not a defeat. Full laziness increases sharing, and more sharing can mean more residency.
 
--- Take only what you need
-firstTen = take 10 naturals  -- [1..10]
+## Procedures that save time
 
--- Infinite data structures work!
-fibs :: [Integer]
-fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
+### Space-leak triage
 
-fib100 = fibs !! 100  -- Computes only what's needed
+1. Start with `+RTS -s` and one heap profile mode, not five.
+2. If you suspect wasted retention, use biography first to classify the waste (`drag` and `void` are the interesting states), then retainer profiling second. GHC cannot mix `-hb` and `-hr`, so this is a required two-stage process.
+3. If retainer profiles collapse to `MANY`, raise `-R` above the default 8 before changing code.
+4. If the nearest retainer is just another thunk in the chain, restrict the next retainer profile to that closure class and walk up one level. The first reported retainer is often not the root cause.
+5. Only after the profile implicates thunk retention should you add local bangs, strict fields, or `deepseq` boundaries.
 
+### Specialization triage
 
--- BUT: laziness can cause space leaks
--- BAD: builds up a chain of thunks
-badSum :: [Int] -> Int
-badSum = foldl (+) 0
--- badSum [1,2,3] builds: ((0+1)+2)+3 as thunks!
+1. Decide whether the bottleneck is local or imported.
+2. For local code, prefer making the hot overloaded function `INLINABLE` and measuring call-site specialization before adding many explicit `SPECIALIZE`s.
+3. For imported code, verify unfolding availability first. If the library owns the function, expose the right unfoldings there; if not, accept that some call-site wishes are impossible.
+4. If you reach for `-fspecialise-aggressively`, scope it to the offending module or benchmark lane. It is a code-size lever, not a harmless default.
+5. If specialization still fails, check for `OPAQUE`, missing unfoldings, or hidden constraints under `newtype`.
 
--- GOOD: strict left fold
-goodSum :: [Int] -> Int
-goodSum = foldl' (+) 0
--- Forces evaluation at each step
+### RULES triage
 
-import Data.List (foldl')
-```
+1. Turn on `-Winline-rule-shadowing`.
+2. Check firings before looking at full Core.
+3. If the rule targets a class method, stop and refactor to an instance-specific wrapper; class methods are rewritten to instance functions too early for method RULES to be reliable.
+4. Use phase control to keep the rule redex alive long enough to fire.
+5. If the simplifier runs out of ticks, inspect `-ddump-simpl-stats` and cut the loop. Do not raise `-fsimpl-tick-factor` first.
 
-### Strictness Annotations
+### Escape-hatch triage
 
-```haskell
-{-# LANGUAGE BangPatterns #-}
+1. If `unsafePerformIO` must exist, mark the wrapper `NOINLINE`.
+2. If the effect must happen per call, make the action depend on the lambda argument or disable float-out on that module with `-fno-full-laziness`.
+3. If distinct effects must stay distinct, disable CSE for that module with `-fno-cse`.
+4. If someone suggests `unsafeDupablePerformIO` for a resource-management path, stop; duplicated or partially executed actions break invariants that `bracket`-style code relies on.
 
--- Bang patterns force evaluation
-strictSum :: [Int] -> Int
-strictSum = go 0
-  where
-    go !acc []     = acc      -- !acc is strict
-    go !acc (x:xs) = go (acc + x) xs
+## NEVER
 
--- Strict data fields
-data Point = Point !Double !Double
--- Fields are evaluated when Point is constructed
+- NEVER assume `foldl'`, `BangPatterns`, `StrictData`, or `Data.Map.Strict` give deep strictness because the names sound like a complete leak fix. The seductive move is to stop at WHNF and declare victory; the concrete consequence is that tuple, record, and container fields keep accumulating thunks while the profile points at code you already marked "strict". Instead force or redesign the lazy fields that survive WHNF, or put a deliberate `deepseq` boundary where the data crosses ownership.
+- NEVER turn on module-wide `Strict` or scatter `UNPACK` everywhere because it feels like the shortest path to "less laziness". The seductive move is broad, low-effort annotation; the concrete consequence is changed semantics in unrelated bindings plus workers that exceed argument budgets and lose the worker-wrapper win you wanted. Instead profile first and unbox only where the worker will still fit within argument and register budgets.
+- NEVER add call-site `SPECIALIZE` and expect imported overloaded code to speed up because the annotation looks local and surgical. The seductive move is to patch the hot call site; the concrete consequence is zero specialization when the imported unfolding is unavailable, hidden behind `newtype`, or blocked by missing `INLINABLE`. Instead verify that the callee's unfolding is actually available cross-module and that you are not blocked by `OPAQUE` or hidden constraints.
+- NEVER write RULES against class methods because the method name looks like the stable API surface. The seductive move is to target the prettiest identifier; the concrete consequence is that the method is rewritten to the instance function before your RULE can match, so you pay complexity for no firing. Instead write the rule against an instance-specific wrapper kept alive with phase-controlled `NOINLINE`.
+- NEVER respond to simplifier tick exhaustion by raising `-fsimpl-tick-factor` first because it makes the compile continue. The seductive move is to buy more optimizer budget; the concrete consequence is longer compiles that preserve the same rewrite or inlining loop, often with larger Core. Instead assume a bad interaction, inspect `-ddump-simpl-stats`, and cut the loop.
+- NEVER trust RSS alone as evidence of a Haskell leak because OS memory includes collector slack, retained heap after spikes, and profiling overhead. The seductive move is to believe `top`; the concrete consequence is source churn to "fix" code that was only reflecting `-F`, collector strategy, or profiler cost. Instead compare live data, GC strategy, `-F`/`-Fd`, and profile mode before touching source.
+- NEVER hide stateful caches behind `unsafePerformIO` without `NOINLINE`, CSE discipline, and float-out resistance because the code still "looks pure". The seductive move is a small pure wrapper; the concrete consequence is one shared cell across calls, duplicated side effects after inlining, or type-unsafe polymorphic references. Instead make the sharing story explicit and guard the wrapper with the optimizer constraints it needs.
 
--- Versus lazy (default):
-data LazyPoint = LazyPoint Double Double
--- Fields can be thunks
+## Progressive disclosure
 
+This skill is intentionally self-contained.
 
--- UNPACK for removing indirection
-data Vec3 = Vec3 {-# UNPACK #-} !Double
-                 {-# UNPACK #-} !Double
-                 {-# UNPACK #-} !Double
--- Stores three doubles directly, no pointers
-```
+- Before changing strictness, read the relevant module's demand signatures.
+- Before changing RULES or phase pragmas, read firings, rewrites, and simplifier stats.
+- Before changing residency-related code, read RTS stats and exactly one heap-profile breakdown.
+- Do NOT jump straight to full Core/STG dumps, generic "optimization" blog posts, or global flag churn on the first pass; they dilute signal before the cheaper artifact has failed.
 
-### Fusion and Deforestation
+## Freedom calibration
 
-```haskell
--- GHC can fuse pipelines to avoid intermediate lists
+- Use high freedom for representation choices, strictness boundaries, and whether to prefer fusion, specialization, or explicit workers.
+- Use low freedom for flags, pragmas, and profiling commands: change one lever at a time, keep workload shape fixed, and treat every compiler knob as a measurable hypothesis.
 
--- This looks like it builds 3 lists:
-result = sum . map (*2) . filter even $ [1..1000000]
+## Done means
 
--- But GHC fuses it into a single loop!
--- No intermediate lists are allocated
-
--- Write in fusion-friendly style:
--- Use map, filter, foldr, concatMap, etc.
--- Avoid: length, (!!), reverse in hot paths
-
-
--- The RULES pragma enables fusion
-{-# RULES
-"map/map" forall f g xs. map f (map g xs) = map (f . g) xs
-"map/filter" forall f p xs. 
-    map f (filter p xs) = foldr (\x ys -> if p x then f x : ys else ys) [] xs
-#-}
-
--- GHC's list fusion uses foldr/build:
--- build (\c n -> ... c ... n ...) >>= foldr c n
--- fuses to: ... c ... n ...
-```
-
-### Newtypes for Zero-Cost Abstraction
-
-```haskell
--- newtype has no runtime overhead
-newtype UserId = UserId Int
-    deriving (Eq, Ord, Show)
-
-newtype Email = Email String
-    deriving (Eq, Show)
-
--- Type safety with zero cost
-createUser :: UserId -> Email -> User
-createUser uid email = ...
-
--- Cannot accidentally swap arguments!
--- createUser someEmail someUserId  -- Type error!
-
-
--- GeneralizedNewtypeDeriving for free instances
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
-newtype Money = Money Int
-    deriving (Eq, Ord, Num, Show)
-
--- Now you can do: Money 100 + Money 50 = Money 150
-```
-
-### Monomorphism and Specialization
-
-```haskell
--- Polymorphic code has overhead (dictionary passing)
-genericSum :: Num a => [a] -> a
-genericSum = foldl' (+) 0
-
--- SPECIALIZE to remove overhead for known types
-{-# SPECIALIZE genericSum :: [Int] -> Int #-}
-{-# SPECIALIZE genericSum :: [Double] -> Double #-}
-
--- Or use INLINABLE to let GHC specialize at use sites
-{-# INLINABLE genericSum #-}
-
--- For hot code, monomorphic is faster
-intSum :: [Int] -> Int
-intSum = foldl' (+) 0
-```
-
-### Understanding Core
-
-```haskell
--- Use -ddump-simpl to see GHC Core output
--- Core shows what GHC actually compiles
-
--- Example: does this fuse?
-test :: [Int] -> Int
-test = sum . map (+1) . filter even
-
--- Compile with: ghc -O2 -ddump-simpl Test.hs
--- Look for single recursive function (fused)
--- vs multiple (not fused)
-
-
--- Key Core concepts:
--- - let: allocation
--- - case: evaluation (forcing)
--- - λ: function
--- - Type applications: @Int, @Bool
-
--- Fewer lets = less allocation
--- Strategic cases = proper strictness
-```
-
-### Efficient Recursion
-
-```haskell
--- Tail recursion with accumulator
-factorial :: Integer -> Integer
-factorial n = go n 1
-  where
-    go 0 !acc = acc
-    go n !acc = go (n-1) (n*acc)
-
--- Worker/wrapper transformation
--- Expose strict worker, wrap with friendly interface
-{-# INLINE factorial #-}
-
-
--- Avoid: naive recursion with growing stack
-badFactorial :: Integer -> Integer
-badFactorial 0 = 1
-badFactorial n = n * badFactorial (n-1)
--- Builds: n * (n-1) * (n-2) * ... * 1 as thunks
-
-
--- Use continuation-passing for complex control flow
-data Tree a = Leaf a | Node (Tree a) (Tree a)
-
-sumTree :: Num a => Tree a -> a
-sumTree t = go t id
-  where
-    go (Leaf x) k = k x
-    go (Node l r) k = go l (\sl -> go r (\sr -> k (sl + sr)))
-```
-
-## Mental Model
-
-SPJ approaches Haskell by asking:
-
-1. **What gets evaluated when?** Understand lazy vs strict
-2. **Where are the thunks?** Potential space leaks
-3. **Will this fuse?** Intermediate structures eliminated?
-4. **What does Core look like?** The ground truth
-5. **Is this inlined?** Key for performance
-
-## Signature SPJ Moves
-
-- Bang patterns for strategic strictness
-- UNPACK for unboxed fields
-- INLINE/INLINABLE for specialization
-- Fusion-friendly combinators
-- Worker/wrapper pattern
-- Core inspection for optimization
+- You can explain the change in terms of sharing, cardinality, or unfolding availability, not "the benchmark went up".
+- You have one artifact that proves the old story was wrong or the new story is right.
+- You know which budget you spent: heap, code size, compile time, register pressure, or lost sharing.

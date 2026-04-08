@@ -9,6 +9,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.sublime-*
+.direnv/
 
 # Build artifacts
 *.o
@@ -18,6 +19,7 @@ Thumbs.db
 
 # Rust build artifacts
 target/
+result
 
 # Logs
 *.log

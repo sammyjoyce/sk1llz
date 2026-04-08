@@ -1,594 +1,101 @@
 ---
 name: rodriguez-threat-hunter-playbook
-description: Apply Roberto Rodriguez's threat hunting methodology with the Threat Hunter Playbook and HELK. Emphasizes documented hunts, open source infrastructure, and data-driven hunting. Use when building hunting programs or developing hunt playbooks.
-tags: threat-hunting, jupyter, analytics, detection, siem, log-analysis, sigma, endpoint, investigation
+description: "Build and review threat hunts in Roberto Rodriguez's Threat Hunter Playbook style: pre-hunt data management, relationship-driven analytics, notebook-first evidence chains, and replay validation with OTRF Security Datasets. Use when creating a new hunt playbook, auditing why a hunt failed, porting THP ideas into an existing SIEM or notebook stack, validating ATT&CK coverage claims, or working on HELK, OTRF, OSSEM, Security Datasets, Mordor, DCSync, remote PowerShell, WMI, service-creation, or other Windows behavior hunts."
 ---
 
-# Roberto Rodriguez — Threat Hunter Playbook⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​‌​​‌‌​‍​‌​​‌​‌‌‍‌​​‌‌‌​‌‍‌‌‌​​​​‌‍​​​​‌​‌​‍​‌​‌‌​​‌⁠‍⁠
+# Rodriguez Threat Hunter Playbook
 
-## Overview
+## Loading Rules
 
-Roberto Rodriguez is a Principal Threat Researcher at Microsoft and creator of the Threat Hunter Playbook and HELK (Hunting ELK). His work democratized threat hunting by providing open-source infrastructure, documented methodologies, and reproducible hunt procedures.
+- Before redesigning the overall methodology or explaining HELK/OTRF lineage, READ `references/methodology.md`.
+- Do NOT load `references/methodology.md` for live triage, a quick notebook pivot, or Sigma conversion. It is architecture-heavy and will slow down hunt work that depends on field-level decisions.
 
-## References
+## What This Skill Adds
 
-- **Threat Hunter Playbook**: https://threathunterplaybook.com/
-- **HELK**: https://github.com/Cyb3rWard0g/HELK
-- **GitHub**: https://github.com/Cyb3rWard0g
-- **Open Threat Research**: https://github.com/OTRF
+- Rodriguez is not "use ATT&CK plus notebooks." His edge is that most hunt failures are diagnosed as data-management failures before query rewrites begin.
+- Treat ATT&CK as a planning scaffold for required data, not proof that the technique is huntable in your environment.
+- Treat hunts as evidence chains. Single events are usually weak; joins on stable relationship keys are where the analytic becomes durable.
 
-## Core Philosophy
+## Before You Hunt, Ask Yourself
 
-> "Share knowledge, not just indicators."
+- Is this really an analytic problem, or is the telemetry incomplete, inconsistent, late, or unmodeled?
+- Which exact event provider, event ID, and relationship prove the behavior? If you cannot name the join key, you are not ready to write the query.
+- Does the source log success, failure, or both? Several useful Windows events only expose one side of the action.
+- Are you looking at event time or ingest time? Delayed forwarding can make a 24-hour-old action look current and destroy sequence-based reasoning.
+- Is rarity global, or only rare inside the right slice? Rodriguez repeatedly baselines by business unit, department, role, or recurring source address, not by whole enterprise averages.
 
-> "If you can't reproduce it, you can't improve it."
+## Rodriguez Workflow
 
-> "The best defense is an educated community."
+1. Start with data-source coverage, not detections.
+   Use ATT&CK data sources as an initial 1/0 map of what your tools claim to provide. This is only the first pass.
+2. Score data quality before trusting the map.
+   Rodriguez's useful dimensions are completeness, consistency, and timeliness. Completeness is per source; consistency and timeliness are often pipeline-wide when everything lands in one SIEM. Full deployment is not full completeness: if `CommandLine` is blank on a meaningful slice of endpoints, the analytic is still weak.
+3. Document only the events needed for the hunt, but document them deeply.
+   Record raw fields, collector quirks, and the relationship keys that survive normalization such as `ProcessGuid`, `ParentProcessGuid`, `LogonId`, `ObjectHandle`, `TargetFilename`, and `SourceAddress`.
+4. Build the hunt as a notebooked experiment.
+   The notebook should preserve the reasoning chain: hypothesis, collection prerequisites, analytics, pivots, expected benigns, known bypasses, and validation notes.
+5. Replay before you celebrate.
+   Validate with OTRF Security Datasets or a controlled lab replay. A hunt that only works on your prettiest production shard is not validated.
+6. Publish the blind spots.
+   Rodriguez-style work always names missing audit rules, ETW-only visibility, noisy sources, and bypasses. Silence on prerequisites is a bug.
 
-Rodriguez believes that threat hunting knowledge should be open, reproducible, and accessible. His playbooks document not just what to hunt, but how to think about hunting.
+## High-Value Heuristics
 
-## Key Contributions
+- Use ATT&CK coverage bins such as `0-20`, `20-40`, `40-60`, `60-80`, `80-100` only for planning boards. They are useful for prioritization and misleading for capability claims.
+- A tool saying it provides a data source does not mean the analytic has value. Rodriguez's Sysmon example is brutal: one exclude rule on a relevant image or module can reduce effective coverage for that analytic to zero.
+- Packed fields are a quality problem, not just a parsing annoyance. Sysmon's combined `Hashes` field forces regex-heavy workarounds, increases query cost, and makes cross-source stacking harder than vendors imply.
+- Data dictionaries are not paperwork. They expose useful fields analysts usually miss and frequently reveal stronger pivots than the original idea.
+- Relationship modeling is the accelerator. Once you know which fields express "process created process" or "user authenticated host," you stop writing isolated queries and start writing behavior chains.
 
-### Threat Hunter Playbook
-Community-driven library of documented hunts mapped to ATT&CK, with queries, notebooks, and methodology.
+## Decision Tree
 
-### HELK (Hunting ELK)
-Open source hunting platform combining Elasticsearch, Logstash, Kibana with Jupyter notebooks for interactive analysis.
+- If the primary event only logs failures:
+  Treat it as a lead, not a detector. Find the success-side event and correlate it with logon, network, or object-handle telemetry.
+- If the best source exists only in ETW or another hard-to-scale feed:
+  Prove the idea in lab or targeted collection first. Then design a production fallback using more common logs, even if fidelity is lower.
+- If the behavior is administratively noisy:
+  Baseline by department, role, source system, or daily recurring creator. Enterprise-wide rarity usually hides the signal you need.
+- If replay data is unavailable:
+  Reproduce the action in a controlled lab, or state explicitly that validation debt remains. Never imply replay validation that did not happen.
 
-### Mordor Datasets
-Pre-recorded attack datasets for testing detections without needing a lab.
+## Field-Tested Hunt Patterns
 
-## When Implementing
+- DCSync:
+  Correlate `4662` with `4624` logon type `3` on the domain controller by `LogonId`. If you can collect the Microsoft-Windows-RPC ETW provider, filter the replication interface GUID `E3514235-4B06-11D1-AB04-00C04FC2DCD2`, but do not make that a default scale dependency because it does not naturally land in `.evtx` and is operationally awkward without tooling such as SilkETW.
+- Remote PowerShell:
+  Do not stop at `wsmprovhost.exe`. Include inbound layer `44` traffic on ports `5985` and `5986`, then baseline by department if WinRM is common.
+- Alternate PowerShell hosts:
+  Hunt for `System.Management.Automation` loaded by non-`powershell.exe` processes and for named pipes beginning with `\\PSHost`. Those pivots surface hosts that never advertise themselves as PowerShell.
+- Remote SCM handle discovery:
+  `4656` on the SCM database is mostly a failed-handle story because the SCM object lacks the SACL coverage people assume. Use `4674` for successful privileged access, join to `4624` type `3`, inspect `5156` inbound `services.exe` traffic on layer `44`, and pivot on `ObjectHandle` to see what happened after the handle opened.
+- Remote service creation:
+  Join `4697` to `4624` type `3` by `LogonId` to separate remote installs from local administration. Stack service binary paths and daily creators; Microsoft software can legitimately create many unique services and will fool naive rarity tests.
+- Registry-based hunts:
+  If the target key lacks the required SACLs, the hunt is blind no matter how elegant the query is. Treat audit-rule verification as part of analytic validation.
 
-### Always
+## Anti-Patterns
 
-- Document every hunt with methodology
-- Map hunts to ATT&CK techniques
-- Use Jupyter notebooks for reproducibility
-- Share successful hunts with the team
-- Test detections with Mordor datasets
-- Build on community playbooks
+- NEVER claim hunt readiness from ATT&CK coverage alone because vendor heat maps and binary matrices are seductive. They make partial telemetry look equivalent to usable telemetry and lead teams to trust blind analytics. Instead score coverage first, then grade completeness, consistency, and timeliness before making capability claims.
+- NEVER write the query before documenting the raw event relationships because field names look familiar enough to improvise. You will miss the join key that carries the behavior across events and end up with a brittle single-event detector. Instead capture the provider, event IDs, join fields, and collection prerequisites first.
+- NEVER rely on failure-side Windows events as if they represent the whole behavior because they are easy to observe and demo. The concrete result is systematic under-detection of successful tradecraft. Instead identify which event logs the successful action, then correlate both sides if useful.
+- NEVER baseline noisy admin behaviors at whole-enterprise level because it is the fastest chart to build. The consequence is that remote PowerShell, service creation, or alternate hosts disappear into global admin noise. Instead baseline inside the operational slice that owns the behavior.
+- NEVER trust normalized timestamps blindly because ingestion time is often easier to access than creation time. The consequence is broken timelines, bad pivot windows, and false "simultaneous" stories. Instead verify event-time semantics before using sequence-based logic.
+- NEVER rebuild HELK just because Rodriguez used it and it feels canonical. The seductive path is platform cosplay. The consequence is weeks of plumbing work with no new hunt fidelity. Instead port the relationship model and notebook logic into the platform you already operate.
+- NEVER accept "the tool collects it" as proof that the hunt has value. Partial field capture, Sysmon include/exclude drift, and vendor parsing shortcuts can drop the one attribute your analytic needs. Instead test the exact fields against replay data or a lab trace.
 
-### Never
+## Freedom Calibration
 
-- Hunt without a hypothesis
-- Keep successful methodologies private
-- Deploy without testing against known attacks
-- Ignore the importance of data quality
-- Skip documentation of findings
+- High freedom:
+  Choosing the behavioral chain, selecting pivots, picking the business slice for baselining, and deciding whether the right answer is a hunt, a data-quality escalation, or both.
+- Low freedom:
+  Event IDs, join keys, audit-rule prerequisites, ETW caveats, validation claims, and any statement about coverage. Do not invent telemetry that is not collected.
 
-### Prefer
+## Output Checklist
 
-- Interactive notebooks over static queries
-- Reproducible hunts over one-time searches
-- Community playbooks as starting points
-- Data-driven hypotheses over intuition
-- Open source tools over vendor lock-in
-
-## Implementation Patterns
-
-### Hunt Playbook Structure
-
-```python
-# playbook.py
-# Threat Hunter Playbook structure
-
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional
-from datetime import datetime
-
-@dataclass
-class DataSource:
-    """Required data for the hunt"""
-    name: str
-    category: str              # e.g., "Process Monitoring"
-    platforms: List[str]       # e.g., ["Windows"]
-    collection_method: str     # e.g., "Sysmon Event 1"
-    fields_required: List[str]
-
-@dataclass
-class AnalyticStep:
-    """Single step in hunt analytics"""
-    step_number: int
-    description: str
-    query: str
-    query_language: str        # e.g., "KQL", "SPL", "SQL"
-    expected_output: str
-    interpretation: str
-
-@dataclass
-class HuntPlaybook:
-    """Complete hunt playbook - Rodriguez style"""
-    
-    # Metadata
-    id: str
-    title: str
-    description: str
-    author: str
-    created: datetime
-    modified: datetime
-    
-    # ATT&CK Mapping
-    tactics: List[str]
-    techniques: List[str]
-    
-    # Hunt Details
-    hypothesis: str
-    technical_context: str     # Background on the technique
-    
-    # Requirements
-    data_sources: List[DataSource]
-    platforms: List[str]
-    
-    # Analytics
-    analytics: List[AnalyticStep]
-    
-    # Validation
-    mordor_datasets: List[str]  # Datasets for testing
-    
-    # Results
-    expected_benign: List[str]
-    known_bypasses: List[str]
-    
-    # References
-    references: List[str]
-    
-    def to_jupyter_notebook(self) -> dict:
-        """Export playbook as Jupyter notebook"""
-        cells = []
-        
-        # Title cell
-        cells.append({
-            "cell_type": "markdown",
-            "source": [
-                f"# {self.title}\n",
-                f"\n",
-                f"**Author:** {self.author}\n",
-                f"**Created:** {self.created}\n",
-                f"\n",
-                f"## ATT&CK Mapping\n",
-                f"- **Tactics:** {', '.join(self.tactics)}\n",
-                f"- **Techniques:** {', '.join(self.techniques)}\n"
-            ]
-        })
-        
-        # Hypothesis cell
-        cells.append({
-            "cell_type": "markdown",
-            "source": [
-                "## Hypothesis\n",
-                f"\n{self.hypothesis}\n",
-                "\n## Technical Context\n",
-                f"\n{self.technical_context}\n"
-            ]
-        })
-        
-        # Analytics cells
-        for analytic in self.analytics:
-            # Description
-            cells.append({
-                "cell_type": "markdown",
-                "source": [
-                    f"### Step {analytic.step_number}: {analytic.description}\n",
-                    f"\n{analytic.interpretation}\n"
-                ]
-            })
-            
-            # Query
-            cells.append({
-                "cell_type": "code",
-                "source": [analytic.query]
-            })
-        
-        return {
-            "cells": cells,
-            "metadata": {
-                "kernelspec": {
-                    "display_name": "PySpark",
-                    "language": "python",
-                    "name": "pyspark"
-                }
-            },
-            "nbformat": 4,
-            "nbformat_minor": 4
-        }
-    
-    def validate_with_mordor(self) -> dict:
-        """Instructions for validating with Mordor datasets"""
-        return {
-            "datasets": self.mordor_datasets,
-            "instructions": [
-                "1. Download Mordor dataset from https://mordordatasets.com/",
-                "2. Import into your SIEM/hunting platform",
-                f"3. Run analytics from this playbook",
-                "4. Verify detection of simulated attack",
-                "5. Document any required tuning"
-            ]
-        }
-
-
-# Example playbook: Credential Dumping via LSASS
-lsass_playbook = HuntPlaybook(
-    id="WIN-190625024610",
-    title="Credential Dumping via LSASS Memory Access",
-    description="Detect credential dumping by monitoring processes "
-                "that access LSASS memory",
-    author="Roberto Rodriguez @Cyb3rWard0g",
-    created=datetime(2024, 1, 15),
-    modified=datetime(2024, 2, 20),
-    
-    tactics=["Credential Access"],
-    techniques=["T1003.001"],
-    
-    hypothesis="Adversaries might be accessing LSASS process memory "
-               "to extract credentials",
-    
-    technical_context="""
-    The Local Security Authority Subsystem Service (LSASS) stores 
-    credentials in memory for single sign-on. Attackers commonly 
-    target LSASS using tools like Mimikatz, procdump, or comsvcs.dll.
-    
-    Windows Event ID 10 (Sysmon) captures process access events,
-    including when a process reads another process's memory.
-    """,
-    
-    data_sources=[
-        DataSource(
-            name="Process Access",
-            category="Process Monitoring",
-            platforms=["Windows"],
-            collection_method="Sysmon Event ID 10",
-            fields_required=[
-                "SourceProcessGUID",
-                "SourceImage",
-                "TargetImage",
-                "GrantedAccess"
-            ]
-        )
-    ],
-    
-    platforms=["Windows"],
-    
-    analytics=[
-        AnalyticStep(
-            step_number=1,
-            description="Find processes accessing LSASS",
-            query="""
-SELECT 
-    SourceImage,
-    TargetImage,
-    GrantedAccess,
-    COUNT(*) as AccessCount
-FROM sysmon_events
-WHERE EventCode = 10
-    AND TargetImage LIKE '%lsass.exe'
-    AND SourceImage NOT LIKE '%MsMpEng.exe'
-    AND SourceImage NOT LIKE '%csrss.exe'
-GROUP BY SourceImage, TargetImage, GrantedAccess
-ORDER BY AccessCount DESC
-            """,
-            query_language="SQL (Spark)",
-            expected_output="List of processes accessing LSASS with counts",
-            interpretation="Look for unusual processes or high access counts"
-        ),
-        AnalyticStep(
-            step_number=2,
-            description="Analyze granted access rights",
-            query="""
-SELECT 
-    SourceImage,
-    GrantedAccess,
-    CASE 
-        WHEN GrantedAccess IN ('0x1010', '0x1410', '0x1438', '0x143a')
-        THEN 'SUSPICIOUS - Memory Read Access'
-        ELSE 'Likely Benign'
-    END as Assessment
-FROM sysmon_events
-WHERE EventCode = 10
-    AND TargetImage LIKE '%lsass.exe'
-            """,
-            query_language="SQL (Spark)",
-            expected_output="Access rights analysis",
-            interpretation="Memory read access (0x1010, 0x1410) indicates "
-                          "potential credential dumping"
-        )
-    ],
-    
-    mordor_datasets=[
-        "https://mordordatasets.com/notebooks/small/windows/06_credential_access/"
-    ],
-    
-    expected_benign=[
-        "Windows Defender (MsMpEng.exe)",
-        "Client Server Runtime (csrss.exe)",
-        "System process",
-        "Antivirus products"
-    ],
-    
-    known_bypasses=[
-        "Direct syscalls (bypass Sysmon hooking)",
-        "Targeting SAM/SECURITY registry instead",
-        "Using MiniDumpWriteDump variations"
-    ],
-    
-    references=[
-        "https://attack.mitre.org/techniques/T1003/001/",
-        "https://github.com/gentilkiwi/mimikatz",
-        "https://threathunterplaybook.com/notebooks/windows/06_credential_access/"
-    ]
-)
-```
-
-### HELK-Style Hunting Platform
-
-```python
-# helk_hunt.py
-# Hunting with HELK-style infrastructure
-
-from dataclasses import dataclass
-from typing import List, Dict, Any
-import pandas as pd
-
-@dataclass
-class HuntingPlatform:
-    """HELK-inspired hunting infrastructure"""
-    
-    elasticsearch_url: str
-    spark_master: str
-    jupyter_url: str
-    
-    def query_elastic(self, query: Dict) -> pd.DataFrame:
-        """Query Elasticsearch and return DataFrame"""
-        from elasticsearch import Elasticsearch
-        
-        es = Elasticsearch([self.elasticsearch_url])
-        
-        response = es.search(
-            index="logs-*",
-            body=query,
-            size=10000
-        )
-        
-        hits = response['hits']['hits']
-        return pd.DataFrame([hit['_source'] for hit in hits])
-    
-    def hunt_with_spark(self, sql_query: str) -> pd.DataFrame:
-        """Execute Spark SQL for large-scale hunting"""
-        from pyspark.sql import SparkSession
-        
-        spark = SparkSession.builder \
-            .master(self.spark_master) \
-            .appName("ThreatHunting") \
-            .getOrCreate()
-        
-        result = spark.sql(sql_query)
-        return result.toPandas()
-
-
-class InteractiveHunt:
-    """Jupyter notebook-based interactive hunt"""
-    
-    def __init__(self, platform: HuntingPlatform):
-        self.platform = platform
-        self.findings = []
-        self.timeline = []
-    
-    def search(self, query: str, time_range: str = "24h") -> pd.DataFrame:
-        """Execute search and track in timeline"""
-        self.timeline.append({
-            'action': 'search',
-            'query': query,
-            'time_range': time_range
-        })
-        
-        # Execute query
-        elastic_query = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"query_string": {"query": query}},
-                        {"range": {"@timestamp": {"gte": f"now-{time_range}"}}}
-                    ]
-                }
-            }
-        }
-        
-        return self.platform.query_elastic(elastic_query)
-    
-    def filter_noise(self, df: pd.DataFrame, 
-                     column: str, 
-                     exclude: List[str]) -> pd.DataFrame:
-        """Filter known benign activity"""
-        self.timeline.append({
-            'action': 'filter',
-            'column': column,
-            'excluded': exclude
-        })
-        
-        mask = ~df[column].isin(exclude)
-        return df[mask]
-    
-    def pivot(self, df: pd.DataFrame, 
-              pivot_field: str, 
-              pivot_value: Any) -> pd.DataFrame:
-        """Pivot investigation to related events"""
-        self.timeline.append({
-            'action': 'pivot',
-            'field': pivot_field,
-            'value': pivot_value
-        })
-        
-        query = f'{pivot_field}:"{pivot_value}"'
-        return self.search(query, time_range="7d")
-    
-    def mark_finding(self, description: str, 
-                     evidence: pd.DataFrame,
-                     severity: str):
-        """Document a finding"""
-        self.findings.append({
-            'description': description,
-            'evidence_count': len(evidence),
-            'severity': severity,
-            'evidence_sample': evidence.head(5).to_dict()
-        })
-    
-    def generate_report(self) -> str:
-        """Generate hunt report"""
-        report = "# Hunt Report\n\n"
-        
-        report += "## Investigation Timeline\n\n"
-        for i, step in enumerate(self.timeline, 1):
-            report += f"{i}. **{step['action'].title()}**: "
-            if step['action'] == 'search':
-                report += f"Query: `{step['query']}`\n"
-            elif step['action'] == 'filter':
-                report += f"Excluded {len(step['excluded'])} values from {step['column']}\n"
-            elif step['action'] == 'pivot':
-                report += f"Pivoted on {step['field']}={step['value']}\n"
-        
-        report += "\n## Findings\n\n"
-        for i, finding in enumerate(self.findings, 1):
-            report += f"### Finding {i}: {finding['description']}\n"
-            report += f"- **Severity**: {finding['severity']}\n"
-            report += f"- **Evidence Count**: {finding['evidence_count']}\n\n"
-        
-        return report
-```
-
-### Mordor Dataset Integration
-
-```python
-# mordor_testing.py
-# Test detections with Mordor attack datasets
-
-from dataclasses import dataclass
-from typing import List, Dict, Optional
-import requests
-import json
-
-@dataclass
-class MordorDataset:
-    """Mordor attack dataset reference"""
-    
-    id: str
-    name: str
-    description: str
-    attack_technique: str
-    platform: str
-    
-    download_url: str
-    file_format: str      # "json", "csv"
-    
-    # Expected indicators
-    expected_processes: List[str]
-    expected_files: List[str]
-    expected_network: List[str]
-    
-    def download(self, output_path: str):
-        """Download dataset"""
-        response = requests.get(self.download_url)
-        response.raise_for_status()
-        
-        with open(output_path, 'wb') as f:
-            f.write(response.content)
-        
-        return output_path
-    
-    def load_events(self) -> List[Dict]:
-        """Load events from dataset"""
-        response = requests.get(self.download_url)
-        response.raise_for_status()
-        
-        if self.file_format == 'json':
-            return response.json()
-        else:
-            # Handle other formats
-            pass
-
-
-class DetectionValidator:
-    """Validate detections against Mordor datasets"""
-    
-    def __init__(self):
-        self.results = []
-    
-    def test_detection(self, 
-                       detection_query: str,
-                       dataset: MordorDataset,
-                       query_executor) -> dict:
-        """Test if detection finds attack in Mordor data"""
-        
-        # Load Mordor dataset into test environment
-        events = dataset.load_events()
-        
-        # Index events
-        for event in events:
-            query_executor.index(event)
-        
-        # Run detection
-        matches = query_executor.search(detection_query)
-        
-        # Assess results
-        result = {
-            'dataset': dataset.id,
-            'technique': dataset.attack_technique,
-            'total_events': len(events),
-            'matches': len(matches),
-            'detected': len(matches) > 0,
-            'expected_processes_found': self._check_indicators(
-                matches, 'process.name', dataset.expected_processes
-            )
-        }
-        
-        self.results.append(result)
-        return result
-    
-    def _check_indicators(self, 
-                          matches: List[Dict], 
-                          field: str,
-                          expected: List[str]) -> List[str]:
-        """Check which expected indicators were found"""
-        found = []
-        for match in matches:
-            value = match.get(field)
-            if value in expected:
-                found.append(value)
-        return list(set(found))
-    
-    def coverage_report(self) -> str:
-        """Generate detection coverage report"""
-        report = "# Detection Validation Report\n\n"
-        
-        detected = sum(1 for r in self.results if r['detected'])
-        total = len(self.results)
-        
-        report += f"**Overall Detection Rate**: {detected}/{total} "
-        report += f"({detected/total*100:.1f}%)\n\n"
-        
-        report += "## Results by Technique\n\n"
-        for result in self.results:
-            status = "✅" if result['detected'] else "❌"
-            report += f"- {status} **{result['technique']}**: "
-            report += f"{result['matches']} matches in {result['total_events']} events\n"
-        
-        return report
-```
-
-## Mental Model
-
-Rodriguez approaches threat hunting by asking:
-
-1. **Is this documented?** Can others reproduce this hunt?
-2. **Is this mapped?** What ATT&CK technique does this address?
-3. **Can I test this?** Do I have Mordor data to validate?
-4. **Is this shareable?** Can the community benefit?
-5. **Is this interactive?** Can I explore and pivot?
-
-## Signature Rodriguez Moves
-
-- Jupyter notebooks for reproducible hunts
-- Mordor datasets for validation
-- ATT&CK mapping for all playbooks
-- Open source hunting infrastructure (HELK)
-- Community playbook contribution
-- Data-driven hypothesis generation
+- State the hypothesis in one sentence.
+- Name the exact providers, event IDs, fields, and join keys required.
+- Call out collection prerequisites such as SACLs, command-line auditing, or ETW setup.
+- Provide the primary analytic plus at least one relationship-based pivot.
+- Name the expected benign slice and how you would baseline it.
+- State validation method: OTRF dataset, lab replay, or explicit validation debt.
+- End with blind spots and known bypasses, not just matches.

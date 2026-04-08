@@ -1,250 +1,87 @@
 ---
 name: stonebraker-database-architecture
-description: Design databases in the style of Michael Stonebraker, Turing Award winner and creator of Ingres, Postgres, VoltDB, and Vertica. Emphasizes clean architecture, separation of OLTP/OLAP, and building systems that last decades. Use when designing database internals, storage engines, or making fundamental architectural decisions.
-tags: databases, relational, acid, transactions, query-processing, storage, schema-design, sql, distributed-db
+description: >-
+  Make database architecture calls in Michael Stonebraker's style: classify workloads by dominant
+  bottleneck, decide when OLTP and OLAP must be split, choose when shared-nothing and main-memory
+  designs actually pay off, and avoid hidden costs in column stores, deterministic OLTP, and
+  Postgres-style extensibility. Use when deciding OLTP vs OLAP vs HTAP, choosing a partition key,
+  evaluating VoltDB/Vertica/Postgres-like designs, designing a storage engine, or arguing against
+  "one database for everything." Triggers: "database architecture", "OLTP vs OLAP", "HTAP",
+  "shared nothing", "partition key", "column store", "projection", "tuple mover", "VoltDB",
+  "Vertica", "Postgres extensibility", "anti-caching", "storage engine".
 ---
 
-# Michael Stonebraker Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​​​‌​​‍​​​‌‌​‌‌‍​​‌​‌​​​‍​‌‌‌​‌‌‌‍​​​​‌​​‌‍​‌‌​‌​​​⁠‍⁠
+# Stonebraker Database Architecture
 
-## Overview
+Stonebraker's move is not "tune harder." It is "identify the overhead the incumbent system treats as normal, then delete the subsystem that exists only to pay that overhead." The right first question is never "which database is best?" It is "what is the dominant tax here: coordination, scans, memory misses, write amplification, or lack of extensibility?"
 
-Michael Stonebraker is a Turing Award winner (2014) who has created more influential database systems than anyone in history: Ingres, Postgres, VoltDB, Vertica, C-Store, H-Store, and SciDB. His work spans five decades and continues to shape how we think about data management.
+## Use Order
 
-## Core Philosophy
+- Use this skill standalone for first-pass architecture decisions.
+- Do not dive into vendor tuning guides, ORM advice, or index cookbooks before you finish the tests below. Those docs optimize a chosen architecture; they do not tell you whether the architecture is wrong.
 
-> "One size fits all is a thing of the past."
+## Before You Commit
 
-> "The database market is fragmenting. Different workloads need different architectures."
+Before choosing an engine or topology, ask yourself:
 
-> "If you want performance, you have to know your workload."
+- Where does CPU go after you remove the old bottleneck? In the original "Looking Glass," classic OLTP wasted most instructions on buffer management, locking, latching, and logging. In "Looking Glass 2.0," VoltDB-style systems moved the pain to communication: stored-procedure mode still spent 23%/51%/68% of CPU on communication for TPC-C/Voter/YCSB-C, and client-driven mode rose to 47%/63%/68%.
+- Are transactions routable before execution starts? H-Store gets its economics only when input parameters tell you the partition(s) up front and the procedure set is known before deployment. If procedures arrive after deployment, the physical design is already misaligned.
+- Are you optimizing for a bounded historical window or pretending "time travel" is free? C-Store's HWM/LWM split exists because near-now history consumes write-store space and delays cleanup.
+- Do indexes stay memory-resident even when base data does not? H-Store anti-caching assumes they do. If large secondary indexes spill, the design premise changes.
+- Is the hot spot semantic or accidental? Shared-nothing does not remove hot rows. Stonebraker's answer is usually to delete the hot aggregate or split it into N subobjects, not to buy a different cluster shape.
 
-Stonebraker believes that specialized databases will always outperform general-purpose ones. The era of the monolithic RDBMS serving all needs is over.
+## Decision Rules
 
-## Design Principles
+- If the workload is repetitive OLTP and requests can be routed from their input parameters to one partition, prefer main-memory shared-nothing with predefined transaction classes. The gain is not "RAM is fast"; it is deleting buffer-pool, latch, and lock-manager work.
+- If the same product must support ad hoc analytical scans, do not hide behind "HTAP." Stonebraker's claim is that OLTP and OLAP want adversarial physical designs: row-oriented, coordination-minimized execution versus reordered, compressed, scan-oriented execution. Treat them as separate engines even if they share a parser or SQL surface.
+- If analytics read a small subset of wide rows, prefer columnar projections, not "a row store plus more indexes." C-Store wins when sort order, encoding, and operators all align around the same scan patterns.
+- If queries routinely touch most columns, or the table is narrow, columnar advantage shrinks because tuple reconstruction and join-index work start to dominate.
+- If the product needs new types, temporal semantics, spatial operators, or custom indexes, copy Postgres's seam: new types, operators, operator classes, and access methods. Do not keep adding planner special cases one feature at a time.
 
-1. **Workload-Specific Design**: OLTP, OLAP, streaming, and scientific data need different architectures.
+## Procedures That Matter
 
-2. **Main Memory is the New Disk**: Design for RAM-resident data; disk is for durability, not performance.
+### 1. Partitionability Test
 
-3. **Shared-Nothing Scales**: Horizontal partitioning beats shared-disk for scalability.
+1. List the top transaction classes, not the biggest tables.
+2. For each class, mark the routing key available before the first statement runs.
+3. If touched partitions cannot be inferred from the call boundary, deterministic single-partition execution is the wrong bet.
+4. For every cross-partition step, ask whether duplicating a small reference table or moving a derived summary upstream would make it local.
+5. If the remaining distributed work is still central to the product, stop asking "how do we shard this?" and ask "why is this service boundary forcing coordination?"
 
-4. **The Log is the Database**: Write-ahead logging is fundamental; the log can be the source of truth.
+### 2. Column-Store Reality Check
 
-5. **Clean Abstractions Endure**: Postgres has lasted 30+ years because of its extensible, clean design.
+1. Enumerate the 3-5 query shapes that actually matter; every extra projection multiplies write cost.
+2. Choose projection sort orders for pruning and compression, not to mimic OLTP indexes.
+3. Verify that operators can run on compressed data. If the executor inflates early, most of the architectural gain is already lost.
+4. Budget tuple-mover headroom. WS->RS movement also updates delete metadata, storage keys, and join indexes; if write-store growth outruns merge-out, the engine degrades into a dual-format liability.
+5. Bound historical visibility. LWM chases HWM because "recent as-of queries" are not free; they delay cleanup and bloat the write store.
 
-## When Writing Database Code
+### 3. Extensibility Seam Test
 
-### Always
+1. When a team asks for a new data type, ask whether it needs a new planner branch or just a type + operators + operator class + access method.
+2. Prefer indirection that avoids secondary-index churn on ordinary updates. POSTGRES anchor pointers let rows move and delta chains grow without rewriting every index entry.
+3. Only choose no-overwrite / append-only internals if you are also willing to own vacuum economics. Instant recovery is the sales pitch; background cleanup debt is the bill.
 
-- Design for a specific workload first, generalize later
-- Separate storage engine from query processing
-- Make the common case fast, even at cost to edge cases
-- Build extensibility points (types, operators, indexes, languages)
-- Use write-ahead logging for durability
-- Consider column vs row storage based on access patterns
+## Numbers That Change Decisions
 
-### Never
+- C-Store's published prototype stored the benchmark at 1.987 GB where the compared row store needed 4.480 GB and another column store needed 2.650 GB. Redundant projections can still win on space when sort order and encoding are chosen together.
+- C-Store's Type-2 bitmap encoding makes selection cheap, but operators may need one memory page per possible value. A column that looked "few-valued" in design review can become a memory sink when cardinality drifts.
+- In H-Store anti-caching, sampled LRU stayed within roughly 2-7% of baseline overhead, while full-LRU tracking cost materially more. Approximate coldness unless the access pattern is nearly flat.
+- Anti-caching beat tuned MySQL by 9x/18x/10x on skewed YCSB read-only/read-heavy/write-heavy workloads with data 8x memory size, but that result depended on skew and memory-resident indexes. This is a skew play, not a universal oversubscription strategy.
+- Looking Glass 2.0 showed DPDK/F-Stack raising VoltDB's transaction-processing share from 33%/48%/70% to 53.8%/72%/91% on TPC-C/Voter/YCSB-C. After you delete disk-era overheads, the network stack becomes architecture, not plumbing.
 
-- Assume one architecture fits all workloads
-- Ignore the memory hierarchy (L1 → L2 → L3 → RAM → SSD → HDD)
-- Mix OLTP and OLAP in the same engine without thought
-- Underestimate the cost of disk I/O
-- Build without considering concurrency control from day one
+## NEVER
 
-### Prefer
+- NEVER keep OLTP and analytics in one engine because the seductive story is "one source of truth." The concrete result is that scan costs and coordination costs share the same blast radius. Instead split by bottleneck and make replication or CDC an explicit seam.
+- NEVER choose shared-nothing because "it scales linearly" while skipping placement work. The seductive path is buying nodes before proving locality. The consequence is distributed commit machinery plus unchanged hot spots. Instead prove routing keys, hotspot strategy, and local-transaction dominance first.
+- NEVER benchmark a column store on read-only RS behavior and declare victory. The seductive path is celebrating scan numbers before tuple-mover, delete-vector, and join-index pressure show up. The consequence is a warehouse that wins demos and loses once writes age. Instead capacity-plan WS->RS merge throughput as a first-class number.
+- NEVER treat stored procedures as a cosmetic API choice. The seductive path is keeping client-side transaction logic for debuggability while expecting deterministic OLTP economics. The consequence is that communication becomes the new bottleneck even after disk-era taxes are gone. Instead decide explicitly whether you want stored-procedure locality or client-side flexibility.
+- NEVER add projections or indexes "just in case." The seductive path is covering every imaginable query. The consequence is multiplicative write amplification and brittle maintenance paths. Instead keep only the few orderings that materially change pruning or compression.
+- NEVER promise append-only history "for free." The seductive path is instant recovery and time travel. The consequence is vacuum debt, longer delta chains, and archival/index maintenance that somebody must eventually pay. Instead bound retention windows and fund the cleanup path.
 
-- Specialized engines over general-purpose compromises
-- Main-memory optimized structures for OLTP
-- Columnar storage for analytics
-- Shared-nothing over shared-disk
-- Deterministic execution for replication
+## If The First Choice Fails
 
-## Code Patterns
-
-### Separation of Concerns (Postgres Architecture)
-
-```
-┌─────────────────────────────────────────────────┐
-│                  SQL Interface                   │
-├─────────────────────────────────────────────────┤
-│    Parser → Analyzer → Rewriter → Planner       │
-├─────────────────────────────────────────────────┤
-│              Executor (Volcano Model)            │
-├─────────────────────────────────────────────────┤
-│  Access Methods   │  Buffer Manager  │  WAL     │
-├───────────────────┼──────────────────┼──────────┤
-│              Storage Manager                     │
-└─────────────────────────────────────────────────┘
-```
-
-### OLTP vs OLAP Design
-
-```python
-# OLTP: Row-oriented, point queries, high concurrency
-class OLTPStorage:
-    """
-    Stonebraker's H-Store/VoltDB principles:
-    - Main-memory resident
-    - Single-threaded partitions (no locking!)
-    - Stored procedures, not ad-hoc SQL
-    - Deterministic execution for replication
-    """
-    def __init__(self, num_partitions):
-        self.partitions = [Partition() for _ in range(num_partitions)]
-    
-    def execute(self, txn):
-        partition = self.route(txn)
-        # Single-threaded: no locks needed!
-        return partition.execute(txn)
-    
-    def route(self, txn):
-        # Partition by primary key
-        return self.partitions[hash(txn.key) % len(self.partitions)]
-
-
-# OLAP: Column-oriented, full scans, compression
-class OLAPStorage:
-    """
-    Stonebraker's C-Store/Vertica principles:
-    - Column-at-a-time processing
-    - Heavy compression (RLE, dictionary, delta)
-    - Projection-based storage (materialized views)
-    - Read-optimized store + write-optimized store
-    """
-    def __init__(self):
-        self.columns = {}  # column_name -> compressed array
-        self.write_store = []  # Recent writes (row-oriented)
-    
-    def scan(self, column_name, predicate):
-        # Operate on compressed data when possible
-        col = self.columns[column_name]
-        return col.scan_with_predicate(predicate)
-    
-    def aggregate(self, column_name, agg_func):
-        # Vectorized execution on columnar data
-        col = self.columns[column_name]
-        return agg_func(col.decompress_batch())
-```
-
-### Write-Ahead Logging
-
-```python
-class WriteAheadLog:
-    """
-    Fundamental durability mechanism.
-    The log IS the database; tables are just a cache.
-    """
-    def __init__(self, log_path):
-        self.log_file = open(log_path, 'ab')
-        self.lsn = 0  # Log Sequence Number
-    
-    def append(self, record):
-        """Write-ahead: log before modifying data pages."""
-        self.lsn += 1
-        entry = LogEntry(
-            lsn=self.lsn,
-            timestamp=time.time(),
-            record=record
-        )
-        self.log_file.write(entry.serialize())
-        self.log_file.flush()
-        os.fsync(self.log_file.fileno())  # Force to disk
-        return self.lsn
-    
-    def recover(self):
-        """Replay log to reconstruct state after crash."""
-        for entry in self.read_all_entries():
-            self.apply(entry)
-```
-
-### Extensible Type System (Postgres Model)
-
-```sql
--- Stonebraker's key insight: let users define their own types
--- This is why Postgres supports JSON, arrays, PostGIS, etc.
-
-CREATE TYPE complex AS (
-    re double precision,
-    im double precision
-);
-
-CREATE FUNCTION complex_add(complex, complex) RETURNS complex AS $$
-    SELECT ROW($1.re + $2.re, $1.im + $2.im)::complex;
-$$ LANGUAGE SQL IMMUTABLE;
-
-CREATE OPERATOR + (
-    leftarg = complex,
-    rightarg = complex,
-    function = complex_add,
-    commutator = +
-);
-
--- Now you can: SELECT (1.0, 2.0)::complex + (3.0, 4.0)::complex;
-```
-
-### Partition-Based Concurrency
-
-```python
-class PartitionedDatabase:
-    """
-    H-Store insight: if each partition is single-threaded,
-    you eliminate locking overhead entirely.
-    """
-    def __init__(self, num_partitions):
-        self.partitions = []
-        for i in range(num_partitions):
-            # Each partition runs in its own thread
-            p = Partition(id=i)
-            p.start()
-            self.partitions.append(p)
-    
-    def execute_single_partition(self, txn):
-        """Fast path: no coordination needed."""
-        p = self.get_partition(txn.partition_key)
-        return p.execute(txn)
-    
-    def execute_multi_partition(self, txn):
-        """Slow path: requires coordination."""
-        # Two-phase commit across partitions
-        partitions = self.get_involved_partitions(txn)
-        
-        # Phase 1: Prepare
-        votes = [p.prepare(txn) for p in partitions]
-        if all(votes):
-            # Phase 2: Commit
-            for p in partitions:
-                p.commit(txn)
-        else:
-            for p in partitions:
-                p.abort(txn)
-```
-
-## Mental Model
-
-Stonebraker approaches database design by asking:
-
-1. **What is the workload?** OLTP, OLAP, streaming, scientific?
-2. **Where is the data?** Memory, SSD, disk, distributed?
-3. **What is the access pattern?** Point queries, range scans, full table scans?
-4. **What consistency is required?** ACID, eventual, something in between?
-5. **How will it scale?** Vertical, horizontal, both?
-
-Then design the architecture specifically for those answers.
-
-## Signature Stonebraker Moves
-
-- Specialized engines over general-purpose
-- Column stores for analytics, row stores for transactions
-- Main-memory optimization for OLTP
-- Shared-nothing architecture for scale
-- Extensible type systems
-- Clean separation between components
-- Write-ahead logging as the foundation
-
-## Key Papers
-
-- "The Design of Postgres" (1986)
-- "C-Store: A Column-oriented DBMS" (2005)
-- "H-Store: A High-Performance, Distributed Main Memory Transaction Processing System" (2008)
-- "The End of an Architectural Era" (2007)
-- "One Size Fits All: An Idea Whose Time Has Come and Gone" (2005)
+- If locality fails, first replicate tiny read-mostly dimensions and delete synthetic hot rows; if that still leaves unpredictable multi-partition work, move to a design that expects coordination instead of hiding it.
+- If the column store cannot keep up with writes, reduce projection count before touching codecs; projection entropy usually hurts more than imperfect compression.
+- If anti-caching misses too often, stop tuning eviction policy first and re-check whether the working-set assumption is false. Anti-caching is for skewed access, not uniform churn.
+- If the organization insists on "one database product," keep a common parser or SQL layer and specialize the execution engines underneath. Stonebraker's compromise is shared front-end, fractured back-end.

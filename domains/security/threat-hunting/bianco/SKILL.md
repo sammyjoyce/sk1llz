@@ -1,490 +1,138 @@
 ---
 name: bianco-pyramid-of-pain
-description: Apply David Bianco's threat hunting frameworks including the Pyramid of Pain and Threat Hunting Maturity Model. Emphasizes prioritizing detection by adversary cost and building mature hunting programs. Use when designing detection strategies or assessing hunting capability.
-tags: threat-intelligence, indicators, detection, adversary, ioc, ttps, hunting, defense, attribution
+namespace: bianco-pyramid-of-pain
+description: "Threat-hunting strategy and detection-engineering guidance for using David Bianco's Pyramid of Pain, Hunting Maturity Model (HM0-HM4), and modern Summiting-the-Pyramid/Ambiguous-Techniques methods to choose hypotheses, score robustness, and turn hunts into durable detections. Use when planning hunts, deciding whether a signal belongs at IOC/tool/TTP level, triaging living-off-the-land activity, measuring hunting maturity, or operationalizing successful hunts. Triggers: pyramid of pain, hunting maturity model, HM0, HM1, HM2, HM3, HM4, summiting the pyramid, ambiguous techniques, TTP hunting, direct correlation, loose correlation, hunt-to-detection."
 ---
 
-# David Bianco — Threat Hunting Frameworks⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​​‌​‌‌‌‍‌​‌‌​​​‌‍‌​‌‌‌‌​​‍​​​​​​‌​‍​​​​‌​‌​‍​‌‌‌​​​​⁠‍⁠
+# Hunt for attacker cost, not IOC volume
 
-## Overview
+**MANDATORY**: Before maturity scoring, backlog prioritization, or detection promotion, READ `references/pyramid_of_pain.md`.
+Do NOT load `scripts/pyramid_analyzer.py` unless the strategy is already frozen and you are executing a batch scoring task.
+Do NOT load `references/pyramid_of_pain.md` just to write platform-specific rule syntax; once the plan and promotion decision are frozen, this skill is done.
 
-David Bianco is a SANS instructor with 20+ years in information security, primarily in detection and response. He created two foundational frameworks: the **Pyramid of Pain** (2013), which prioritizes indicators by adversary impact, and the **Threat Hunting Maturity Model**, which guides organizations in building hunting capability.
+This skill is for choosing what to hunt, how much confidence to demand, and when a hunt is mature enough to become a detection. It is not for SIEM-specific query syntax.
 
-## References
+## Before doing X, ask yourself...
 
-- **Pyramid of Pain**: Original 2013 blog post, SANS documentation
-- **Threat Hunting Maturity Model**: SANS whitepaper
-- **Profile**: https://www.sans.org/profiles/david-bianco
+- Before starting a hunt, ask: am I trying to discover exposure, prove attacker presence, or graduate a known pattern into automation? Each goal tolerates different noise.
+- Before accepting an indicator as "high pain," ask: what exactly must the adversary rebuild to evade this signal: a byte, an IP, a domain, a tool configuration, one implementation, or the technique itself?
+- Before declaring an admin-like action suspicious, ask: is this an ambiguous technique that needs context rather than a standalone alert?
+- Before tuning a detector, ask: am I improving precision with defender-controlled context, or with attacker-controlled values that become the next evasion path?
+- Before claiming maturity, ask: are hunts creating reusable procedures and detections, or just producing one-off stories?
 
-## Core Philosophy
+## The working model
 
-> "The more pain you cause adversaries, the more effective your detection."
+Treat the Pyramid as a defender economics model:
 
-> "Hunting is not about finding evil—it's about finding evil that your automated defenses missed."
+- Levels `hash -> IP -> domain` are disposable. Use them for rapid scoping, retro-hunting, and temporary containment, not as the center of a hunt program.
+- Domains deserve slightly more respect than IPs because registration, propagation, and reputation-building can slow phishing or callback infrastructure by days or weeks. That is still not durable enough to anchor a mature hunt program.
+- Artifacts and tools are where durable wins often start, especially when the observable is inside your boundary or tied to pre-existing tooling the attacker does not control.
+- Modern Summiting-the-Pyramid work matters because many rules that look "behavioral" collapse to low pain once you score the actual observables. Robustness is five levels: `1 ephemeral`, `2 adversary-brought/outside boundary`, `3 pre-existing tools or inside boundary`, `4 core to some implementations`, `5 core to the technique`.
 
-Bianco's insight: not all indicators are equal. Detecting hash values is trivial for adversaries to evade; detecting their tactics, techniques, and procedures (TTPs) forces them to fundamentally change how they operate.
+The practical rule: score the observable, not the marketing label on the rule.
 
-## The Pyramid of Pain
+## Freedom calibration
 
-```
-                    /\
-                   /  \
-                  / TT \      ← TTPs: Tough! Adversary must change behavior
-                 /  Ps  \
-                /--------\
-               /  Tools   \   ← Tools: Annoying. Must find/create new tools
-              /------------\
-             / Network/Host \  ← Artifacts: Irritating. Must reconfigure
-            /   Artifacts    \
-           /------------------\
-          /   Domain Names     \ ← Domains: Simple. Register new ones
-         /----------------------\
-        /     IP Addresses       \ ← IPs: Easy. Change infrastructure
-       /--------------------------\
-      /       Hash Values          \ ← Hashes: Trivial. Recompile
-     /------------------------------\
-```
+- Use high freedom when choosing hypotheses and deciding which attacker problem matters most.
+- Use low freedom when scoring observables, choosing correlation style, or promoting a hunt into a detection. Those mistakes create long-lived blind spots or alert debt.
 
-### Level Details
+## Maturity floor
 
-| Level | Indicator Type | Adversary Pain | Detection Value |
-|-------|---------------|----------------|-----------------|
-| **1** | Hash Values | Trivial | Low |
-| **2** | IP Addresses | Easy | Low |
-| **3** | Domain Names | Simple | Medium |
-| **4** | Network/Host Artifacts | Annoying | Medium |
-| **5** | Tools | Challenging | High |
-| **6** | TTPs | Tough! | Highest |
+Use HMM honestly:
 
-## Threat Hunting Maturity Model
+- Bianco explicitly recommends `HMM2` as the realistic starting point. If you lack centralized network, host, and application data plus routine IOC/intel use, you are not ready for reliable top-of-pyramid hunting.
+- `HMM3` starts when analysts follow recurring hunt procedures on a schedule and designated hunters or a rotation exist.
+- `HMM4` starts only when successful hunts are systematically automated or used to improve alerting, and the team has a scaling method for the procedures it keeps inventing.
 
-```
-Level 0: Initial
-├── Relies primarily on automated alerting
-├── Little to no routine data collection
-└── Hunting: None
+If you fail an HMM gate, stop chasing sophistication and fix the prerequisite.
 
-Level 1: Minimal  
-├── Incorporates threat intelligence indicators
-├── Moderate data collection
-└── Hunting: IOC searches only
+## Procedure: run a hunt cycle without fooling yourself
 
-Level 2: Procedural
-├── Follows procedures from others
-├── High/very high data collection
-└── Hunting: Follows published playbooks
+1. Set the hunt class.
+   - `Seed hunt`: low-pain indicators allowed, objective is scoping or containment.
+   - `Durable hunt`: aim for Level 3-5 observables and write down what attacker change would be required to evade them.
+   - `Ambiguous-technique hunt`: require context before paging anyone.
 
-Level 3: Innovative
-├── Creates new procedures
-├── High/very high data collection
-└── Hunting: Creates original hypotheses
+2. Pick the right context model.
+   - Use `peripheral context` for pre-compromise or sector-specific targeting.
+   - Use `chain context` when co-occurring techniques establish intent better than any single event.
+   - Use `technique context` when the behavior is admin-like or LOTL. Force the question set `Who / What / When / Where`.
 
-Level 4: Leading
-├── Automates successful hunts
-├── Very high data collection
-└── Hunting: Continuous, automated
-```
+3. Choose correlation style deliberately.
+   - Use `direct correlation` only when the actions are dependent on one another.
+   - Use `loose correlation` for discovery, scripting, and other ambiguous activity. Start with `>=3` related analytics on the same user, host, or asset group inside one working window and tune from there; do not force brittle sequence logic where no dependency exists.
 
-## When Implementing
+4. Score the observables before writing production logic.
+   - Prefer `K` over `U` over `A` host telemetry when you have a choice.
+   - Prefer network `header visibility` over `payload visibility` when encryption or attacker-controlled obfuscation can erase the payload signal.
+   - Break every rule into observables. In STP, an `AND` chain collapses to the lowest-scoring observable. One cheap attacker-controlled term can drag an impressive-looking rule down to Level 1.
+   - Look for a `spanning set`: the smallest set of observables that still fires across implementations. If you cannot describe the spanning set, you probably do not understand the true pain level yet.
 
-### Always
+5. Promote only after operational proof.
+   - Baseline against roughly `30 days` of data.
+   - Run in observational mode for about `1 week` before automating response.
+   - Track the false positives created by transitioned hunts.
+   - Treat `1 successful hunt -> 1 new analytic, rule improvement, or at least preserved IOC` as the default expectation. If a hunt produces nothing reusable, challenge whether it was mature enough to count as "successful."
 
-- Prioritize TTP-based detections over IOC matching
-- Measure detection effectiveness by adversary pain
-- Document and share successful hunt methodologies
-- Automate proven hunts into continuous detection
-- Assess your organization's hunting maturity honestly
+6. Keep the backlog honest.
+   - Hunt for TTPs you do not already catch well. Leave previously solved patterns to automation maintenance.
+   - If a sprint spends more time recovering missing fields than testing hypotheses, reclassify it as telemetry engineering and stop calling it a hunt.
 
-### Never
+## Decision tree
 
-- Rely solely on hash-based detection
-- Treat all indicators as equally valuable
-- Hunt without a hypothesis
-- Fail to document findings
-- Ignore organizational maturity constraints
+If you only have hashes, IPs, or domains:
+- Use them to scope blast radius or pivot to richer behavior.
+- If the hunt ends there, record it as containment support, not durable detection progress.
 
-### Prefer
+If the signal is a pre-existing admin tool, LOLBin, or normal-looking network action:
+- Assume ambiguity.
+- Require context before alerting.
+- Prefer loose correlation unless you can prove the steps are causally dependent.
 
-- Behavioral detection over signature matching
-- Hypothesis-driven hunts over random searching
-- Automated continuous hunting over periodic campaigns
-- TTP mapping over IOC collection
-- Detection as code over manual rule creation
+If the observable is inside your boundary or tied to invariant platform behavior:
+- Try to lift it to Level 3-5 and build from there.
+- Add precision with defender-controlled context, not attacker-controlled strings.
 
-## Implementation Patterns
+If the candidate rule is robust but noisy:
+- Keep the robust core.
+- Improve accuracy with surrounding context or chaining.
+- Do not replace the robust core with easy-to-evade low-level filters.
 
-### Pyramid-Aware Detection Strategy
+If telemetry is missing:
+- Open a logging-gap task immediately.
+- Do not fake maturity with a thinner hypothesis.
 
-```python
-# detection_strategy.py
-# Prioritize detections by Pyramid of Pain level
+## Anti-patterns that cost real programs
 
-from dataclasses import dataclass
-from enum import IntEnum
-from typing import List, Optional
+- NEVER call a rule "top-of-pyramid" because it mentions an ATT&CK technique. That is seductive because the label sounds strategic. The consequence is false confidence: the rule can still be Level 1 if one attacker-controlled field anchors the condition. Instead decompose the rule and score the weakest observable first.
+- NEVER alert on ambiguous admin behavior in isolation because it feels like proactive coverage. The consequence is durable analyst fatigue and defenders training themselves to ignore the exact LOTL activity they needed to see. Instead add peripheral, chain, or `Who/What/When/Where` context first.
+- NEVER force strict sequence logic onto discovery-style hunts because it feels mathematically clean. The consequence is expensive engineering and missed adversary activity when real campaigns vary order or distribute steps. Instead use direct correlation for dependent actions and loose correlation for converging patterns.
+- NEVER tune precision with attacker-controlled exclusions because it is the fastest way to make a chart look better. The consequence is that the exclusion becomes an evasion recipe, and in STP the cheap term may govern the rule. Instead filter with inside-boundary context such as sanctioned admin hosts, approved maintenance windows, stable parent lineage, or privileged-role expectations.
+- NEVER judge a new hunting program by the first spike in incidents found because leaders expect hunting to lower the graph immediately. The consequence is killing the program during the normal startup bump, when hunting is finally surfacing old compromise, logging gaps, and insecure practices. Instead watch dwell time, detection gaps filled, logging gaps corrected, and transitioned hunts.
+- NEVER let CTI feeds define the backlog because ingesting IOCs is easy to automate and easy to report. The consequence is a program optimized for expiration dates instead of attacker cost. Instead use feeds as seeds, then climb toward inside-boundary artifacts, spanning sets, and behavior.
+- NEVER assume "tool detection" is automatically high pain because tools sit high on the diagram and tool names sound meaningful. The consequence is overrating detections tied to adversary-brought frameworks, malleable profiles, or easily swapped kits. Instead prefer observables tied to pre-existing platform behavior, inside-boundary dependencies, or technique-spanning sets.
+- NEVER hand-triage the bottom of the pyramid at scale because it feels safer than behavioral work. The consequence is that senior analyst time gets burned on disposable infrastructure while robust detection never improves. Instead automate most hash/IP/domain handling and reserve human cycles for Level 3-5 reasoning.
 
-class PyramidLevel(IntEnum):
-    """Pyramid of Pain levels - higher = more valuable"""
-    HASH_VALUES = 1
-    IP_ADDRESSES = 2
-    DOMAIN_NAMES = 3
-    ARTIFACTS = 4      # Network/Host artifacts
-    TOOLS = 5
-    TTPS = 6
+## Metrics and thresholds that matter
 
-@dataclass
-class Detection:
-    """A detection rule with pyramid classification"""
-    name: str
-    description: str
-    level: PyramidLevel
-    mitre_technique: Optional[str]
-    query: str
-    false_positive_rate: float
-    
-    @property
-    def adversary_pain(self) -> str:
-        pain_map = {
-            PyramidLevel.HASH_VALUES: "Trivial - recompile",
-            PyramidLevel.IP_ADDRESSES: "Easy - change infrastructure",
-            PyramidLevel.DOMAIN_NAMES: "Simple - register new domains",
-            PyramidLevel.ARTIFACTS: "Annoying - reconfigure tools",
-            PyramidLevel.TOOLS: "Challenging - find/create new tools",
-            PyramidLevel.TTPS: "Tough - must change tradecraft"
-        }
-        return pain_map[self.level]
-    
-    @property
-    def priority_score(self) -> float:
-        """Higher score = better detection to invest in"""
-        # Weight by pyramid level, penalize false positives
-        return (self.level.value * 10) * (1 - self.false_positive_rate)
+- Use `HMM2` as the realistic entry point for serious hunting.
+- On a mature team, the expected ratio is roughly `1:1` between successful hunts and some reusable output: new analytic, improved rule, or at minimum a preserved indicator.
+- Baseline prospective detections over about `30 days`, then run them observationally for about `1 week` before enabling automated response or hard paging.
+- A practical portfolio target is to keep roughly `60%` of engineered coverage in the top three levels and automate about `80-90%` of hash/IP/domain handling; if humans are still spending more than about `20%` of hunt time there, the program is upside down.
+- Judge hunts by attacker cost or defender visibility moved: dwell time, detection gaps filled, logging gaps corrected, false positives on transitioned hunts, and newly gained visibility. Raw hunt count is management theater.
 
+## Edge cases and fallback rules
 
-class DetectionPortfolio:
-    """Manage detections with pyramid awareness"""
-    
-    def __init__(self):
-        self.detections: List[Detection] = []
-    
-    def add(self, detection: Detection):
-        self.detections.append(detection)
-    
-    def coverage_by_level(self) -> dict:
-        """Assess coverage at each pyramid level"""
-        coverage = {level: [] for level in PyramidLevel}
-        for det in self.detections:
-            coverage[det.level].append(det.name)
-        return coverage
-    
-    def maturity_assessment(self) -> str:
-        """Assess detection maturity based on pyramid distribution"""
-        coverage = self.coverage_by_level()
-        
-        ttp_count = len(coverage[PyramidLevel.TTPS])
-        tool_count = len(coverage[PyramidLevel.TOOLS])
-        ioc_count = (len(coverage[PyramidLevel.HASH_VALUES]) + 
-                     len(coverage[PyramidLevel.IP_ADDRESSES]) +
-                     len(coverage[PyramidLevel.DOMAIN_NAMES]))
-        
-        total = len(self.detections)
-        if total == 0:
-            return "No detections - Level 0"
-        
-        ttp_ratio = (ttp_count + tool_count) / total
-        
-        if ttp_ratio > 0.5:
-            return "Mature - Strong TTP focus"
-        elif ttp_ratio > 0.25:
-            return "Developing - Building TTP coverage"
-        else:
-            return "Immature - Over-reliant on IOCs"
-    
-    def improvement_recommendations(self) -> List[str]:
-        """Suggest where to invest detection effort"""
-        coverage = self.coverage_by_level()
-        recommendations = []
-        
-        if len(coverage[PyramidLevel.TTPS]) < 10:
-            recommendations.append(
-                "Priority: Add more TTP-based detections. "
-                "These cause maximum adversary pain."
-            )
-        
-        if len(coverage[PyramidLevel.TOOLS]) < 5:
-            recommendations.append(
-                "Add tool-based detections for common attack frameworks "
-                "(Cobalt Strike, Mimikatz, etc.)"
-            )
-        
-        ioc_count = (len(coverage[PyramidLevel.HASH_VALUES]) + 
-                     len(coverage[PyramidLevel.IP_ADDRESSES]))
-        if ioc_count > len(self.detections) * 0.5:
-            recommendations.append(
-                "Warning: Over 50% of detections are low-value IOCs. "
-                "Consider retiring stale IOC rules."
-            )
-        
-        return recommendations
+- Cloud, identity, and SaaS attacks often make infrastructure indicators nearly useless. Treat valid-credential or token abuse as an ambiguous-technique problem and lean on context, not malware assumptions.
+- Network detections age badly when the useful observable lives only in payload. Re-score after protocol changes, TLS adoption, product upgrades, or sensor changes.
+- STP assumes trusted telemetry. If attackers can suppress, delay, or blind the sensor, the nominal score overstates real pain; compensate with sensor hardening or a second source.
+- Highly robust detections can still be unusable if the behavior is common in your environment. Robustness and accuracy are separate variables; do not trade one away blindly.
+- If the hunt returns zero results, ask whether the behavior is already covered by automation or whether you chose the wrong context model.
+- If the hunt returns too much noise, do not immediately drop down the pyramid. First ask whether a spanning set exists, whether context is missing, or whether the logic should remain a hunt-only analytic instead of a production alert.
 
+## Stop conditions
 
-# Example: TTP-level detection
-ttp_detection = Detection(
-    name="Suspicious PowerShell Download Cradle",
-    description="Detects PowerShell download and execute patterns",
-    level=PyramidLevel.TTPS,
-    mitre_technique="T1059.001",
-    query="""
-        process_name:powershell.exe AND 
-        (command_line:*DownloadString* OR 
-         command_line:*IEX* OR 
-         command_line:*Invoke-Expression*)
-    """,
-    false_positive_rate=0.05
-)
-
-# Example: Hash-level detection (low value)
-hash_detection = Detection(
-    name="Known Malware Hash",
-    description="Matches specific malware sample hash",
-    level=PyramidLevel.HASH_VALUES,
-    mitre_technique=None,
-    query="file_hash:e99a18c428cb38d5f260853678922e03",
-    false_positive_rate=0.001
-)
-```
-
-### Hunting Maturity Assessment
-
-```python
-# maturity_model.py
-# Assess and improve threat hunting maturity
-
-from dataclasses import dataclass
-from enum import IntEnum
-from typing import List
-
-class HuntingMaturityLevel(IntEnum):
-    INITIAL = 0      # Relies on automated alerts
-    MINIMAL = 1      # IOC searches
-    PROCEDURAL = 2   # Follows playbooks
-    INNOVATIVE = 3   # Creates new procedures
-    LEADING = 4      # Automates hunts
-
-@dataclass
-class MaturityAssessment:
-    """Evaluate hunting program maturity"""
-    
-    # Data Collection
-    has_endpoint_telemetry: bool
-    has_network_telemetry: bool
-    has_cloud_telemetry: bool
-    data_retention_days: int
-    
-    # Hunting Practice
-    has_dedicated_hunters: bool
-    hunts_per_month: int
-    uses_threat_intel: bool
-    documents_hunts: bool
-    automates_successful_hunts: bool
-    creates_original_hypotheses: bool
-    
-    # Infrastructure
-    has_hunting_platform: bool
-    has_playbook_library: bool
-    measures_hunt_effectiveness: bool
-    
-    def calculate_level(self) -> HuntingMaturityLevel:
-        """Determine maturity level"""
-        
-        # Level 4: Leading
-        if (self.automates_successful_hunts and 
-            self.creates_original_hypotheses and
-            self.measures_hunt_effectiveness and
-            self.hunts_per_month >= 8):
-            return HuntingMaturityLevel.LEADING
-        
-        # Level 3: Innovative
-        if (self.creates_original_hypotheses and
-            self.documents_hunts and
-            self.hunts_per_month >= 4):
-            return HuntingMaturityLevel.INNOVATIVE
-        
-        # Level 2: Procedural
-        if (self.has_playbook_library and
-            self.has_dedicated_hunters and
-            self.hunts_per_month >= 2):
-            return HuntingMaturityLevel.PROCEDURAL
-        
-        # Level 1: Minimal
-        if self.uses_threat_intel:
-            return HuntingMaturityLevel.MINIMAL
-        
-        # Level 0: Initial
-        return HuntingMaturityLevel.INITIAL
-    
-    def roadmap_to_next_level(self) -> List[str]:
-        """What's needed to advance"""
-        current = self.calculate_level()
-        
-        if current == HuntingMaturityLevel.INITIAL:
-            return [
-                "Implement threat intelligence feeds",
-                "Begin IOC-based hunting",
-                "Ensure basic telemetry collection",
-                "Identify potential hunting analysts"
-            ]
-        
-        elif current == HuntingMaturityLevel.MINIMAL:
-            return [
-                "Develop or adopt hunting playbooks",
-                "Dedicate analyst time to hunting",
-                "Increase data collection coverage",
-                "Hunt at least 2x per month"
-            ]
-        
-        elif current == HuntingMaturityLevel.PROCEDURAL:
-            return [
-                "Train hunters to create original hypotheses",
-                "Document all hunt findings",
-                "Begin measuring hunt effectiveness",
-                "Increase hunt frequency to 4x/month"
-            ]
-        
-        elif current == HuntingMaturityLevel.INNOVATIVE:
-            return [
-                "Automate successful hunts into detections",
-                "Build metrics dashboard for hunting",
-                "Share methodologies with community",
-                "Achieve continuous hunting capability"
-            ]
-        
-        return ["You've achieved hunting mastery! 🏆"]
-```
-
-### TTP-Based Hunt Design
-
-```python
-# ttp_hunt.py
-# Design hunts that target TTPs (maximum pain)
-
-from dataclasses import dataclass
-from typing import List, Dict
-
-@dataclass
-class TTPHunt:
-    """A hunt targeting specific adversary TTPs"""
-    
-    name: str
-    hypothesis: str
-    mitre_tactic: str
-    mitre_techniques: List[str]
-    
-    # Data requirements
-    required_telemetry: List[str]
-    
-    # Hunt queries
-    queries: Dict[str, str]  # platform -> query
-    
-    # Expected findings
-    expected_benign: List[str]
-    indicators_of_compromise: List[str]
-    
-    # Documentation
-    references: List[str]
-    
-    def to_playbook(self) -> str:
-        """Generate hunt playbook"""
-        playbook = f"""
-# Hunt Playbook: {self.name}
-
-## Hypothesis
-{self.hypothesis}
-
-## MITRE ATT&CK Mapping
-- **Tactic**: {self.mitre_tactic}
-- **Techniques**: {', '.join(self.mitre_techniques)}
-
-## Required Telemetry
-{chr(10).join(f'- {t}' for t in self.required_telemetry)}
-
-## Hunt Queries
-
-"""
-        for platform, query in self.queries.items():
-            playbook += f"### {platform}\n```\n{query}\n```\n\n"
-        
-        playbook += f"""
-## Expected Benign Activity
-{chr(10).join(f'- {b}' for b in self.expected_benign)}
-
-## Indicators of Compromise
-{chr(10).join(f'- {i}' for i in self.indicators_of_compromise)}
-
-## References
-{chr(10).join(f'- {r}' for r in self.references)}
-"""
-        return playbook
-
-
-# Example: Credential Dumping Hunt (TTP-level)
-credential_dump_hunt = TTPHunt(
-    name="LSASS Memory Access",
-    hypothesis="Adversaries are accessing LSASS memory to dump credentials",
-    mitre_tactic="Credential Access",
-    mitre_techniques=["T1003.001"],
-    required_telemetry=[
-        "Process creation with command line",
-        "Process access events (Sysmon Event 10)",
-        "Memory read operations"
-    ],
-    queries={
-        "Splunk": """
-            index=windows sourcetype=sysmon EventCode=10
-            TargetImage="*lsass.exe"
-            NOT SourceImage IN ("*\\\\MsMpEng.exe", "*\\\\csrss.exe")
-            | stats count by SourceImage, SourceProcessGUID
-            | where count > 1
-        """,
-        "Elastic": """
-            event.code:10 AND 
-            process.target.name:lsass.exe AND
-            NOT process.name:(MsMpEng.exe OR csrss.exe)
-        """
-    },
-    expected_benign=[
-        "Windows Defender (MsMpEng.exe)",
-        "Antivirus products",
-        "Crash dump utilities"
-    ],
-    indicators_of_compromise=[
-        "procdump.exe accessing lsass.exe",
-        "mimikatz.exe or renamed variants",
-        "comsvcs.dll MiniDump export",
-        "Unknown processes accessing lsass.exe"
-    ],
-    references=[
-        "https://attack.mitre.org/techniques/T1003/001/",
-        "https://www.microsoft.com/security/blog/credential-theft/"
-    ]
-)
-```
-
-## Mental Model
-
-Bianco approaches threat hunting by asking:
-
-1. **What pyramid level is this?** Prioritize TTP-based detection
-2. **What pain does this cause?** Measure detection value by adversary impact
-3. **What's our maturity level?** Match hunting to organizational capability
-4. **Can we automate this?** Successful hunts become continuous detection
-5. **What did we learn?** Every hunt improves the program
-
-## Signature Bianco Moves
-
-- Pyramid of Pain for indicator prioritization
-- Maturity model for program development
-- TTP focus over IOC collection
-- Hypothesis-driven hunting
-- Automation of proven hunts
-- Continuous improvement mindset
+- Stop calling the work "threat hunting" if the main human action is just remediating something a tool already found.
+- Stop promoting hunts when telemetry gaps, not adversary behavior, are driving the results.
+- Stop adding clever logic if the weakest observable is still cheap to evade.
+- Stop claiming maturity growth if procedures are not being published, reused, or automated.

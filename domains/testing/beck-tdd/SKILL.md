@@ -1,524 +1,85 @@
 ---
-name: beck-test-driven-development
-description: Develop software in the style of Kent Beck, creator of Test-Driven Development and Extreme Programming. Emphasizes red-green-refactor, tests-first design, small steps, and emergent architecture. Use when writing new features, refactoring legacy code, or establishing development discipline.
-tags: tdd, test-driven, red-green-refactor, unit-testing, design, refactoring, xp, agile, clean-code
+name: beck-tdd
+description: "Apply Kent Beck style TDD as a step-size and design-control system: decide when not to TDD, choose Obvious Implementation vs Fake It vs Triangulate, keep red phases tiny, separate tidy from behavior, and avoid structure-cementing tests. Use when implementing behavior from a known interface, pinning a reproduced bug, deciding between real collaborator, fake, or mock, coaching an AI agent through red-green-refactor, or routing work out to learning tests, spikes, or legacy characterization when TDD is the wrong tool. Triggers: \"TDD this\", \"red green refactor\", \"Kent Beck\", \"fake it\", \"triangulate\", \"obvious implementation\", \"Tidy First\", \"test list\", \"Detroit school\", \"classicist\", \"TCR\", \"learning test\", \"characterization test\"."
 ---
 
-# Kent Beck Test-Driven Development Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​‌​‌‌​‌‍‌‌​​​​‌​‍​​​‌​‌‌‌‍​​​​​​‌​‍​​​​‌​​‌‍​‌‌‌​​‌​⁠‍⁠
+# Beck TDD
 
-## Overview
+Kent Beck style TDD is not "write tests first" as ritual. It is a control system for fear, step size, and design damage. Most failures come from the wrong move size, the wrong oracle, or tests coupled to structure instead of behavior.
 
-Kent Beck is the creator of Test-Driven Development (TDD) and Extreme Programming (XP), two of the most influential software development practices of the past 30 years. TDD inverts the traditional code-then-test approach: write a failing test first, make it pass with the simplest code, then refactor. This discipline produces clean, tested, well-designed code as a natural byproduct of the development process.
+## Use This Skill When The Problem Fits
 
-## Core Philosophy
+Use TDD when the interface is mostly known, the oracle is cheap, and you can predict the next red or green transition before you run it.
 
-> "Test-Driven Development is a way of managing fear during programming."
+Route out immediately when:
 
-> "Make it work, make it right, make it fast—in that order."
+- The output shape is still unknown. Do a spike or learning test first.
+- The oracle is visual or experiential. Use exploratory or visual testing.
+- The code is legacy with no seam. Use characterization tests and sprout seams first.
+- The task is pure tidying with no behavior change. Use refactoring discipline, not new tests.
 
-> "I'm not a great programmer; I'm just a good programmer with great habits."
+## Before The First Test, Ask Yourself
 
-TDD is not primarily about testing—it's about design. Writing tests first forces you to think about interfaces before implementations, dependencies before details, and behavior before structure. The tests are a beneficial side effect of a disciplined design process.
+- What uncertainty am I buying down: behavior, interface, or algorithm? TDD helps with behavior and interface pressure. It does not substitute for algorithmic insight.
+- Can the next example fit on one screen and can I call pass or fail before I run it? If not, the slice is still too large.
+- If this test were deleted tomorrow, what production risk would return? If the answer is "none", skip it.
+- Is the pain in the test or in the interface? If the test is harder to write than the code, fix the interface before writing more test code.
+- Will a teammate be able to refactor internals tomorrow without breaking this test? If not, you are about to write a structure-sensitive test.
 
-## Design Principles
+## Operating Procedure
 
-1. **Red-Green-Refactor**: Write failing test → make it pass → improve the code.
+1. Write a flat test list before coding. New ideas go onto the list, not into a second live red bar. If the list grows faster than you cross items off for two cycles, stop coding and sketch the problem.
+2. Choose the gear by confidence, not by ceremony.
+   - Obvious Implementation is the default when you can type the answer in about 30 seconds and your surprise rate is below about 1 run in 5.
+   - Fake It when you can see a passing example but the real implementation is still foggy. Replace one constant with one variable at a time.
+   - Triangulate only when the abstraction is still unclear after the first passing example. Two examples that force no new distinction are ceremony, not feedback.
+3. Keep red phases tiny. If a test stays red for longer than roughly a minute or two breaths of thought, revert to the last green state and take a smaller move.
+4. Keep unit tests cheap enough to preserve rhythm. A useful target is under 100 ms per test; once a focused suite drifts past about 10 seconds, people stop running it on every change and TDD silently degrades into test-after.
+5. Split behavior from tidying. A behavioral commit contains the failing test and the minimum code to satisfy it. A structural commit contains rename, extract, move, or inline steps with the suite green before and after. Never mix both kinds of change in one commit.
 
-2. **Baby Steps**: Take the smallest step that could possibly work.
+## Freedom Calibration
 
-3. **YAGNI**: You Aren't Gonna Need It—don't build what you don't need yet.
+- High freedom: pure in-memory business logic with a known interface. Favor the smallest direct move that keeps feedback tight; do not add ceremony just to "look like TDD."
+- Low freedom: time, randomness, filesystems, threads, network, or third-party APIs. Be rigid. Create seams first, inject non-determinism, and keep commit boundaries extremely clean.
 
-4. **Simple Design**: Code that passes tests, reveals intent, has no duplication, and has fewest elements.
+## Collaborators, Doubles, And Determinism
 
-5. **Courage**: Tests give you the courage to refactor aggressively.
+Before you mock anything, ask:
 
-## The TDD Cycle
+- Do I own this collaborator?
+- Can the real collaborator run fast and deterministically in tests?
+- Am I asserting behavior, or just freezing call order?
 
-```
-    ┌─────────────────────────────────────────┐
-    │                                         │
-    │    1. RED: Write a failing test         │
-    │       - Test doesn't compile? That's    │
-    │         failing. Write minimal code     │
-    │         to make it compile (still fail) │
-    │                                         │
-    │                    │                    │
-    │                    ▼                    │
-    │                                         │
-    │    2. GREEN: Make it pass               │
-    │       - Write the simplest code that    │
-    │         could possibly work             │
-    │       - Sins allowed: duplication,      │
-    │         hardcoding, ugly code           │
-    │                                         │
-    │                    │                    │
-    │                    ▼                    │
-    │                                         │
-    │    3. REFACTOR: Clean up                │
-    │       - Remove duplication              │
-    │       - Improve names                   │
-    │       - Extract methods/classes         │
-    │       - Tests must stay green           │
-    │                                         │
-    │                    │                    │
-    │                    ▼                    │
-    │              (repeat)                   │
-    └─────────────────────────────────────────┘
-```
+Default choices:
 
-## When Practicing TDD
+- Use the real collaborator when it is in-memory, fast, and deterministic.
+- Use a fake you own when speed or determinism matters but behavior still needs to feel real.
+- Wrap third-party systems in an adapter you own, then mock only the adapter and cover it with a small real integration suite.
 
-### Always
+The expensive lesson: every flaky or structure-cementing test taxes the entire suite, not just itself. One tolerated flake teaches the team to ignore red. One strict mock of an internal collaborator makes the next refactor look like a functional regression when nothing user-visible changed.
 
-- Write the test before the code
-- Run the test and watch it fail (red)
-- Write only enough code to pass the test
-- Refactor only when tests are green
-- Commit after each green-refactor cycle
-- Keep tests fast (milliseconds, not seconds)
-- Test behavior, not implementation
+## Anti-Patterns You Must Refuse
 
-### Never
+- NEVER write a second failing test because it feels efficient. It is seductive because it captures fresh ideas while you still have them. The consequence is you lose shot-calling and cannot tell which red your next edit is supposed to clear. Instead append the idea to the test list and finish the current red-green cycle.
+- NEVER triangulate by ritual because two examples feel more rigorous than one. The consequence is fake abstraction pressure and slow, theatrical loops. Instead stay in Obvious Implementation until your surprise rate climbs above about 20 percent, then downshift.
+- NEVER "fix" a refactor by editing the test because stale assertions are easy to blame. The consequence is you destroy the contract that refactoring preserves behavior, so you no longer know whether code or test moved. Instead revert to the last green state and re-run the structural change in smaller steps.
+- NEVER mock what you do not own because copying a third-party call shape is faster than designing an adapter. The consequence is your tests validate your guess about Stripe, AWS, or `requests`, not the real integration, so upgrades break production while unit tests stay green. Instead introduce an adapter seam and cover that seam with a small integration slice.
+- NEVER strict-mock your own collaborators because call-order assertions feel precise. The consequence is structure-sensitive tests that explode on harmless extracts, renames, or reordered calls. Instead prefer Detroit style state assertions or a fake that preserves behavior without freezing internals.
+- NEVER clean shared fixtures before a test because it feels safer than teardown. The consequence is you hide the previous dirty test and preserve order dependence until CI parallelism exposes it. Instead make each test build its own world and clean up after.
+- NEVER assert on rendered strings, logs, or serialized blobs as a proxy for domain state because snapshot-like assertions are cheap to add. The consequence is formatting churn detonates unrelated tests and destroys structure-insensitivity. Instead assert on semantic state, and reserve approval-style checks for outputs whose format is itself the product.
+- NEVER keep using TDD on unknown input formats because writing assertions feels disciplined. The consequence is you freeze ignorance into tests and spend the afternoon debugging the oracle instead of the code. Instead spike in a REPL, capture real examples, or write disposable learning tests until "correct" is concrete.
 
-- Write code without a failing test
-- Write more than one failing test at a time
-- Refactor while tests are red
-- Skip the refactoring step
-- Test private methods directly
-- Let tests become slow
-- Mock what you don't own
+## AI Agent Guardrails
 
-### Prefer
+- Force a visible red bar before implementation. Agents cheat by writing code first and backfilling agreeable tests.
+- If a previously green test goes red during a refactor, revert code before touching the test.
+- If the agent proposes changing test and implementation in the same breath, demand the behavioral reason. Mixed edits are where greenwashing hides.
+- Use TCR only when the agent keeps taking oversized steps and the codebase is stable enough to tolerate frequent reverts. The pain is the point.
 
-- Small, focused tests over large integration tests
-- One assertion per test (logical assertion)
-- Descriptive test names that document behavior
-- Testing through public interfaces
-- Fake it till you make it
-- Triangulation to drive generalization
-- Obvious implementation when it's obvious
+## Mandatory Reference Loading
 
-## Code Patterns
-
-### The TDD Rhythm
-
-```python
-# Example: Building a Money class with TDD
-
-# ═══════════════════════════════════════════════════════════════
-# Cycle 1: First test - establish the basics
-# ═══════════════════════════════════════════════════════════════
-
-# RED: Write failing test
-def test_multiplication():
-    five = Dollar(5)
-    assert five.times(2) == Dollar(10)
-
-# This fails: Dollar doesn't exist
-
-# GREEN: Simplest code to pass
-class Dollar:
-    def __init__(self, amount):
-        self.amount = amount
-    
-    def times(self, multiplier):
-        return Dollar(self.amount * multiplier)
-    
-    def __eq__(self, other):
-        return self.amount == other.amount
-
-# REFACTOR: Nothing to refactor yet
-
-# ═══════════════════════════════════════════════════════════════
-# Cycle 2: Add another test - triangulate
-# ═══════════════════════════════════════════════════════════════
-
-# RED: New failing test
-def test_multiplication_by_three():
-    five = Dollar(5)
-    assert five.times(3) == Dollar(15)
-
-# GREEN: Already passes! Our implementation was general enough
-
-# REFACTOR: Still clean
-
-# ═══════════════════════════════════════════════════════════════
-# Cycle 3: Handle a new requirement - different currencies
-# ═══════════════════════════════════════════════════════════════
-
-# RED: Failing test for Franc
-def test_franc_multiplication():
-    five = Franc(5)
-    assert five.times(2) == Franc(10)
-
-# GREEN: Quick and dirty - copy Dollar (sin: duplication)
-class Franc:
-    def __init__(self, amount):
-        self.amount = amount
-    
-    def times(self, multiplier):
-        return Franc(self.amount * multiplier)
-    
-    def __eq__(self, other):
-        return self.amount == other.amount
-
-# REFACTOR: Extract common parent class
-class Money:
-    def __init__(self, amount):
-        self.amount = amount
-    
-    def __eq__(self, other):
-        return (self.amount == other.amount and 
-                type(self) == type(other))
-
-class Dollar(Money):
-    def times(self, multiplier):
-        return Dollar(self.amount * multiplier)
-
-class Franc(Money):
-    def times(self, multiplier):
-        return Franc(self.amount * multiplier)
-```
-
-### Fake It Till You Make It
-
-```python
-# Start with the most degenerate implementation
-# Then generalize as tests force you
-
-# RED: First test
-def test_sum():
-    assert sum([1, 2, 3]) == 6
-
-# GREEN: Fake it!
-def sum(numbers):
-    return 6  # Obviously wrong, but test passes
-
-# RED: Add a test that forces generalization
-def test_sum_different_numbers():
-    assert sum([2, 3, 4]) == 9
-
-# GREEN: Now we must implement for real
-def sum(numbers):
-    result = 0
-    for n in numbers:
-        result += n
-    return result
-
-# REFACTOR: Use built-in (if appropriate)
-def sum(numbers):
-    return builtins.sum(numbers)
-```
-
-### Triangulation
-
-```python
-# Use multiple examples to drive toward generalization
-
-# RED: First example
-def test_equality_same_amount():
-    assert Dollar(5) == Dollar(5)
-
-# GREEN: Simplest implementation
-def __eq__(self, other):
-    return True  # Fake it!
-
-# RED: Second example forces real implementation
-def test_equality_different_amount():
-    assert Dollar(5) != Dollar(6)
-
-# GREEN: Now we need real logic
-def __eq__(self, other):
-    return self.amount == other.amount
-
-# RED: Third example - different types
-def test_equality_different_types():
-    assert Dollar(5) != Franc(5)
-
-# GREEN: Check type too
-def __eq__(self, other):
-    return (self.amount == other.amount and 
-            type(self) == type(other))
-```
-
-### Test Structure: Arrange-Act-Assert
-
-```python
-def test_withdraw_reduces_balance():
-    # Arrange: Set up the test context
-    account = Account(balance=100)
-    
-    # Act: Perform the action being tested
-    account.withdraw(30)
-    
-    # Assert: Verify the expected outcome
-    assert account.balance == 70
-
-
-# Or Given-When-Then for BDD style
-def test_given_account_with_balance_when_withdraw_then_balance_reduced():
-    # Given
-    account = Account(balance=100)
-    
-    # When
-    account.withdraw(30)
-    
-    # Then
-    assert account.balance == 70
-```
-
-### Test Doubles
-
-```python
-# Beck's approach: Use the simplest double that works
-
-# 1. Fake: Working implementation with shortcuts
-class FakeRepository:
-    def __init__(self):
-        self.data = {}
-    
-    def save(self, entity):
-        self.data[entity.id] = entity
-    
-    def find(self, id):
-        return self.data.get(id)
-
-
-# 2. Stub: Returns canned answers
-class StubPriceService:
-    def get_price(self, symbol):
-        return 100.00  # Always returns same price
-
-
-# 3. Spy: Records what happened
-class SpyEmailService:
-    def __init__(self):
-        self.sent_emails = []
-    
-    def send(self, to, subject, body):
-        self.sent_emails.append({
-            'to': to,
-            'subject': subject,
-            'body': body
-        })
-
-
-# 4. Mock: Verifies expected interactions
-# (Use sparingly - prefer state verification over behavior verification)
-
-
-# Test using a fake
-def test_user_registration_saves_user():
-    # Arrange
-    repository = FakeRepository()
-    service = UserService(repository)
-    
-    # Act
-    service.register("alice@example.com", "password123")
-    
-    # Assert: Check state, not behavior
-    saved_user = repository.find_by_email("alice@example.com")
-    assert saved_user is not None
-    assert saved_user.email == "alice@example.com"
-```
-
-### The Testing Pyramid
-
-```python
-# Beck's view: Most tests should be unit tests
-
-"""
-                    /\
-                   /  \
-                  / E2E \        <- Few: Slow, brittle, but necessary
-                 /──────\
-                /        \
-               /Integration\     <- Some: Test component boundaries
-              /──────────────\
-             /                \
-            /    Unit Tests    \  <- Many: Fast, focused, isolated
-           /────────────────────\
-
-"""
-
-# Unit test: Fast, isolated, focused
-def test_calculate_discount_for_premium_customer():
-    customer = Customer(tier='premium')
-    order = Order(total=100)
-    
-    discount = calculate_discount(customer, order)
-    
-    assert discount == 20  # 20% for premium
-
-
-# Integration test: Verify component interaction
-def test_order_service_persists_to_database():
-    db = create_test_database()
-    service = OrderService(db)
-    
-    order = service.create_order(customer_id=1, items=[...])
-    
-    persisted = db.find_order(order.id)
-    assert persisted == order
-
-
-# E2E test: Full system, sparingly
-def test_checkout_flow():
-    browser = Browser()
-    browser.visit('/cart')
-    browser.click('Checkout')
-    browser.fill('card_number', '4242424242424242')
-    browser.click('Pay')
-    
-    assert browser.text_present('Order confirmed')
-```
-
-### Refactoring Patterns
-
-```python
-# REFACTOR phase: Common transformations
-
-# 1. Extract Method
-# Before
-def print_invoice(invoice):
-    print(f"Invoice #{invoice.id}")
-    total = 0
-    for item in invoice.items:
-        total += item.price * item.quantity
-    print(f"Total: ${total}")
-
-# After
-def print_invoice(invoice):
-    print(f"Invoice #{invoice.id}")
-    print(f"Total: ${calculate_total(invoice)}")
-
-def calculate_total(invoice):
-    return sum(item.price * item.quantity for item in invoice.items)
-
-
-# 2. Extract Class
-# Before: Order has too many responsibilities
-class Order:
-    def calculate_total(self): ...
-    def calculate_tax(self): ...
-    def calculate_shipping(self): ...
-    def format_for_email(self): ...
-    def format_for_pdf(self): ...
-
-# After: Extract formatting
-class Order:
-    def calculate_total(self): ...
-    def calculate_tax(self): ...
-    def calculate_shipping(self): ...
-
-class OrderFormatter:
-    def __init__(self, order): ...
-    def to_email(self): ...
-    def to_pdf(self): ...
-
-
-# 3. Replace Conditional with Polymorphism
-# Before
-def calculate_pay(employee):
-    if employee.type == 'hourly':
-        return employee.hours * employee.rate
-    elif employee.type == 'salaried':
-        return employee.salary / 12
-    elif employee.type == 'commissioned':
-        return employee.base + employee.sales * employee.commission_rate
-
-# After
-class HourlyEmployee:
-    def calculate_pay(self):
-        return self.hours * self.rate
-
-class SalariedEmployee:
-    def calculate_pay(self):
-        return self.salary / 12
-
-class CommissionedEmployee:
-    def calculate_pay(self):
-        return self.base + self.sales * self.commission_rate
-```
-
-### The TDD State Machine
-
-```python
-class TDDPractitioner:
-    """
-    The mental states of a TDD practitioner.
-    """
-    
-    def __init__(self):
-        self.state = 'THINKING'
-        self.tests_passing = True
-    
-    def write_test(self):
-        """Write a new failing test."""
-        assert self.state == 'THINKING'
-        assert self.tests_passing, "Fix failing tests before writing new ones"
-        
-        # Write the test...
-        self.tests_passing = False  # Test should fail
-        self.state = 'RED'
-    
-    def make_it_pass(self):
-        """Write simplest code to pass the test."""
-        assert self.state == 'RED'
-        
-        # Write minimal code...
-        self.tests_passing = True
-        self.state = 'GREEN'
-    
-    def refactor(self):
-        """Improve the code while keeping tests green."""
-        assert self.state == 'GREEN'
-        assert self.tests_passing
-        
-        # Refactor...
-        # Run tests after each change
-        assert self.tests_passing, "Refactoring broke tests!"
-        
-        self.state = 'THINKING'  # Ready for next cycle
-    
-    def commit(self):
-        """Commit after each complete cycle."""
-        assert self.state in ('GREEN', 'THINKING')
-        assert self.tests_passing
-        
-        # git commit -m "descriptive message"
-```
-
-## Mental Model
-
-Beck approaches development by asking:
-
-1. **What's the next test?** Start with what you want to prove
-2. **What's the simplest way to pass?** Don't over-engineer
-3. **What duplication can I remove?** Refactor mercilessly
-4. **Am I scared?** Write more tests until you're not
-5. **Is this design emerging?** Trust the process
-
-## The TDD Checklist
-
-```
-□ Write a test that expresses what you want
-□ Run it and watch it fail (RED)
-□ Write the simplest code to pass
-□ Run tests and see them pass (GREEN)
-□ Look for duplication to remove
-□ Refactor while tests stay green
-□ Commit the cycle
-□ Repeat
-```
-
-## Signature Beck Moves
-
-- Red-Green-Refactor cycle
-- Fake it till you make it
-- Triangulation to generalize
-- Obvious implementation when obvious
-- Baby steps when uncertain
-- Test list to track progress
-- One assertion per test (conceptually)
-- Test behavior, not implementation
+- Before choosing between real collaborator, fake, mock, learning test, characterization test, or TCR, READ `references/decision-trees.md`.
+- Before trading off fast vs predictive vs specific vs structure-insensitive, READ `references/test-desiderata.md`.
+- Before designing a matrix of cases that looks combinatorial, READ `references/test-desiderata.md` for composability first.
+- Do NOT load either reference file for routine pure-function or in-memory TDD on a known interface; the body above is enough.
+- Do NOT load `references/test-desiderata.md` when the real question is "should I route out of TDD entirely?" That is a `references/decision-trees.md` problem.

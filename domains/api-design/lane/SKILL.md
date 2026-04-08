@@ -1,186 +1,197 @@
 ---
 name: lane-api-evangelist
-description: Design APIs using Kin Lane's "API Evangelist" philosophy. Emphasizes Design-First (OpenAPI), governance, treating APIs as products, and the political/business impact of interfaces. Use when building public platforms or large-scale internal ecosystems.
-tags: api, developer-experience, documentation, evangelism, sdk, onboarding, api-design, rest, community
+description: >
+  Apply Kin Lane's API Evangelist approach to API design, governance, cataloging,
+  and public API experience. Use when designing or auditing HTTP APIs, standing
+  up API governance, mapping an enterprise API landscape, defining deprecation or
+  versioning policy, evaluating 3rd-party APIs for consumption, or turning an
+  API into a discoverable product surface. Trigger keywords: OpenAPI, APIs.json,
+  API governance, API catalog, public API portal, developer experience,
+  deprecation policy, versioning strategy, Spectral, API survey, API sprawl,
+  API product, 3rd-party API, machine-readable metadata.
 ---
 
-# Kin Lane Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​‌‌​‌​‍‌​‌​​‌​​‍​​​‌‌​​​‍​​​​​‌‌‌‍​​​​‌​​‌‍​‌​​​‌‌‌⁠‍⁠
+# Lane API Evangelist
 
-## Overview
+Kin Lane's useful contribution is not "use OpenAPI." It is that API work is
+half contract design and half political inventory management. The spec is only
+valuable when it helps humans discover, trust, onboard, change, and support the
+API over time.
 
-Kin Lane (The API Evangelist) champions the idea that **APIs are products**, not just technical pipes. His philosophy centers on **Design First**: defining the contract (OpenAPI) before writing a single line of code. This ensures stakeholders agree on the interface, enables parallel development (mocking), and enforces governance.
+## Route First
 
-> "The API contract is the truth. The code is just an implementation detail."
+| Situation | Do this first | Do NOT load |
+|---|---|---|
+| New public or partner HTTP API | MANDATORY: read `references/openapi-contract-template.md` | `references/spectral-governance.md` unless you are also defining rules |
+| Governance rollout, lint rules, CI policy, multi-team consistency audit | MANDATORY: read `references/spectral-governance.md` | `references/openapi-contract-template.md` unless you need an example contract |
+| Enterprise API sprawl, merger, platform reset, catalog cleanup | Read neither reference first; inventory the landscape before prescribing standards | Both references until the inventory exists |
+| Evaluating a vendor or 3rd-party API for consumption | Read neither reference first; create or acquire an OpenAPI and assess consumer fitness | Both references until the dependency is mapped |
+| Deprecation, sunset, or versioning decision | Start from usage evidence and consumer impact, not from the spec | Both references unless you are editing contract or governance artifacts |
 
-## Core Principles
+## Default Stance
 
-1.  **Design First, Code Second**: Always start with an OpenAPI Specification (OAS). If you are writing a controller or a route handler before you have a YAML spec, you are doing it wrong.
-2.  **API as a Product**: Your API has users (developers). It needs documentation, support, a roadmap, and a value proposition.
-3.  **Governance & consistency**: Use linting (Spectral) to enforce style guides across all APIs in an organization. Consistency breeds usability.
-4.  **Human-Readable Contracts**: Descriptions in your OAS are not optional. They are the primary documentation.
-5.  **Mocking**: Use your design to generate mock servers immediately. Get feedback from the frontend team before the backend is built.
+- OpenAPI is the technical surface. APIs.json is the business surface. If you
+  only publish the OpenAPI, consumers still cannot discover pricing, terms,
+  support, status, roadmap, or deprecation policy programmatically.
+- Map before reforming. If the organization cannot say what APIs exist, who owns
+  them, and which suppliers it depends on, a new style guide is theater.
+- Govern for consistency before purity. Lane explicitly tolerates patterns he
+  would not call ideal if they are consistent enough to reduce consumer
+  surprise.
+- Governance is everywhere: central policy, federated team execution, existing
+  IDEs and pipelines, incremental rollout, and no final "done" state.
+- A produced API is not a finished API until it is consumed. Design, governance,
+  support, and change policy should all be evaluated from the consumer side.
 
-## Prompts
+## Before You Act, Ask Yourself
 
-### Design a New API
+### Before designing a new API
 
-> "Act as Kin Lane. Design a RESTful API for [Domain]. Start by creating a comprehensive OpenAPI 3.1 definitions. Do not write implementation code yet.
->
-> Focus on:
-> 1.  **Resource Design**: Nouns over verbs (e.g., `/users`, not `/getUsers`).
-> 2.  **Standard Status Codes**: Use the full HTTP spectrum (201, 202, 204, 400, 401, 403, 404, 409, 429).
-> 3.  **Problem Details**: Use RFC 7807 for error responses.
-> 4.  **Descriptions**: Every schema, parameter, and endpoint must have a verbose, helpful description.
-> 5.  **Reusability**: Use `$ref` for shared components."
+- Is this for public or partner humans, or only controlled internal automation?
+  Lane's versioning and onboarding defaults change when real people debug with
+  curl, spreadsheets, and docs rather than generated clients.
+- What must be machine-readable besides endpoints? If you cannot point to
+  machine-readable pricing, rate limits, support, and legal terms, you have a
+  protocol surface but not a product surface.
+- Which business capability does each tag represent? Tags are inventory labels
+  for your digital warehouse, not reflections of controller names or package
+  layout.
 
-### Audit an Existing API
+### Before writing governance rules
 
-> "Critique this API design from the perspective of the API Evangelist.
->
-> Look for:
-> *   **Leaky Abstractions**: Database columns exposed directly in the API.
-> *   **Inconsistency**: Different naming conventions (camelCase vs snake_case) or path structures.
-> *   **Missing Metadata**: Lack of descriptions, examples, or contact info in the spec.
-> *   **Governance Violations**: Does it follow standard REST practices? Is it versioned correctly?"
+- Am I writing a rule because the business needs the outcome, or because the
+  linter can detect it? Lane's policy order is policy -> rule -> guidance ->
+  provenance, not rule first and rationale later.
+- Can the team challenge or refine this rule? Rules without discussion links,
+  rationale, or ownership become compliance theater.
+- Will this rule teach, not just punish? Every blocking rule should have linked
+  guidance, and often an informational "good job" counterpart.
 
-## Examples
+### Before standardizing an enterprise
 
-### The OpenAPI Contract (The Source of Truth)
+- Do we have a survey repo with OpenAPI, JSON Schema, APIs.json, rules,
+  generated docs, tooling inventory, and team ownership? If not, stop trying to
+  redesign the future and map the present.
+- Are we covering enough of the landscape to reason from facts? Lane's bar is
+  roughly 90%+ of produced and consumed APIs represented by machine-readable
+  artifacts, with about 80%+ of observed patterns and anti-patterns captured as
+  rules before major governance decisions.
 
-```yaml
-openapi: 3.1.0
-info:
-  title: BookStore Platform API
-  version: 1.0.0
-  description: |
-    The central interface for the BookStore ecosystem. 
-    This API allows partners to manage inventory, process orders, and track shipments.
-    
-    ## Authentication
-    All requests must include a valid API Key in the `X-API-Key` header.
-  contact:
-    name: API Governance Team
-    email: api@bookstore.com
-    url: https://developer.bookstore.com/support
-  license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
-tags:
-  - name: Inventory
-    description: Operations related to book stock and warehouses.
-  - name: Orders
-    description: Lifecycle management for customer orders.
+### Before removing or versioning anything
 
-paths:
-  /books:
-    get:
-      summary: List all books
-      operationId: listBooks
-      tags: [Inventory]
-      description: |
-        Retrieve a paginated list of books. 
-        Supports filtering by author, genre, and publication date.
-      parameters:
-        - name: limit
-          in: query
-          description: Maximum number of items to return.
-          schema:
-            type: integer
-            default: 20
-            maximum: 100
-        - name: page
-          in: query
-          schema:
-             type: integer
-             default: 1
-      responses:
-        '200':
-          description: A list of books
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BookList'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-    post:
-      summary: Add a new book
-      operationId: createBook
-      tags: [Inventory]
-      description: Register a new book in the system. Requires `write:inventory` scope.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Book'
-      responses:
-        '201':
-          description: Book successfully created. Location header contains the URL of the new resource.
-          headers:
-            Location:
-              description: URL of the created resource
-              schema:
-                type: string
-        '400':
-          $ref: '#/components/responses/BadRequest'
+- Which API keys, teams, or contracts are still using this? A low-request
+  consumer can still be economically critical.
+- Is the friction of a "more correct" design higher than the friction of an
+  explicit, boring design? Lane moved from defending header-based versioning to
+  favoring path-based major versions because field reality beat theory.
+- What is the removal class? Lane's practical floor is roughly 3 months for a
+  field, 6 months for an endpoint, and 12+ months for a major-version sunset;
+  removed surfaces should return `410 Gone`, not an ambiguous `404`.
 
-components:
-  schemas:
-    Book:
-      type: object
-      required: [isbn, title, author_id]
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        isbn:
-          type: string
-          pattern: '^(?=(?:\D*\d){10}(?:(?:\D*\d){3})?$)[\d-]+$'
-          example: "978-3-16-148410-0"
-        title:
-          type: string
-          example: "The API Design Guide"
-        price:
-          description: Price in cents
-          type: integer
-          minimum: 0
-    BookList:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/Book'
-        meta:
-          $ref: '#/components/schemas/PaginationMeta'
+## Working Modes
 
-  responses:
-    BadRequest:
-      description: The server could not understand the request due to invalid syntax.
-      content:
-         application/problem+json:
-            schema:
-              $ref: '#/components/schemas/ProblemDetails'
-    RateLimited:
-      description: You have exceeded your rate limit.
-      headers:
-        Retry-After:
-          description: The number of seconds to wait before making a new request.
-          schema:
-            type: integer
+### 1. Survey Before Strategy
 
-```
+Use this when the landscape is messy, political, or unknown.
 
-### Anti-Patterns (What NOT to do)
+1. Create or pick one source-of-truth repo for the survey.
+2. Gather or generate rough OpenAPI for every HTTP API you can find; do not
+   wait for perfect completeness.
+3. Add team ownership, tooling inventory, and generated docs.
+4. Assemble APIs.json so the portfolio includes support, pricing, terms,
+   deprecation policy, rate limits, status, and roadmap where available.
+5. Only then derive rules from the patterns and anti-patterns that are already
+   present.
 
-*   **Code First**: Writing a Python/Go struct and auto-generating the Swagger. This makes the API implementation-dependent and often ugly.
-*   **Database Driven**: Exposing `created_at`, `updated_at`, or internal `user_id` fields that have no business meaning to the consumer.
-*   **Vague Errors**: Returning `500 Internal Server Error` with `{"error": "Something went wrong"}`. Always use RFC 7807 (`type`, `title`, `detail`, `instance`).
-*   **Breaking Changes**: Changing a field name or type without bumping the API version (v1 -> v2).
+This is deliberately boring. Lane's advice in sprawl is "do not do anything
+new; map what you have."
 
-## Resources
+### 2. Design a Public or Partner API
 
-*   [API Evangelist Blog](https://apievangelist.com/)
-*   [OpenAPI Specification](https://www.openapis.org/)
-*   [Spectral (JSON/YAML Linter)](https://stoplight.io/open-source/spectral)
+- Write the contract so product, legal, and support can review it, not just
+  engineers.
+- Put the major API version where humans can see it when consumers are manual or
+  mixed-skill. Lane's 2024-10-30 versioning note cites thousands of evaluated
+  APIs and five of seven style guides favoring URI/path major-version
+  visibility, despite header-based versioning being the theoretically purer
+  answer.
+- Keep one externally visible API version per contract file. Mixing v1 and v2
+  in one artifact invites silent `$ref` reuse and misleading change reviews.
+- Keep API version and `info.version` separate in your head. The first is
+  consumer change management; the second is document versioning.
+- Treat `operationId` as a code generation contract. Once published, renaming it
+  is often more disruptive than renaming a field.
+- Separate input and output models when generator behavior around `readOnly` and
+  `writeOnly` is ambiguous.
+
+### 3. Roll Out Governance
+
+- Start with 12 or fewer low-drama rules.
+- Run new rules as warnings until they show zero false positives for four
+  consecutive weeks.
+- Group rules by policy and lifecycle stage, not by OpenAPI object type.
+- Publish the "why" with every rule. If the rationale is weak, delete the rule.
+- Prefer existing editor, CLI, CI, and gateway touchpoints over a new governance
+  platform nobody will open.
+
+### 4. Govern 3rd-Party APIs You Consume
+
+- Do not judge vendor APIs by whether they match your internal style guide.
+  Judge whether they are complete enough to onboard, authenticate, test,
+  paginate, recover from errors, and manage change safely.
+- If no usable OpenAPI exists, generate one from docs or traffic and assess
+  that. Consumer governance is about dependency fitness, not ideological purity.
+- Missing support, terms, pricing, rate limits, or deprecation policy is a real
+  integration risk even when the endpoint definitions look clean.
+
+## Lane-Specific Heuristics
+
+- If a governance conversation begins with "which linter rules should we add?",
+  move it up one level and ask which business policy is missing.
+- If your API portal looks good but ownership data is weak, you have marketing,
+  not operations.
+- If a vendor dependency cannot be represented as a machine-readable contract,
+  your supply chain is running on screenshots and tribal memory.
+- If the only versioning argument being made is "REST people say headers," you
+  are ignoring the onboarding and debugging cost paid by actual consumers.
+- If default tool rules say every operation gets exactly one tag, challenge that
+  default. Lane explicitly questioned `operation-singular-tag` as a default:
+  tagging strategy should match how consumers discover capabilities.
+
+## NEVER Do These
+
+- NEVER launch governance with a huge ruleset because it feels comprehensive.
+  The seductive part is that every annoyance can be encoded immediately. The
+  consequence is false positives, trust collapse, and teams optimizing for
+  lint-passing theater. Instead start with a tiny baseline and promote slowly.
+- NEVER standardize the future before mapping the present because greenfield
+  governance looks cleaner than enterprise archaeology. The consequence is that
+  shadow APIs, supplier dependencies, and real ownership never enter the model.
+  Instead survey first and let rules emerge from observed patterns.
+- NEVER treat a generated code-first spec as the finished contract because it is
+  fast and looks objective. The consequence is leaked implementation names,
+  missing business/legal/support metadata, and a contract nobody outside the
+  implementation team reviewed. Instead separate contract design from code.
+- NEVER govern only APIs you produce because those are the ones you control. The
+  seductive lie is that supplier risk is "someone else's problem." The
+  consequence is blind spots in your digital supply chain. Instead apply a
+  consumer-fitness baseline to every critical 3rd-party API.
+- NEVER force header-based versioning on human integrators because it sounds more
+  correct. The consequence is higher debugging and support cost, with consumers
+  missing the version boundary entirely. Instead use explicit path major
+  versions unless the audience is sophisticated enough for negotiated versions.
+- NEVER ship a rule without guidance, provenance, and feedback paths because a
+  YAML rule looks self-explanatory. The consequence is that future teams cannot
+  tell principle from preference. Instead make every rule contestable and
+  traceable.
+
+## Fallbacks
+
+| If this happens | Then do this |
+|---|---|
+| Stakeholders will not review YAML | Run a mock server and review the API behavior plus docs, then sync the contract |
+| Teams resist CI blocking | Put rules in the IDE first; let teams learn before you enforce |
+| You inherit dozens of inconsistent APIs | Standardize inventory and ownership first, not naming minutiae |
+| A vendor has docs but no contract | Generate a draft OpenAPI, then test consumer-critical flows against reality |
+| Multiple versions are mixed in one contract | Split the artifacts before discussing breaking changes |
+| Deprecation timing is disputed | Pull usage by API key for at least 30 days and decide with business stakeholders, not only engineering |

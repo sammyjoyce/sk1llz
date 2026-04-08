@@ -1,250 +1,133 @@
 ---
 name: polya-how-to-solve-it
-description: Solve problems in the style of George Pólya, mathematician and author of "How to Solve It." Emphasizes structured heuristics, analogy, decomposition, and working backward from the goal. Use when stuck on algorithmic problems, debugging complex systems, or designing solutions that require systematic creative thinking.
-tags: heuristics, decomposition, analogy, working-backward, problem-solving, mathematical, strategy, systematic
+description: "Apply Pólya-style problem solving corrected by Schoenfeld and Mason for unfamiliar math, algorithm, debugging, proof, and design problems. Use when you are stuck, chasing the wrong lead, can produce examples but not a method, have a result that will not generalize, or need to turn a hunch into a tractable attack. Triggers: \"I'm stuck\", \"don't know where to start\", \"tried everything\", \"works on examples only\", \"what heuristic should I use\", \"can't see the invariant\", \"why does this fail\", \"false lead\", \"need a proof strategy\"."
 ---
 
-# George Pólya Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​‌‌‌​​​‌‍​​​​‌​​​‍‌‌​‌‌​‌‌‍​​​​‌‌​‌‍‌​​‌​​‌​‍‌​‌‌​​‌‌‍​​​​‌​​‌‍‌‌‌‌‌‌​‌⁠‍⁠
+# Pólya After The Corrections
 
-## Overview
+Pólya's four phases are still the right shell. The expert corrections are these: the heuristic labels are too coarse to execute directly; most failure is bad control, not lack of ideas; and anomaly management matters more than elegance. This skill is for unfamiliar problems, not routine exercises whose method is already signaled by context.
 
-George Pólya (1887–1985) was a Hungarian-American mathematician whose book *How to Solve It* (1945) became the definitive manual for structured problem-solving. Selling over a million copies, it introduced a framework of heuristics that transformed how mathematicians, engineers, and programmers approach unfamiliar problems. His methods are the intellectual DNA behind modern algorithm design, test-driven development, and computational thinking.
+## Mandatory Loading Rules
 
-## Core Philosophy
+- Before choosing a plan for any non-routine problem, READ `references/heuristic-families.md`. Schoenfeld's key result is that "try a simpler problem" or "use analogy" are labels for families of moves, not executable moves.
+- READ `references/worked-example.md` only when teaching the method, auditing why your process failed, or you need one full end-to-end demonstration.
+- Do NOT load `references/worked-example.md` during live solving unless you are explicitly debugging your process; it anchors you to one canonical pattern and makes surface analogy more likely.
+- Do NOT load either reference for routine exercises or tasks where the operative method is already known. In those cases, execute directly.
 
-> "If you can't solve a problem, then there is an easier problem you can solve: find it."
+## Hard-Won Truths
 
-> "The first rule of discovery is to have brains and good luck. The second rule of discovery is to sit tight and wait till you get a bright idea."
+- Treat every heuristic label as a menu, never as an action. If you cannot name the exact family member you are using and the feature that triggered it, you are not solving; you are narrating.
+- On unfamiliar problems, experts spend more than half their early time making sense of the problem and exploring structure before committing to implementation. If you rush into execution, you are already in novice mode.
+- In Schoenfeld's videotapes, roughly 60 percent of unsuccessful attempts followed the same pattern: read, make a quick decision, then pursue it stubbornly. The first bad commitment is usually the real bug.
+- Analogy rarely fails at retrieval; it fails at transfer. The relaxed problem or analogous problem is only half the job. The hidden job is the **connection subproblem**: how its solution maps back to your original data, condition, and unknown.
+- Surprise is signal. When a result contradicts your expectation, do not smooth it away as noise. Mason's point is that contradiction is often the event that makes structure visible.
+- Specializing has three different jobs. Use **random** examples to get a feel, **systematic** examples to expose pattern, and **artful** examples to break your own conjecture at regime changes. Using only one mode gives you the wrong evidence.
 
-> "It is better to solve one problem five different ways than to solve five problems one way."
+## Before You Move, Ask Yourself
 
-Pólya believed problem-solving is a *learnable skill*, not an innate talent. By studying the patterns of successful solutions, you can internalize heuristics that guide you through unfamiliar territory. The key is not knowing the answer—it's knowing the *process*.
+Before planning, pin down Pólya's exact vocabulary:
 
-## Design Principles
+- **Unknown**: what specific value, object, or statement is missing?
+- **Data**: what is actually given?
+- **Condition**: what relation ties the data to the unknown?
 
-1. **Understand the Problem First**: Before writing a single line, you must be able to state the problem clearly, identify the unknowns, the data, and the constraints. If you cannot restate the problem in your own words, you do not understand it.
+Then ask the questions that experts use and novices skip:
 
-2. **Devise a Plan Before Executing**: Find the connection between the data and the unknown. Consider analogous problems, special cases, and decomposition. Do not start coding until you have a strategy.
+- Is the condition sufficient, insufficient, redundant, or contradictory?
+- Which datum has not been used yet? Unused data is usually a clue, an invariant, or evidence you solved an easier problem.
+- For proof tasks, which hypothesis has not been used? If your argument works without it, either you proved a stronger statement, the problem is overspecified, or the proof is wrong.
+- What are the **dimensions of possible variation** here? What can change while the object is still the same kind of object?
+- What range of change is actually permissible? Many false generalizations come from varying a parameter outside the problem's meaningful range.
+- Before relaxing a condition, ask: which condition carries the core structure, and which one can I drop without destroying the mechanism I need to learn?
+- Before trusting a pattern, ask: which boundary case, carry, parity flip, empty case, or dimension jump have I not crossed yet?
+- Before using an analogy, ask: what exact object from the analog will reconnect to the original problem, and where could that reconnection fail?
 
-3. **Carry Out the Plan with Discipline**: Implement step by step, checking each step as you go. If a step doesn't work, return to the plan—don't patch blindly.
+## Operating Loop
 
-4. **Look Back and Reflect**: After solving, examine the solution. Can you derive it differently? Can you generalize it? Can you use the result or method for another problem?
+### 1. Understand Structurally
 
-## The Four Phases
+- Rewrite the problem in terms of unknown, data, and condition.
+- If the problem has parameters, identify the smallest non-degenerate case that preserves the structure. "Smallest" is often wrong; "smallest still interesting" is right.
+- If you already have examples, classify them by regime changes, not adjacency. Boundary crossings like zero/nonzero, even/odd, sign changes, carry/borrow, empty/non-empty, or dimension changes expose structure faster than ten neighboring cases.
+- When generating examples, use Mason's order deliberately: random for orientation, systematic for pattern, artful for attempted refutation.
 
-### Phase 1: Understanding the Problem
+### 2. Choose A Real Move
 
-```
-Questions to ask:
-├── What is the unknown? What are we trying to compute/build/find?
-├── What is the data? What inputs do we have?
-├── What are the constraints? What conditions must be satisfied?
-├── Can I restate the problem in my own words?
-├── Can I draw a diagram, table, or example?
-├── Have I seen this problem before—or something similar?
-└── Is the problem well-posed? Are there edge cases or ambiguities?
-```
+Pick one explicit family member from `references/heuristic-families.md`, then write one sentence of the form:
 
-#### Applied to Code
+`I am using <specific move> because this problem has <trigger feature>, and if it works I expect to obtain <intermediate object>.`
 
-```python
-# PROBLEM: Given a list of intervals, merge overlapping ones.
-#
-# UNDERSTAND FIRST:
-# - Unknown: merged list of non-overlapping intervals
-# - Data: list of [start, end] pairs
-# - Constraints: intervals overlap if one starts before the other ends
-# - Edge cases: empty list, single interval, all overlapping, none overlapping
-# - Restate: "Collapse touching/overlapping ranges into minimal set"
+If you cannot finish that sentence, go back to understanding.
 
-# Draw examples:
-# Input:  [[1,3], [2,6], [8,10], [15,18]]
-# Visual: |---|         1-3
-#           |-----|     2-6
-#                  |--| 8-10
-#                          |--| 15-18
-# Output: [[1,6], [8,10], [15,18]]
-```
+### 3. Run The Control Loop
 
-### Phase 2: Devising a Plan
+Every 5 minutes on a hard problem, interrupt yourself and answer:
 
-Pólya's heuristic toolkit:
+1. What exactly am I doing?
+2. Why am I doing it?
+3. How will the outcome help?
 
-| Heuristic | Description | Code Application |
-|-----------|-------------|------------------|
-| **Analogy** | Have you seen a similar problem? | Pattern matching to known algorithms |
-| **Decomposition** | Can you break it into parts? | Divide and conquer, modular functions |
-| **Specialization** | Try a special case first | Handle n=1, n=2 before n=general |
-| **Generalization** | Can you solve a broader problem? | Generic solution that includes this case |
-| **Working Backward** | Start from the desired result | Write the test first, then the code |
-| **Auxiliary Elements** | Introduce a helper construct | Helper functions, intermediate data structures |
-| **Variation** | Change the problem slightly | Relax a constraint, solve the relaxed version |
+If any answer is vague, you are in a wild goose chase. Stop execution, vary the problem, or change representation. If you fail two check-ins in a row, the plan is wrong; do not "push through."
 
-#### Applied to Code
+### 4. Look Back The Expert Way
 
-```python
-# PLAN for interval merging:
-#
-# Analogy: This is like merging sorted ranges — a sweep-line pattern.
-#
-# Decomposition:
-#   1. Sort intervals by start time
-#   2. Walk through sorted list
-#   3. For each interval, either merge with previous or start new
-#
-# Working backward:
-#   - Final output is sorted, non-overlapping intervals
-#   - To produce that, I need to process in order
-#   - To process in order, I need to sort first
-#
-# Specialization (test small cases):
-#   - Empty: [] → []
-#   - Single: [[1,3]] → [[1,3]]
-#   - Two overlapping: [[1,3],[2,4]] → [[1,4]]
-#   - Two disjoint: [[1,2],[3,4]] → [[1,2],[3,4]]
-```
+Look Back is not "spot-check the answer." It means:
 
-### Phase 3: Carrying Out the Plan
+- Verify the result against all data and the whole condition.
+- Derive it a second way if the stakes are high. Independent derivations catch different classes of error.
+- Audit which hypotheses were actually used.
+- Ask where the method breaks, not just where it works.
+- Name one second problem to which the method transfers. If you cannot, you found a trick, not a method.
 
-```python
-def merge_intervals(intervals: list[list[int]]) -> list[list[int]]:
-    if not intervals:
-        return []
+## Decision Tree
 
-    # Step 1: Sort by start time (from our plan)
-    intervals.sort(key=lambda x: x[0])
+**If you do not understand the problem**
+- Restate it with unknown, data, and condition.
+- Draw one concrete instance or construct one exact example.
+- If you still cannot restate the condition precisely, you are not ready to plan.
 
-    # Step 2: Walk and merge
-    merged = [intervals[0]]
+**If you understand it but have no plan**
+- Check `references/heuristic-families.md`.
+- Prefer specialization that preserves structure, or relaxation that drops the least structural condition first.
+- If an analogy appears, write the mapping explicitly: data to data, condition to condition, unknown to unknown.
 
-    for start, end in intervals[1:]:
-        last = merged[-1]
-        if start <= last[1]:  # Overlapping — merge
-            last[1] = max(last[1], end)
-        else:                 # Disjoint — new interval
-            merged.append([start, end])
+**If you have a conjecture from examples**
+- Test it on regime changes, not just nearby cases.
+- Compute one more case than feels necessary. Four matching cases is where a conjecture becomes interesting, not trustworthy.
 
-    return merged
+**If a relaxed problem or analog is solved**
+- Stop and solve the connection subproblem: what exact object, invariant, or locus from the easier problem reconnects to the original condition?
 
-# Step 3: Check each step
-assert merge_intervals([]) == []
-assert merge_intervals([[1, 3]]) == [[1, 3]]
-assert merge_intervals([[1, 3], [2, 6]]) == [[1, 6]]
-assert merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]) == [[1, 6], [8, 10], [15, 18]]
-```
+**If execution keeps expanding**
+- You are probably in a belief trap: "real progress must look like computation" or "this must reduce to the last bug I saw."
+- Change representation before doing more work: algebra to picture, picture to coordinates, recurrence to table, symptom list to mechanism.
 
-### Phase 4: Looking Back
+**If the result feels brittle**
+- Rewrite the reasoning forward.
+- Check reversibility of each backward step.
+- Ask which hypothesis would break the proof if removed. If none would, inspect for overgeneralization.
 
-```python
-# REFLECT:
-#
-# 1. Can we derive it differently?
-#    - Union-Find approach: treat each interval as a node, union overlapping
-#    - Stack-based: push/merge pattern
-#    - Both work but sorting + scan is O(n log n) and simplest
-#
-# 2. Can we generalize?
-#    - Works for any comparable type, not just int
-#    - Extend to multi-dimensional intervals (rectangles, volumes)
-#    - Adapt to "merge if gap < k" by changing the overlap condition
-#
-# 3. Can we use this method elsewhere?
-#    - Meeting room scheduling (same pattern)
-#    - Memory allocation / free-list coalescing
-#    - Time-series data range consolidation
-#
-# 4. What did we learn?
-#    - "Sort first, then scan" is a powerful meta-pattern
-#    - The key insight was: sorting makes overlap detection local
-```
+## NEVER Do These
 
-## When Writing Code
+- NEVER invoke a heuristic by label alone because it feels like forward motion while committing you to nothing; the consequence is that 20 minutes later you cannot say what you actually tried. Instead do a named sub-strategy with an explicit trigger and expected payoff.
+- NEVER sample only adjacent easy cases because neighboring examples create fake regularity and hide regime changes; the consequence is a conjecture that survives friendly tests and dies on the first real boundary. Instead sample ladder cases and adversarial boundary cases.
+- NEVER relax a condition just because it is easiest to drop because the seductive path usually removes the very structure that teaches you about the original problem; the consequence is an easier subproblem whose solution does not reconnect. Instead drop the least structural condition that leaves the core mechanism intact.
+- NEVER treat an analogy as valid because the symptoms or vocabulary match because surface resemblance is cheap and structural correspondence is rare; the consequence is importing the wrong method and burning time on a mechanism the problem does not have. Instead write the data-condition-unknown mapping and downgrade the analogy to a hint if any part does not map cleanly.
+- NEVER keep computing after two bad control-loop answers because more work on a bad plan only deepens commitment and makes abandonment emotionally harder; the consequence is grind that feels productive and teaches nothing. Instead stop, diagnose the obstacle in one sentence, and vary the problem.
+- NEVER work backward and then present the backward chain as a proof because implication is not equivalence and one irreversible step can poison the whole argument; the consequence is a polished false proof. Instead rewrite the full chain forward and verify each step is justified.
+- NEVER ignore an unused datum or hypothesis because it is often the only evidence that you solved a simpler cousin of the real problem; the consequence is a solution that looks clean while silently missing the asked constraint. Instead point to the exact step where each datum or hypothesis is consumed.
+- NEVER sand down a surprising example because contradiction is often the first glimpse of the invariant, hidden case split, or wrong representation; the consequence is losing the one clue that would have changed your model. Instead preserve the surprise and ask what assumption it just falsified.
 
-### Always
+## Freedom Calibration
 
-- State the problem before writing code
-- Identify unknowns, data, and constraints explicitly
-- Search for analogous solved problems
-- Test small/special cases by hand first
-- Check each step during implementation
-- Reflect on the solution after it works
+- Use high freedom when choosing a representation or heuristic family. Experts vary problems creatively; rigid scripts fail here.
+- Use low freedom when validating a proof, checking reversibility, or reconnecting a relaxed problem to the original. These are brittle steps where hand-waving causes elegant wrong answers.
+- Use medium freedom when specializing: vary boldly, but record why each example was chosen.
 
-### Never
+## Fallbacks And Stop Rules
 
-- Start coding without understanding the problem
-- Skip the planning phase because the problem "seems easy"
-- Abandon a failing approach without understanding *why* it fails
-- Consider a problem solved without reviewing the solution
-- Solve only one way when multiple approaches exist
-- Ignore edge cases until they become bugs
-
-### Prefer
-
-- Understanding over speed — slow down to go fast
-- Decomposition over monolithic solutions
-- Analogy to known patterns over inventing from scratch
-- Small verified steps over large untested leaps
-- Multiple solution approaches over attachment to the first idea
-- Generalized solutions over one-off hacks
-
-## Pólya's Heuristic Ladder
-
-When stuck, climb this ladder from bottom to top:
-
-```
-Level 5: INVERSION
-         └── Can I solve the opposite problem?
-         └── What if I assume the answer and work backward?
-
-Level 4: TRANSFORMATION
-         └── Can I change the representation? (graph → matrix, recursion → iteration)
-         └── Can I map this to an equivalent problem I know how to solve?
-
-Level 3: AUXILIARY ELEMENTS
-         └── What if I introduce a helper variable, function, or data structure?
-         └── What if I add constraints to make it easier?
-
-Level 2: DECOMPOSITION
-         └── Can I break this into independent subproblems?
-         └── Can I solve a simpler version first?
-
-Level 1: SPECIALIZATION
-         └── What happens for n=0? n=1? n=2?
-         └── What does the simplest possible input look like?
-
-Level 0: RESTATEMENT
-         └── Can I say this in different words?
-         └── Can I draw it?
-```
-
-## The Debugging Corollary
-
-Pólya's framework applies directly to debugging:
-
-1. **Understand the Bug**: What is the expected behavior? What is the actual behavior? What is the minimal input that reproduces it?
-
-2. **Devise a Hypothesis**: What could cause this discrepancy? Analogy — have you seen a similar bug before? Decomposition — which component is responsible?
-
-3. **Test the Hypothesis**: Add a log, write a test, isolate the component. One variable at a time.
-
-4. **Reflect**: Why did this bug occur? What systemic issue allowed it? How do you prevent the class of bug, not just this instance?
-
-## Mental Model
-
-Pólya approaches every problem by asking:
-
-1. **What do I know?** Inventory all given information.
-2. **What do I need?** State the goal precisely.
-3. **What connects them?** Find the bridge between known and unknown.
-4. **Have I seen this bridge before?** Draw on solved problems.
-5. **Can I build the bridge in pieces?** Decompose if the gap is too wide.
-
-## Signature Pólya Moves
-
-- Restating problems until they become tractable
-- Solving the simplest special case first, then generalizing
-- Drawing diagrams and tables before writing code
-- Asking "Have I seen something like this?" for every new problem
-- Working backward from the desired output
-- Reflecting on solutions to extract reusable patterns
-- Treating problem-solving as a skill to be practiced, not a talent to be born with
+- If nothing is working, write `STUCK:` followed by the current obstacle, the last move attempted, and one regime you have not tested. Mason's point is that naming stuckness restores the monitor.
+- If you have many examples but no method, organize them by what changed, what stayed invariant, and where behavior flipped.
+- If you have a method for the easier problem but not the original, stop generating new easier problems and solve the connection subproblem.
+- If you have been executing for 10 straight minutes without changing representation, asking a control question, or learning a new structural fact, you are almost certainly grinding.
+- If the problem has resisted a full focused pass, take an incubation break before reading a solution. Looking too early converts a learnable method into borrowed pattern recognition.

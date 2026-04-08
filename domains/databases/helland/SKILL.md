@@ -1,338 +1,149 @@
 ---
 name: helland-distributed-data
-description: Design scalable data systems in the style of Pat Helland, distributed systems veteran from Tandem, Microsoft, and Amazon. Emphasizes life beyond distributed transactions, idempotency, and practical patterns for data at scale. Use when building systems that must scale beyond single-node ACID transactions.
-tags: distributed, transactions, idempotency, scalability, partitioning, replication, eventual-consistency, microservices
+description: "Apply Pat Helland's distributed-data philosophy to cross-service state, retries, versioned facts, and low-tail-latency coordination. Use when designing entity boundaries, idempotency contracts, outside-data schemas, tentative workflows, reconciliation paths, or quorum behavior under jitter. Trigger keywords: helland, entities, activities, idempotency, outside data, inside data, tentative operations, versioned facts, reconciliation, repartitioning, at-least-once, stale reads, quorum, jitter, fuzzy visibility."
 ---
 
-# Pat Helland Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌​‌‌‌​‍​​‌​​‌‌‌‍​​‌​​​​​‍‌‌‌​​‌​‌‍​​​​‌​‌​‍​​​​​‌​​⁠‍⁠
+# Helland Distributed Data
 
-## Overview
+Use this skill when the failure boundary matters more than the call graph.
 
-Pat Helland has worked on distributed systems for 40+ years at Tandem (fault-tolerant transaction systems), Microsoft (SQL Server, Cosmos DB), and Amazon. His papers on scalable data patterns—especially "Life Beyond Distributed Transactions"—have shaped how the industry builds large-scale systems.
+## Mandatory source reloads
 
-## Core Philosophy
+- Before designing cross-service message formats or reference data, reread `Data on the Outside versus Data on the Inside`, especially the sections on stable data, immutable schemas, and references.
+- Before claiming cross-entity atomicity, dedup, or workflow correctness, reread `Life Beyond Distributed Transactions`, especially entities, activities, and tentative operations.
+- Before using quorum to dodge slow nodes, reread `Decoupled Transactions`, especially fuzzy visibility, confluence, retirement, and the 3AZ examples.
+- Do NOT start with generic CAP, saga, or event-sourcing summaries. They usually blur the inside/outside split and hide the negative-space failure modes Helland is warning about.
 
-> "In a world with unbounded scale, you cannot have distributed transactions."
+## First classifier
 
-> "Idempotency is the key to building reliable systems."
+Ask these in order before sketching an API or schema:
 
-> "Data on the inside is not the same as data on the outside."
+1. **Is the invariant inside one entity-key?**
+   - Yes: keep it inside one transactional scope.
+   - No: stop talking about ACID across that boundary; you are designing a collaboration.
+2. **Is this data inside, outside, or activity state?**
+   - Inside data: mutable, optimized for local invariants.
+   - Outside data: immutable or versioned facts crossing time and trust.
+   - Activity state: what one entity remembers about one partner.
+3. **Are you proving "X happened" or "X did not happen"?**
+   - Positive existence can often ride on quorum/confluence.
+   - Negative claims are harder; live quorum can lie during transition.
+4. **Is the work naturally idempotent or only made idempotent by remembered identity?**
+   - If it changes substantive business state, assume you must remember it.
+5. **Can any side effect be canceled?**
+   - If not, it belongs after confirmation, not inside the tentative step.
 
-Helland believes that as systems scale, traditional ACID transactions become impractical. Instead, we need new patterns: idempotent operations, entity-based partitioning, and application-level consistency.
+## Hard-won lenses
 
-## Design Principles
+- The **entity-key is the atomicity boundary**. If two records "must" commit together but have different keys, either you have not found the real entity yet or you need an activity-based protocol.
+- **Repartitioning is the bug revealer.** Neighbor-based atomic assumptions appear to work in tests, then fail only after scale or rebalancing moves keys apart.
+- **Dedup memory must travel with the entity.** A transport-layer or cache-layer duplicate filter that does not move with partitioning is counterfeit exactly-once.
+- **Activity is per partner, not per workflow in the abstract.** Uncertainty is relational. If you cannot point to the partner whose state you are remembering, the model is too vague to recover.
+- **Idempotence is about substantive behavior, not all side effects.** Extra logs, heap churn, counters, or monitoring noise are often acceptable; duplicate reservation, charge, or entitlement grant is not.
+- **Outside data has no shared "now."** Anything published as `current_*` is unstable unless versioned with an as-of meaning consumers can preserve.
+- **Stable data requires never-reused names.** If an outside copy may outlive your internal record lifecycle, recycling customer IDs, seat IDs, or document numbers turns old facts ambiguous.
+- **Extensibility fights shredding.** If you eagerly flatten outside messages into inside tables, the first unplanned field or schema drift gets silently discarded.
+- **Replay-safe messages need exact schema identity.** A message that says "parse me with the current schema" is not immutable enough to survive time.
+- **Compensation is not restoration.** Lower layers keep side effects: cache churn, queue load, staffing triggers, block splits, downstream reservations. Undo at the business layer does not rewind the universe.
+- **Quorum visibility is fuzzy during transition.** Incomplete quorum operations can be intermittently included; they can flutter into and out of visibility.
+- **Negative proofs need extra machinery.** "Does exist" and "does not exist" are different problems. Exact absence needs sealing, windowing, retirement, or a more ordered authority.
 
-1. **Entities, Not Tables**: Think in terms of independently scalable entities, not relational tables.
+## Design procedure
 
-2. **Idempotency Everywhere**: Operations must be safely retryable.
+### 1. Name the entity before naming the endpoint
 
-3. **Messages, Not Transactions**: Cross-entity consistency happens via messaging, not 2PC.
+- Write the entity-key for every stateful operation.
+- If an operation needs two keys, choose one:
+  - Re-key so the invariant lives inside one entity.
+  - Or split into messages and accept uncertainty explicitly.
 
-4. **Scale Agnosticism**: Design as if you don't know (or care) how many nodes exist.
+### 2. Classify every datum by temporal contract
 
-5. **Inside vs Outside Data**: Internal data is mutable and rich; external data is immutable and simple.
+- **Inside:** mutable state whose meaning is local and current.
+- **Outside:** immutable or versioned fact whose meaning survives copying, delay, and replay.
+- **Activity:** partner-specific memory such as last accepted request, pending reservation, or reneging status.
 
-## When Designing Distributed Data Systems
+If a datum crosses a service boundary and can be retried later, publish it as outside data, not a pointer to mutable inside state.
 
-### Always
+### 3. Define idempotence at the business layer
 
-- Design entities that can be independently scaled and partitioned
-- Make all operations idempotent (same request twice = same result)
-- Use unique request IDs to detect and deduplicate retries
-- Accept that cross-entity operations are eventually consistent
-- Version your external data contracts
-- Plan for messages to be delivered at-least-once
+Before saying "this is idempotent," ask:
 
-### Never
+- What counts as the **substantive effect**?
+- What identity proves "same work" across crash, retry, and new session?
+- How long can legitimate retries or replays occur?
+- What exact prior response must be replayed on duplicate acceptance?
 
-- Depend on distributed transactions for correctness at scale
-- Assume exactly-once message delivery
-- Share mutable state across service boundaries
-- Design entities that require coordination with other entities for basic operations
-- Ignore the CAP theorem implications of your design
+Use an operation identity tied to intent, not transport:
 
-### Prefer
+- Good: check number, payment instruction ID, client-generated command ID, `(partner, business object, operation kind, sequence)`.
+- Bad: TCP connection, request timestamp alone, worker-local counter, cache entry keyed only by payload hash.
 
-- Idempotent operations over exactly-once semantics
-- Event sourcing over mutable state
-- Saga pattern over 2PC
-- Entity-based partitioning over arbitrary sharding
-- Immutable messages over mutable shared state
+Retention rule:
 
-## Code Patterns
+- Keep dedup state for at least the full business replay horizon. Helland's banking example works because check numbers are stable and checks expire within a bounded window; a `24h` TTL on a `90d` retry horizon is a duplicate-payment bug, not an optimization.
 
-### Idempotent Operations
+### 4. Model tentative work as explicit uncertainty
 
-```python
-class IdempotentPaymentService:
-    """
-    Helland's key insight: if operations are idempotent,
-    retries are safe, and you don't need exactly-once delivery.
-    """
-    
-    def __init__(self, db):
-        self.db = db
-    
-    def process_payment(self, request_id: str, account_id: str, amount: Decimal):
-        # Check if we've already processed this request
-        existing = self.db.get_processed_request(request_id)
-        if existing:
-            return existing.result  # Return same result as before
-        
-        # Process the payment
-        with self.db.transaction():
-            account = self.db.get_account(account_id)
-            account.balance -= amount
-            
-            result = PaymentResult(
-                request_id=request_id,
-                status='completed',
-                new_balance=account.balance
-            )
-            
-            # Record that we processed this request (atomically with the change)
-            self.db.save_processed_request(request_id, result)
-            self.db.save_account(account)
-        
-        return result
-```
+For every tentative operation, write down:
 
-### Entity-Based Design
+- Who is allowed to confirm.
+- Who is allowed to cancel.
+- What timeout means.
+- Whether reneging is allowed after timeout.
+- Which side effect is irreversible.
 
-```python
-class Order:
-    """
-    Helland's entity pattern: each entity is an island of consistency.
-    Cross-entity operations happen via messaging, not transactions.
-    """
-    
-    def __init__(self, order_id: str):
-        self.order_id = order_id
-        self.items = []
-        self.status = 'pending'
-        self.version = 0
-        
-        # Outbox: messages to send (part of entity's transaction)
-        self.outbox = []
-    
-    def add_item(self, product_id: str, quantity: int, request_id: str):
-        """All mutations include request_id for idempotency."""
-        if self.has_processed(request_id):
-            return  # Already did this
-        
-        self.items.append(OrderItem(product_id, quantity))
-        self.record_processed(request_id)
-        self.version += 1
-    
-    def submit(self, request_id: str):
-        if self.has_processed(request_id):
-            return
-        
-        self.status = 'submitted'
-        self.record_processed(request_id)
-        self.version += 1
-        
-        # Queue message for inventory service (not a distributed txn!)
-        self.outbox.append(Message(
-            type='OrderSubmitted',
-            order_id=self.order_id,
-            items=self.items
-        ))
-```
+If you cannot express cancel and confirm rights, you do not have a tentative step. You have already committed.
 
-### Inside Data vs Outside Data
+### 5. Be precise about quorum semantics
 
-```python
-# INSIDE DATA: Rich, mutable, internal representation
-class InternalOrder:
-    order_id: str
-    customer: Customer              # Full customer object
-    items: List[OrderItem]          # Mutable list
-    shipping_address: Address       # Complex nested object
-    internal_notes: str             # Internal-only field
-    audit_log: List[AuditEntry]     # Full history
-    version: int                    # Optimistic concurrency
-    
-    def to_external(self) -> 'ExternalOrder':
-        """Convert to outside representation for APIs/messages."""
-        return ExternalOrder(
-            order_id=self.order_id,
-            customer_id=self.customer.id,  # Just the ID, not full object
-            item_ids=[i.id for i in self.items],  # Just IDs
-            submitted_at=self.audit_log[0].timestamp  # Simplified
-        )
+When quorum is used to avoid jitter, classify the question:
 
+- **Existence query:** quorum/confluence may be enough.
+- **Non-existence query:** require sealing, windowing, retirement, or a single ordered authority.
 
-# OUTSIDE DATA: Simple, immutable, versioned contract
-@dataclass(frozen=True)  # Immutable!
-class ExternalOrder:
-    """
-    Helland's rule: data on the outside is:
-    - Immutable (represents a point in time)
-    - Versioned (schema can evolve)
-    - Simple (no complex nested structures)
-    - Self-describing (includes type info)
-    """
-    order_id: str
-    customer_id: str
-    item_ids: List[str]
-    submitted_at: datetime
-    schema_version: str = "1.0"
-```
+Operational numbers from Helland's 3AZ thought experiment:
 
-### Saga Pattern (Instead of Distributed Transactions)
+- Catalogs: `9` replicas, wait for `5`, tolerate `4` jittery (`AZ+1`).
+- Log durability example: `6` replicas, durable after `4` acknowledgements, so `2` slow replicas do not stall progress.
 
-```python
-class OrderSaga:
-    """
-    Helland's alternative to 2PC: sagas with compensating actions.
-    Each step is a local transaction + message to next step.
-    Failures trigger compensating transactions.
-    """
-    
-    def __init__(self, order_id: str):
-        self.order_id = order_id
-        self.state = 'started'
-        self.completed_steps = []
-    
-    async def execute(self):
-        try:
-            # Step 1: Reserve inventory (local txn in Inventory service)
-            await self.reserve_inventory()
-            self.completed_steps.append('inventory_reserved')
-            
-            # Step 2: Charge payment (local txn in Payment service)
-            await self.charge_payment()
-            self.completed_steps.append('payment_charged')
-            
-            # Step 3: Ship order (local txn in Shipping service)
-            await self.ship_order()
-            self.completed_steps.append('order_shipped')
-            
-            self.state = 'completed'
-            
-        except Exception as e:
-            # Compensate in reverse order
-            await self.compensate()
-            self.state = 'compensated'
-            raise
-    
-    async def compensate(self):
-        """Undo completed steps in reverse order."""
-        for step in reversed(self.completed_steps):
-            if step == 'order_shipped':
-                await self.cancel_shipment()
-            elif step == 'payment_charged':
-                await self.refund_payment()
-            elif step == 'inventory_reserved':
-                await self.release_inventory()
-```
+Use these as reasoning shapes, not cargo-cult constants. The point is to size `N` and `Q` around bounded jitter and explicit failure assumptions.
 
-### Outbox Pattern for Reliable Messaging
+## Decision tree
 
-```python
-class OutboxPublisher:
-    """
-    Helland's insight: you can't atomically update DB and send a message.
-    Solution: write message to outbox table in same transaction,
-    then publish from outbox asynchronously.
-    """
-    
-    def __init__(self, db, message_broker):
-        self.db = db
-        self.broker = message_broker
-    
-    def update_with_message(self, entity, message):
-        """Atomically update entity and queue message."""
-        with self.db.transaction():
-            self.db.save(entity)
-            self.db.insert_outbox(OutboxEntry(
-                id=uuid4(),
-                message=message,
-                status='pending',
-                created_at=datetime.utcnow()
-            ))
-    
-    async def publish_outbox(self):
-        """Background process: publish pending messages."""
-        while True:
-            pending = self.db.get_pending_outbox_entries(limit=100)
-            
-            for entry in pending:
-                try:
-                    await self.broker.publish(entry.message)
-                    self.db.mark_outbox_published(entry.id)
-                except Exception:
-                    # Will retry on next iteration
-                    pass
-            
-            await asyncio.sleep(1)
-```
+| Situation | Primary move | Fallback when it fails |
+| --- | --- | --- |
+| Need invariant across two keys | Re-key into one entity | Use activity state plus reconciliation and pending business states |
+| Need low latency despite slow replicas | Quorum over bounded jitter | Drop to ordered authority for negative claims or retirement decisions |
+| Need duplicate-safe side effects | Durable business-layer idempotency identity | Manual reconciliation queue with exact replay token and original intent |
+| Need external consumers to reason about past facts | Publish immutable/versioned outside data | Publish as-of snapshots plus explicit staleness contract |
+| Need to ingest flexible partner payloads | Preserve immutable envelope, then project | Store raw envelope and late-bind new fields instead of lossy reparse |
 
-### Request-Response with Correlation
+## NEVERs that matter
 
-```python
-class AsyncRequestResponse:
-    """
-    Helland's pattern for async request-response:
-    include correlation ID, expect response via messaging.
-    """
-    
-    def __init__(self, outbox, response_handler):
-        self.outbox = outbox
-        self.pending_requests = {}
-        self.response_handler = response_handler
-    
-    async def send_request(self, target_service: str, payload: dict) -> str:
-        correlation_id = str(uuid4())
-        
-        request = Message(
-            correlation_id=correlation_id,
-            reply_to='my-service-responses',
-            target=target_service,
-            payload=payload
-        )
-        
-        self.pending_requests[correlation_id] = {
-            'sent_at': datetime.utcnow(),
-            'request': request
-        }
-        
-        await self.outbox.publish(request)
-        return correlation_id
-    
-    async def handle_response(self, message: Message):
-        correlation_id = message.correlation_id
-        
-        if correlation_id in self.pending_requests:
-            original = self.pending_requests.pop(correlation_id)
-            await self.response_handler(original['request'], message)
-```
+- NEVER depend on two different entity-keys staying colocated because the seductive "it works in test and usually hashes nearby" assumption turns into a production-only atomicity bug after repartitioning; instead unify the invariant under one key or make the collaboration explicit.
+- NEVER answer a business-critical "does not exist" question from live quorum reads because incomplete operations are intermittently included and can later disappear from visibility; instead seal or window the input, retire old items monotonically, or route the claim through an ordered authority.
+- NEVER use session identity, socket identity, or worker-local counters for idempotency because crash-retry from a new session replays the same intent as new work; instead assign the identity at business ingress and retain it for the entire replay horizon.
+- NEVER publish references to mutable outside facts such as `current_inventory` or `latest_price` because consumers read them under different clocks and derive contradictory truths; instead publish versioned or as-of facts whose identifiers are stable.
+- NEVER recycle identifiers or rely on a floating "latest schema" label because outside copies live longer than your rename cycle and later replays become semantically ambiguous; instead mint never-reused identifiers and stamp each message with the exact schema version it was authored against.
+- NEVER shred a partner message before preserving the immutable envelope because extensibility fights shredding and the first unplanned field becomes unrecoverable data loss; instead keep the original envelope and project inside views from it.
+- NEVER fire irreversible effects during a tentative step because cancel/confirm races leave payments, notices, or entitlements attached to uncertain state; instead persist the tentative agreement first and schedule irreversible effects only after confirmation.
+- NEVER promise "exactly once" across a failure boundary because lower layers may repeat work, reorder deliveries, or preserve side effects after compensation; instead promise at-least-once delivery plus substantive idempotence and reconciliation.
+- NEVER let compensation loops flap on every oscillation because lower layers keep TMI side effects and repeated cancel/reapply cycles amplify load; instead add hysteresis, thresholds, or manual review to unstable workflows.
 
-## Mental Model
+## Freedom calibration
 
-Helland approaches distributed data design by asking:
+- **Low freedom:** money, inventory, seat allocation, legal commitments, entitlement issuance. Require explicit entity-key, operation identity, replay horizon, activity state, and irreversible-step ordering.
+- **Medium freedom:** schema boundaries, projection shapes, reconciliation UX, staleness contracts. Preserve the Helland invariants, but design can vary.
+- **High freedom:** educational diagrams, prose explanations, naming, and comparison material. Keep the inside/outside/activity split intact.
 
-1. **What are the entities?** What are the natural units of consistency?
-2. **How do entities interact?** Via messages, not shared transactions
-3. **What if this message is delivered twice?** Design for idempotency
-4. **What if this operation fails halfway?** Design compensating actions
-5. **What data crosses boundaries?** Keep it simple and immutable
+## Sanity checks before shipping
 
-## Signature Helland Moves
+- Can every cross-entity operation point to durable activity state on both sides?
+- Is every duplicate-prone command tied to a stable business identity?
+- Does every outside reference name an immutable or versioned fact?
+- Are negative claims backed by more than "I asked a quorum and didn't see it"?
+- Do irreversible effects happen only after uncertainty is resolved?
+- If a retry arrives months later from a different session, is the answer still correct?
 
-- Idempotent operations with request IDs
-- Entity-based partitioning
-- Outbox pattern for reliable messaging
-- Saga pattern instead of 2PC
-- Inside data vs outside data distinction
-- At-least-once delivery with deduplication
-- Immutable external data contracts
-
-## Key Papers
-
-- "Life Beyond Distributed Transactions: An Apostate's Opinion" (2007, 2016)
-- "Data on the Outside vs Data on the Inside" (2005)
-- "Building on Quicksand" (2009)
-- "Immutability Changes Everything" (2015)
-- "Standing on Distributed Shoulders of Giants" (2016)
+If any answer is "no," the design is not yet Helland-safe.

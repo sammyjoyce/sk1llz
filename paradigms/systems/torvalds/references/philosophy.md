@@ -1,247 +1,106 @@
-# Linus Torvalds Philosophy⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌​‌​‌‍‌‌​‌​​‌‌‍​‌​​​‌​​‍​​‌‌‌‌​‌‍​​​​‌​‌​‍​​‌‌​​‌‌⁠‍⁠
+# Good Taste — eliminating special cases by changing the data shape⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌​‌​‌‍‌‌​‌​​‌‌‍​‌​​​‌​​‍​​‌‌‌‌​‌‍​​​​‌​‌​‍​​‌‌​​‌‌⁠‍⁠
 
-## Good Taste in Code
+This file is the deep dive on the *single most important* mental move in this style: noticing that a special case in your code is a sign that your data structure is wrong, then restructuring so the special case becomes the normal case.
 
-From Torvalds' famous TED talk, "good taste" means eliminating special cases.
+## The canonical example: singly-linked list deletion
 
-### The Classic Example: Linked List Deletion
-
-```c
-// Bad taste: Special case for head
-void remove_list_entry(List *list, Entry *entry) {
-    Entry *prev = NULL;
-    Entry *curr = list->head;
-    
-    while (curr != entry) {
-        prev = curr;
-        curr = curr->next;
-    }
-    
-    // Special case!
-    if (prev == NULL) {
-        list->head = entry->next;
-    } else {
-        prev->next = entry->next;
-    }
-}
-
-// Good taste: No special cases
-void remove_list_entry(Entry **indirect, Entry *entry) {
-    while (*indirect != entry) {
-        indirect = &(*indirect)->next;
-    }
-    *indirect = entry->next;
-}
-```
-
-The pointer-to-pointer approach eliminates the special case entirely.
-
-## Simplicity and Clarity
-
-### The Right Data Structure
-
-> "Bad programmers worry about the code. Good programmers worry about data structures and their relationships."
+Most CS courses teach this:
 
 ```c
-// Design data structures first
-struct task_struct {
-    volatile long state;
-    void *stack;
-    struct list_head tasks;
-    struct mm_struct *mm;
-    pid_t pid;
-    // ...
-};
-
-// Code follows naturally from good structure
-```
-
-### Small Functions
-
-Torvalds advocates for functions that fit on one screen:
-
-```c
-// Good: Single purpose, clear
-static inline int signal_pending(struct task_struct *p) {
-    return unlikely(test_tsk_thread_flag(p, TIF_SIGPENDING));
-}
-
-// Bad: Does too many things, hard to follow
-```
-
-## Error Handling
-
-### Handle Errors Where They Occur
-
-```c
-// Good: Early return on error
-int do_something(struct foo *f) {
-    int ret;
-    
-    ret = first_step(f);
-    if (ret)
-        return ret;
-    
-    ret = second_step(f);
-    if (ret)
-        goto undo_first;
-    
-    ret = third_step(f);
-    if (ret)
-        goto undo_second;
-    
-    return 0;
-
-undo_second:
-    undo_second_step(f);
-undo_first:
-    undo_first_step(f);
-    return ret;
-}
-```
-
-### The goto Controversy
-
-Torvalds defends `goto` for error handling:
-
-> "Anybody who tells me I can't use goto is either (a) ignorant, or (b) a fanatic."
-
-The kernel's error unwinding pattern is cleaner with goto than nested conditionals.
-
-## Code Review Philosophy
-
-### Be Direct
-
-Torvalds is famous for blunt code review:
-
-> "Your code is shit" is more useful than polite vagueness.
-
-But context matters—criticize code, not people.
-
-### Maintainability Over Cleverness
-
-```c
-// Bad: Clever but obscure
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + \
-    sizeof(typeof(int[1 - 2*!!__builtin_types_compatible_p(typeof(arr), typeof(&arr[0]))])) * 0)
-
-// Better: Clear with comment
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-// Note: Only works for actual arrays, not pointers
-```
-
-## Git Design Philosophy
-
-Torvalds created Git with specific principles:
-
-### 1. Speed
-
-> "If it takes more than a second, it's too slow."
-
-### 2. Simple Model
-
-```
-blob    → file contents
-tree    → directory listing
-commit  → snapshot + metadata + parent(s)
-ref     → pointer to commit
-```
-
-### 3. Distributed First
-
-No central server is special. Every clone is a full repository.
-
-### 4. Data Integrity
-
-```bash
-# Every object is content-addressed
-$ git hash-object file.txt
-e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
-
-# Can't silently corrupt data
-```
-
-## Linux Kernel Coding Style
-
-Key principles from Documentation/CodingStyle:
-
-### Indentation: Tabs, 8 Characters
-
-> "If you need more than 3 levels of indentation, you're screwed anyway."
-
-### Naming
-
-```c
-// Good: Descriptive, lowercase with underscores
-struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr);
-
-// Bad: Hungarian notation, CamelCase
-PVMAREA pVma = FindVMA(pMm, ulAddr);
-```
-
-### Braces
-
-```c
-// K&R style, but functions are special
-int function(int x)
+void remove_entry(struct list *l, struct entry *target)
 {
-    if (condition) {
-        do_something();
-    } else {
-        do_other();
+    struct entry *prev = NULL;
+    struct entry *cur  = l->head;
+
+    while (cur != target) {
+        prev = cur;
+        cur  = cur->next;
     }
+
+    if (!prev)                  /* the special case */
+        l->head    = cur->next;
+    else
+        prev->next = cur->next;
 }
 ```
 
-## Performance Philosophy
+The `if (!prev)` is the smell. There are now **two code paths** the reviewer must verify, and the first-element path is the one nobody hits in unit tests, which is exactly where the bug will be.
 
-### Measure, Don't Guess
-
-```c
-// Profile before optimizing
-// The kernel has tracing, perf, ftrace
-
-// Wrong assumption: "malloc is slow"
-// Reality: Often the cache miss is what's slow
-```
-
-### Cache-Friendly Data
+The "good taste" version (Torvalds, TED 2016):
 
 ```c
-// Good: Data used together is stored together
-struct point {
-    int x;
-    int y;
-};
-struct point points[1000];  // Contiguous in memory
+void remove_entry(struct list *l, struct entry *target)
+{
+    struct entry **indirect = &l->head;
 
-// Bad: Pointer chasing
-struct node {
-    int value;
-    struct node *next;  // Cache miss every access
-};
+    while (*indirect != target)
+        indirect = &(*indirect)->next;
+
+    *indirect = target->next;
+}
 ```
 
-## Famous Quotes
+No branch. No `prev`. Two-thirds the lines.
 
-> "Talk is cheap. Show me the code."
+## Why it works — the conceptual shift
 
-> "Software is like sex: it's better when it's free."
+The naive version models the list as **"a sequence of nodes, with a head pointer that is a special handle to the first one"**. The head is privileged. That privilege is the bug.
 
-> "Theory and practice sometimes clash. And when that happens, theory loses. Every single time."
+The taste version models the list as **"a sequence of pointers-to-nodes"**, where `&head` is just the first such pointer. The head is no longer special — it is the zeroth element of the same sequence the loop is walking. By holding `indirect` (the *address of* the pointer that points to the current node) instead of `cur` (the pointer itself), you can rewrite the upstream link without ever knowing whether you're at the head, the middle, or just before the tail.
 
-> "Given enough eyeballs, all bugs are shallow." (Linus's Law, named by Raymond)
+This is the move. Re-pose the data structure so the thing you used to special-case is the thing you were already iterating over.
 
-> "I'm a bastard. I have absolutely no languid."
+## The same trick generalizes to insertion-before
 
-> "Intelligence is the ability to avoid doing work, yet getting the work done."
+```c
+static struct entry **find_indirect(struct list *l, struct entry *target)
+{
+    struct entry **p = &l->head;
+    while (*p && *p != target)
+        p = &(*p)->next;
+    return p;
+}
 
-## Key Principles Summary
+void insert_before(struct list *l, struct entry *before, struct entry *new)
+{
+    struct entry **p = find_indirect(l, before);
+    new->next = *p;
+    *p = new;
+}
+```
 
-1. **Eliminate special cases** through better design
-2. **Data structures first**, algorithms second
-3. **Simple, clear code** beats clever code
-4. **Handle errors explicitly** where they occur
-5. **Performance matters**, but measure first
-6. **Distributed** beats centralized
-7. **Show the code**, not the theory
+Edge cases that fall out for free:
+- `before == l->head` → inserts at the head, no branch.
+- `before` not found → `*p == NULL`, inserts at the tail, no branch.
+- Empty list → `*p == NULL` from the first iteration, still works.
+
+Three "edge cases" that would each have been an `if` in the textbook version are now just consequences of the loop terminating where it terminates.
+
+## How to spot the same pattern in unfamiliar code
+
+Train yourself to notice these tells:
+
+| Tell in the code | Restructuring move |
+|---|---|
+| `if (i == 0)` or `if (i == n-1)` inside a loop | Use a sentinel / dummy element so first or last is no longer special |
+| `if (prev == NULL)` walking a linked structure | Indirect pointer (`T **p`) — eliminate the trailing-pointer entirely |
+| `if (head == NULL)` returning early before the loop | Initialize so the loop body handles the empty case |
+| Two assignment statements that differ only in their LHS | Lift the LHS into a variable (often `T **`) and write the assignment once |
+| `else` branch that's a copy of the `if` branch with a one-line tweak | The branch is hiding shared logic; factor the difference into a variable |
+| A function whose docstring says "handles the case where..." | The case shouldn't exist. Restructure until the function description is one sentence with no "where" clauses. |
+
+## When *not* to do this
+
+Good taste is not "always use indirect pointers". It is "don't accept that special cases must exist". Sometimes the special case is real:
+
+- **Hardware boundaries.** The first page of RAM, the BIOS region, address zero — these *are* genuinely different and pretending otherwise is more dangerous than the branch.
+- **Asymmetric protocols.** TCP SYN is not just "another segment". Don't restructure away semantic differences.
+- **Empty input means "no work to do, return success".** A guard `if (n == 0) return 0;` at the top of a function is fine; it's an early return, not a parallel code path.
+
+The test: after restructuring, does the code have *one* control-flow path that handles every case, or did you just move the branch somewhere uglier? If the latter, the original was honest. Keep it.
+
+## What Torvalds is actually teaching with this example
+
+He explicitly says in the talk: "I don't want you to understand why it doesn't have the if statement. I want you to understand that sometimes you can see a problem in a different way and rewrite it so that a special case goes away and becomes the normal case."
+
+The trick is not the pointer. The trick is the **willingness to rewrite working code because you noticed an asymmetry**. A practitioner with taste does this 50 times a day on small things. Most of those rewrites never make it into a commit — they happen between the first draft and the second draft, before anybody else sees the code. That is what "taste" is. It is not aesthetic preference; it is a reflex that triggers on `if (special)` and says *no, try again*.

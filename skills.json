@@ -1,14 +1,14 @@
 {
   "version": "1.0.0",
-  "generated_at": "2026-03-09T09:25:22.582508+00:00",
+  "generated_at": "2026-04-08T10:46:30.855101+00:00",
   "repository": "https://github.com/copyleftdev/sk1llz",
   "raw_base_url": "https://raw.githubusercontent.com/copyleftdev/sk1llz/master",
-  "skill_count": 101,
+  "skill_count": 102,
   "skills": [
     {
       "id": "fielding-rest",
       "name": "fielding",
-      "description": "Design network-based software architectures using Roy Fielding's REST principles. Emphasizes the constraints of the web\u2014statelessness, cacheability, uniform interfaces, and HATEOAS. Use when designing web APIs that must endure for decades.",
+      "description": "Apply Roy Fielding's REST style to long-lived HTTP APIs that must survive independent client and server evolution. Use when deciding whether REST is the right constraint set, designing hypermedia and media types, choosing between profiles and new media types, setting cache and concurrency semantics, or planning deprecation without URI churn. Trigger keywords: REST, HATEOAS, hypermedia, media type, profile relation, content negotiation, ETag, If-Match, Vary, Prefer, Accept-Patch, Deprecation, Sunset, problem+json.",
       "category": "domains",
       "subcategory": "api-design",
       "path": "domains/api-design/fielding",
@@ -18,23 +18,13 @@
       "tags": [
         "domains",
         "api_design",
-        "fielding",
-        "rest",
-        "http",
-        "stateless",
-        "hateoas",
-        "caching",
-        "uniform_interface",
-        "web_api",
-        "resources",
-        "hypermedia",
-        "architecture"
+        "fielding"
       ]
     },
     {
       "id": "lane-api-evangelist",
       "name": "lane",
-      "description": "Design APIs using Kin Lane's \"API Evangelist\" philosophy. Emphasizes Design-First (OpenAPI), governance, treating APIs as products, and the political/business impact of interfaces. Use when building public platforms or large-scale internal ecosystems.",
+      "description": "Apply Kin Lane's API Evangelist approach to API design, governance, cataloging, and public API experience. Use when designing or auditing HTTP APIs, standing up API governance, mapping an enterprise API landscape, defining deprecation or versioning policy, evaluating 3rd-party APIs for consumption, or turning an API into a discoverable product surface. Trigger keywords: OpenAPI, APIs.json, API governance, API catalog, public API portal, developer experience, deprecation policy, versioning strategy, Spectral, API survey, API sprawl, API product, 3rd-party API, machine-readable metadata.",
       "category": "domains",
       "subcategory": "api-design",
       "path": "domains/api-design/lane",
@@ -44,21 +34,13 @@
       "tags": [
         "domains",
         "api_design",
-        "lane",
-        "api",
-        "developer_experience",
-        "documentation",
-        "evangelism",
-        "sdk",
-        "onboarding",
-        "rest",
-        "community"
+        "lane"
       ]
     },
     {
       "id": "mendez-async-api",
       "name": "mendez",
-      "description": "Design event-driven architectures using Fran M\u00e9ndez's \"AsyncAPI\" philosophy. Emphasizes Event-First design, treating message contracts with the same rigor as REST (AsyncAPI spec), and decoupling producers from consumers. Use when building message buses, IoT networks, or microservices that communicate asynchronously.",
+      "description": "Apply Fran Mendez's application-centric AsyncAPI style to event-driven APIs. Use when designing or reviewing AsyncAPI v2/v3 contracts, choosing schema-evolution rules, modeling request-reply over brokers, deciding thin vs fat events, scoping bindings, or deciding whether CloudEvents belongs in the envelope. Trigger keywords: AsyncAPI, event contract, send receive, request-reply, channel address, Kafka binding, MQTT retain, schema registry compatibility, CloudEvents, event versioning, schema evolution.",
       "category": "domains",
       "subcategory": "api-design",
       "path": "domains/api-design/mendez",
@@ -68,23 +50,13 @@
       "tags": [
         "domains",
         "api_design",
-        "mendez",
-        "async_api",
-        "event_driven",
-        "message_broker",
-        "pubsub",
-        "kafka",
-        "rabbitmq",
-        "websocket",
-        "streaming",
-        "microservices",
-        "mqtt"
+        "mendez"
       ]
     },
     {
       "id": "hashimoto-cli-ux",
       "name": "hashimoto",
-      "description": "Design CLI tools in the style of Mitchell Hashimoto, founder of HashiCorp. Emphasizes consistent command patterns, helpful error messages, progressive disclosure, and machine-readable output. Use when building command-line tools that developers will love.",
+      "description": "Design operator-grade CLIs in the Hashimoto style: human text is disposable, machine output is a versioned contract, mutation workflows separate review from execution, and automation never depends on terminal heuristics. Use when designing or refactoring subcommands, help/version behavior, --json or event streams, plan/apply or dry-run flows, flag-env-config precedence, config introspection, CI-safe prompts, or full-screen terminal UX. Trigger keywords: CLI design, command-line UX, exit codes, automation, machine-readable output, plan apply, dry-run, stderr stdout, config precedence, help text, subcommands, TTY, terminal flicker.",
       "category": "domains",
       "subcategory": "cli-design",
       "path": "domains/cli-design/hashimoto",
@@ -94,23 +66,13 @@
       "tags": [
         "domains",
         "cli_design",
-        "hashimoto",
-        "cli",
-        "command_line",
-        "terminal",
-        "flags",
-        "help_text",
-        "output_formatting",
-        "progressive_disclosure",
-        "ux",
-        "tool",
-        "shell"
+        "hashimoto"
       ]
     },
     {
       "id": "helland-distributed-data",
       "name": "helland",
-      "description": "Design scalable data systems in the style of Pat Helland, distributed systems veteran from Tandem, Microsoft, and Amazon. Emphasizes life beyond distributed transactions, idempotency, and practical patterns for data at scale. Use when building systems that must scale beyond single-node ACID transactions.",
+      "description": "Apply Pat Helland's distributed-data philosophy to cross-service state, retries, versioned facts, and low-tail-latency coordination. Use when designing entity boundaries, idempotency contracts, outside-data schemas, tentative workflows, reconciliation paths, or quorum behavior under jitter. Trigger keywords: helland, entities, activities, idempotency, outside data, inside data, tentative operations, versioned facts, reconciliation, repartitioning, at-least-once, stale reads, quorum, jitter, fuzzy visibility.",
       "category": "domains",
       "subcategory": "databases",
       "path": "domains/databases/helland",
@@ -120,21 +82,13 @@
       "tags": [
         "domains",
         "databases",
-        "helland",
-        "distributed",
-        "transactions",
-        "idempotency",
-        "scalability",
-        "partitioning",
-        "replication",
-        "eventual_consistency",
-        "microservices"
+        "helland"
       ]
     },
     {
       "id": "pavlo-database-performance",
       "name": "pavlo",
-      "description": "Optimize databases in the style of Andy Pavlo, CMU professor and database performance expert. Emphasizes understanding internals, benchmarking rigorously, and making informed architectural choices. Use when tuning query performance, designing storage engines, or evaluating database technologies.",
+      "description": "Diagnose and tune real database performance problems using Andy Pavlo-style heuristics for benchmarking, optimizer pathologies, MVCC version retention, buffer managers, and storage-engine trade-offs. Use when a query is slow for non-obvious reasons, when EXPLAIN ANALYZE and observed latency disagree, when choosing B-tree vs LSM or mmap vs buffer pool, when a mixed OLTP/OLAP workload regresses over time, or when benchmarking/tuning PostgreSQL, MySQL/InnoDB, RocksDB/MyRocks, NoisePage-style engines, or database internals. Trigger keywords: EXPLAIN ANALYZE, cardinality estimation, CREATE STATISTICS, shared_buffers, work_mem, autovacuum, backend_xmin, replication slots, compaction debt, write amplification, B-tree, Bw-Tree, optimistic lock coupling, mmap, TLB shootdown, query compilation, vectorized execution, BenchBase, OtterTune.",
       "category": "domains",
       "subcategory": "databases",
       "path": "domains/databases/pavlo",
@@ -144,22 +98,13 @@
       "tags": [
         "domains",
         "databases",
-        "pavlo",
-        "query_optimization",
-        "indexing",
-        "storage_engines",
-        "btree",
-        "lsm_tree",
-        "olap",
-        "oltp",
-        "benchmarking",
-        "sql"
+        "pavlo"
       ]
     },
     {
       "id": "stonebraker-database-architecture",
       "name": "stonebraker",
-      "description": "Design databases in the style of Michael Stonebraker, Turing Award winner and creator of Ingres, Postgres, VoltDB, and Vertica. Emphasizes clean architecture, separation of OLTP/OLAP, and building systems that last decades. Use when designing database internals, storage engines, or making fundamental architectural decisions.",
+      "description": "Make database architecture calls in Michael Stonebraker's style: classify workloads by dominant bottleneck, decide when OLTP and OLAP must be split, choose when shared-nothing and main-memory designs actually pay off, and avoid hidden costs in column stores, deterministic OLTP, and Postgres-style extensibility. Use when deciding OLTP vs OLAP vs HTAP, choosing a partition key, evaluating VoltDB/Vertica/Postgres-like designs, designing a storage engine, or arguing against \"one database for everything.\" Triggers: \"database architecture\", \"OLTP vs OLAP\", \"HTAP\", \"shared nothing\", \"partition key\", \"column store\", \"projection\", \"tuple mover\", \"VoltDB\", \"Vertica\", \"Postgres extensibility\", \"anti-caching\", \"storage engine\".",
       "category": "domains",
       "subcategory": "databases",
       "path": "domains/databases/stonebraker",
@@ -169,21 +114,13 @@
       "tags": [
         "domains",
         "databases",
-        "stonebraker",
-        "relational",
-        "acid",
-        "transactions",
-        "query_processing",
-        "storage",
-        "schema_design",
-        "sql",
-        "distributed_db"
+        "stonebraker"
       ]
     },
     {
       "id": "s2-geometry-spatial-indexing",
       "name": "s2-geometry",
-      "description": "Index and query geospatial data using Google's S2 Geometry library. Emphasizes hierarchical cell decomposition, Hilbert curves for locality preservation, and efficient spatial operations on spherical geometry. Use when building location-based services, proximity search, geofencing, or any system that needs to efficiently query geographic data.",
+      "description": "Use when designing or debugging S2-based spatial indexes, coverings, term indexes, geofences, proximity search, or cell-id/token interoperability. Helps choose max_cells/min_level/max_level/level_mod, avoid covering explosions and false-negative query bugs, decide when to use interior coverings or mixed-level indexes, and debug antimeridian/degenerate geometry/token issues. Trigger keywords: s2, s2cellid, s2regioncoverer, s2regiontermindexer, interior covering, cell union, token, geofence, proximity, sharding, antimeridian.",
       "category": "domains",
       "subcategory": "geospatial",
       "path": "domains/geospatial/s2-geometry",
@@ -193,22 +130,13 @@
       "tags": [
         "domains",
         "geospatial",
-        "s2_geometry",
-        "spatial_indexing",
-        "s2",
-        "cells",
-        "regions",
-        "coordinates",
-        "geographic",
-        "mapping",
-        "location",
-        "queries"
+        "s2_geometry"
       ]
     },
     {
       "id": "gettys-bufferbloat",
       "name": "gettys-bufferbloat",
-      "description": "Engineer low-latency networks in the style of Jim Gettys, discoverer of bufferbloat. Emphasizes understanding excessive buffering, queue management, latency under load, and the fq_codel solution. Use when diagnosing network latency issues, optimizing for real-time applications, or implementing queue management.",
+      "description": "Diagnose and fix latency under load by locating the real queue, selecting the right AQM/FQ strategy, and avoiding dark-buffer traps across DOCSIS, DSL, Wi-Fi, tunnels, containers, and Linux qdiscs. Use when loaded RTT, jitter, or game/video-call lag appears only during traffic; when tuning fq_codel, CAKE, SQM, BQL, AQL, or tc qdiscs; or when fq_codel/CAKE \"should help\" but does not. Triggers: bufferbloat, latency under load, fq_codel, CAKE, SQM, AQM, BQL, AQL, DOCSIS, Wi-Fi lag, tc qdisc, dark buffer, jitter, loaded RTT.",
       "category": "domains",
       "subcategory": "networking",
       "path": "domains/networking/gettys-bufferbloat",
@@ -218,22 +146,13 @@
       "tags": [
         "domains",
         "networking",
-        "gettys_bufferbloat",
-        "latency",
-        "bufferbloat",
-        "tcp",
-        "congestion",
-        "aqm",
-        "queuing",
-        "real_time",
-        "bandwidth",
-        "packet_loss"
+        "gettys_bufferbloat"
       ]
     },
     {
       "id": "jacobson-network-performance",
       "name": "jacobson",
-      "description": "Engineer network systems in the style of Van Jacobson, the architect of TCP congestion control who saved the internet from collapse. Emphasizes congestion avoidance, RTT-based adaptation, queue management, and understanding network dynamics. Use when optimizing network performance, implementing congestion control, or diagnosing latency issues.",
+      "description": "Diagnose queueing, RTT, and TCP control-loop pathologies with Jacobson-style measurement discipline. Use when a path is fast but feels slow, RTT explodes under load, fq_codel/CoDel/CAKE or BBR/CUBIC tuning is on the table, or you must separate real loss from reordering, policers, ACK pathologies, or hidden buffers. Trigger keywords: bufferbloat, standing queue, min_rtt, BDP, fq_codel, CoDel, CAKE, BQL, RACK, DSACK, ACK compression, tcp_notsent_lowat, delayed ACK, BBRv3, CUBIC, ECN bleach, tc qdisc, tcp_rmem, tcp_wmem, Wi-Fi aggregation, satellite TCP.",
       "category": "domains",
       "subcategory": "networking",
       "path": "domains/networking/jacobson",
@@ -244,14 +163,14 @@
         "domains",
         "networking",
         "jacobson",
-        "performance",
-        "measurement",
-        "protocols",
         "tcp",
-        "congestion",
-        "monitoring",
-        "throughput",
-        "latency"
+        "congestion_control",
+        "bufferbloat",
+        "aqm",
+        "latency",
+        "performance",
+        "bbr",
+        "fq_codel"
       ]
     },
     {
@@ -282,7 +201,7 @@
     {
       "id": "feynman-first-principles",
       "name": "feynman",
-      "description": "Think and build in the style of Richard Feynman, Nobel laureate physicist and legendary problem solver. Emphasizes first-principles reasoning, playful exploration, ruthless simplification, and the Feynman Technique for deep understanding. Use when debugging impossible problems, designing from scratch, or when conventional wisdom has failed.",
+      "description": "Stress-test explanations, estimates, fixes, and designs by rebuilding them from primitives, operating envelopes, and falsification probes instead of trusting polished stories. Use when a bug survives normal debugging, when experts disagree on basics, when a system is outside its validated regime, when you need a model you can hand-simulate, or when a \"simple explanation\" feels suspiciously smooth. Triggers: \"first principles\", \"rederive\", \"what actually causes this\", \"reason from scratch\", \"sanity check\", \"back of envelope\", \"falsify this\", \"simple example\", \"explain why this works\", \"I don't really understand this\".",
       "category": "domains",
       "subcategory": "problem-solving",
       "path": "domains/problem-solving/feynman",
@@ -292,22 +211,13 @@
       "tags": [
         "domains",
         "problem_solving",
-        "feynman",
-        "first_principles",
-        "reasoning",
-        "simplification",
-        "mental_models",
-        "physics",
-        "teaching",
-        "curiosity",
-        "debugging",
-        "fundamentals"
+        "feynman"
       ]
     },
     {
       "id": "polya-how-to-solve-it",
       "name": "polya",
-      "description": "Solve problems in the style of George P\u00f3lya, mathematician and author of \"How to Solve It.\" Emphasizes structured heuristics, analogy, decomposition, and working backward from the goal. Use when stuck on algorithmic problems, debugging complex systems, or designing solutions that require systematic creative thinking.",
+      "description": "Apply P\u00f3lya-style problem solving corrected by Schoenfeld and Mason for unfamiliar math, algorithm, debugging, proof, and design problems. Use when you are stuck, chasing the wrong lead, can produce examples but not a method, have a result that will not generalize, or need to turn a hunch into a tractable attack. Triggers: \"I'm stuck\", \"don't know where to start\", \"tried everything\", \"works on examples only\", \"what heuristic should I use\", \"can't see the invariant\", \"why does this fail\", \"false lead\", \"need a proof strategy\".",
       "category": "domains",
       "subcategory": "problem-solving",
       "path": "domains/problem-solving/polya",
@@ -317,20 +227,13 @@
       "tags": [
         "domains",
         "problem_solving",
-        "polya",
-        "heuristics",
-        "decomposition",
-        "analogy",
-        "working_backward",
-        "mathematical",
-        "strategy",
-        "systematic"
+        "polya"
       ]
     },
     {
       "id": "google-search-architecture",
       "name": "google-search-architecture",
-      "description": "Build search systems informed by Google's internal architecture as revealed in the May 2024 API Content Warehouse leak. Covers Ascorer ranking, NavBoost click signals, Twiddler re-ranking, index tiering, and entity-based retrieval. Use when designing large-scale search engines, ranking systems, or understanding how modern search actually works.",
+      "description": "Design and debug multi-stage search ranking systems using leak-confirmed Google patterns for stage placement, twiddlers, click signals, sitechunk quality, and ranking failure isolation. Use when building or tuning retrieval/ranking stacks, placing a new signal, debugging ranking regressions, designing click-based rerankers, implementing diversity constraints, or separating retrieval failures from trust or packing failures. Triggers include ranking pipeline, retrieval vs ranking, twiddler, NavBoost, click signals, sliceTag, sitechunk, NSR, siteAuthority, freshness, hostAge, official page, quality demotion, packing, search regression.",
       "category": "domains",
       "subcategory": "search",
       "path": "domains/search/google-search-architecture",
@@ -340,22 +243,13 @@
       "tags": [
         "domains",
         "search",
-        "google_search_architecture",
-        "indexing",
-        "ranking",
-        "crawling",
-        "information_retrieval",
-        "pagerank",
-        "distributed",
-        "scale",
-        "query",
-        "text"
+        "google_search_architecture"
       ]
     },
     {
       "id": "bianco-pyramid-of-pain",
       "name": "bianco",
-      "description": "Apply David Bianco's threat hunting frameworks including the Pyramid of Pain and Threat Hunting Maturity Model. Emphasizes prioritizing detection by adversary cost and building mature hunting programs. Use when designing detection strategies or assessing hunting capability.",
+      "description": "Threat-hunting strategy and detection-engineering guidance for using David Bianco's Pyramid of Pain, Hunting Maturity Model (HM0-HM4), and modern Summiting-the-Pyramid/Ambiguous-Techniques methods to choose hypotheses, score robustness, and turn hunts into durable detections. Use when planning hunts, deciding whether a signal belongs at IOC/tool/TTP level, triaging living-off-the-land activity, measuring hunting maturity, or operationalizing successful hunts. Triggers: pyramid of pain, hunting maturity model, HM0, HM1, HM2, HM3, HM4, summiting the pyramid, ambiguous techniques, TTP hunting, direct correlation, loose correlation, hunt-to-detection.",
       "category": "domains",
       "subcategory": "security",
       "path": "domains/security/threat-hunting/bianco",
@@ -366,22 +260,13 @@
         "domains",
         "security",
         "threat_hunting",
-        "bianco",
-        "threat_intelligence",
-        "indicators",
-        "detection",
-        "adversary",
-        "ioc",
-        "ttps",
-        "hunting",
-        "defense",
-        "attribution"
+        "bianco"
       ]
     },
     {
       "id": "mitre-attack-framework",
       "name": "mitre-attack",
-      "description": "Apply the MITRE ATT&CK framework for threat intelligence and detection. Provides a universal taxonomy of adversary tactics, techniques, and procedures (TTPs). Use when mapping threats, building detections, or assessing defensive coverage.",
+      "description": "Turn ATT&CK into defender-grade mappings, hunt hypotheses, and coverage decisions that survive peer review. Use when mapping CTI, incident evidence, raw telemetry, Sigma/EDR detections, Navigator layers, or coverage claims to ATT&CK techniques and sub-techniques. Trigger keywords: map to attack, mitre attack, t10xx, ta00xx, sub-technique, navigator layer, detection coverage, dettect, attack flow, ttp mapping, hunt hypothesis, technique id, attack version.",
       "category": "domains",
       "subcategory": "security",
       "path": "domains/security/threat-hunting/mitre-attack",
@@ -394,21 +279,20 @@
         "threat_hunting",
         "mitre_attack",
         "mitre",
-        "attack_framework",
-        "ttps",
-        "tactics",
-        "techniques",
+        "attack",
+        "ttp",
         "detection",
-        "adversary",
-        "threat_model",
-        "defense",
-        "coverage"
+        "cti",
+        "coverage",
+        "navigator",
+        "dettect",
+        "sub_technique"
       ]
     },
     {
       "id": "rodriguez-threat-hunter-playbook",
       "name": "rodriguez",
-      "description": "Apply Roberto Rodriguez's threat hunting methodology with the Threat Hunter Playbook and HELK. Emphasizes documented hunts, open source infrastructure, and data-driven hunting. Use when building hunting programs or developing hunt playbooks.",
+      "description": "Build and review threat hunts in Roberto Rodriguez's Threat Hunter Playbook style: pre-hunt data management, relationship-driven analytics, notebook-first evidence chains, and replay validation with OTRF Security Datasets. Use when creating a new hunt playbook, auditing why a hunt failed, porting THP ideas into an existing SIEM or notebook stack, validating ATT&CK coverage claims, or working on HELK, OTRF, OSSEM, Security Datasets, Mordor, DCSync, remote PowerShell, WMI, service-creation, or other Windows behavior hunts.",
       "category": "domains",
       "subcategory": "security",
       "path": "domains/security/threat-hunting/rodriguez",
@@ -419,21 +303,13 @@
         "domains",
         "security",
         "threat_hunting",
-        "rodriguez",
-        "jupyter",
-        "analytics",
-        "detection",
-        "siem",
-        "log_analysis",
-        "sigma",
-        "endpoint",
-        "investigation"
+        "rodriguez"
       ]
     },
     {
       "id": "roth-detection-engineering",
       "name": "roth",
-      "description": "Apply Florian Roth's detection engineering methodology with YARA and Sigma rules. Emphasizes portable detection logic, community sharing, and signature quality. Use when creating detection rules that work across platforms.",
+      "description": "Expert playbook for Florian Roth style detection engineering across Sigma, YARA, YARA-X, LOKI, THOR, and signature-base. Use when writing or tuning portable SIEM detections, scoring YARA hits, reducing false positives, debugging unsupported backend conversions, or fixing slow rules. Triggers: sigma, pysigma, sigma-cli, yara, yara-x, THOR, LOKI, signature-base, rule tuning, false positives, backend mapping, threat hunting.",
       "category": "domains",
       "subcategory": "security",
       "path": "domains/security/threat-hunting/roth",
@@ -444,22 +320,13 @@
         "domains",
         "security",
         "threat_hunting",
-        "roth",
-        "yara",
-        "sigma",
-        "detection_rules",
-        "malware",
-        "ioc",
-        "scanning",
-        "community",
-        "open_source",
-        "threat_detection"
+        "roth"
       ]
     },
     {
       "id": "dean-large-scale-systems",
       "name": "dean",
-      "description": "Design large-scale systems using Jeff Dean's pragmatic approach. Emphasizes performance intuition, building reliable systems from unreliable components, and solving problems at Google scale. Use when building infrastructure that must handle millions of QPS, petabytes of data, or global distribution.",
+      "description": "Jeff Dean / Google-scale architecture heuristics for services whose real constraints are fanout, tail latency, hot partitions, shared-cluster scheduling, and multi-region mutation cost. Use when choosing sharding, replication, overload behavior, or control-plane/data-plane boundaries for systems that may span dozens of services or thousands of machines. Trigger words: tail latency, hedged requests, tied requests, stragglers, hot shard, micro-partitions, good-enough results, canary requests, commit wait, TrueTime, quota, shared cell, load shedding.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/dean",
@@ -472,22 +339,26 @@
         "domains",
         "systems_architecture",
         "dean",
-        "mapreduce",
-        "bigtable",
-        "spanner",
-        "distributed",
+        "systems",
         "scale",
-        "fault_tolerance",
+        "reliability",
+        "distributed systems",
+        "google scale",
+        "fault tolerance",
+        "latency",
+        "spanner",
+        "bigtable",
+        "mapreduce",
+        "borg",
         "infrastructure",
-        "google",
-        "data_processing",
-        "parallel"
+        "architecture",
+        "capacity planning"
       ]
     },
     {
       "id": "fowler",
       "name": "fowler",
-      "description": "Design systems using Martin Fowler's principles of refactoring, continuous integration, and patterns of enterprise application architecture. Emphasizes clean code, evolution over revolution, and writing code for humans first. Use when designing enterprise systems, planning refactors, or establishing engineering culture.",
+      "description": "Apply Martin Fowler and Thoughtworks architecture heuristics for legacy modernization, evolutionary design, refactoring strategy, monolith-vs-microservice decisions, service extraction, integration boundary reviews, and technical-debt triage. Use when reviewing or designing system boundaries, planning strangler-fig migrations, deciding whether to split a monolith, introducing feature flags, or diagnosing distributed-monolith failures. Triggers: fowler, refactoring, evolutionary architecture, technical debt, monolith first, microservices, strangler fig, branch by abstraction, service extraction, distributed monolith.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/fowler",
@@ -497,22 +368,13 @@
       "tags": [
         "domains",
         "systems_architecture",
-        "fowler",
-        "refactoring",
-        "code_smells",
-        "clean_code",
-        "design_patterns",
-        "legacy_code",
-        "incremental",
-        "testing",
-        "oop",
-        "architecture"
+        "fowler"
       ]
     },
     {
       "id": "gray-transaction-systems",
       "name": "gray",
-      "description": "Design data systems using Jim Gray's principles of transaction processing and fault tolerance. Emphasizes ACID properties, recovery mechanisms, and the science of making systems reliable. Use when building databases, payment systems, or any system where data integrity is paramount.",
+      "description": "Design and review transaction-processing systems the Jim Gray way: recovery-first logging, anomaly-aware isolation, replica/2PC tradeoffs, long-lived workflow compensation, and durability contracts that survive real failures. Use when building or auditing WAL and crash recovery, ledgers or payments, idempotent retries, prepared transactions, checkpointing, replica topologies, or any code that claims a write is \"durable\". Triggers: transaction, WAL, fsync, checkpoint, group commit, isolation level, snapshot isolation, SSI, write skew, 2PC, prepared transaction, idempotency key, compensation, replica, failover, crash recovery, durability.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/gray",
@@ -524,22 +386,29 @@
       "tags": [
         "domains",
         "systems_architecture",
-        "gray",
-        "transactions",
-        "acid",
-        "recovery",
-        "fault_tolerance",
-        "two_phase_commit",
-        "databases",
-        "reliability",
-        "distributed",
-        "logging"
+        "gray"
       ]
     },
     {
-      "id": "lamport-distributed-systems",
+      "id": "hashimoto-building-block-economy",
+      "name": "hashimoto",
+      "description": "Design software for the building-block economy: ship a robust primitive, keep the mainline app opinionated, and let forks, agents, plugins, and downstream wrappers explore the long tail. Use when deciding whether a feature belongs in core or in an extension seam, whether to split out a library, headless mode, stable CLI, or API, or how to structure a product so downstream composition creates adoption and R&D leverage. Triggers: building block economy, embeddable, headless core, plugin API, extension seam, SDK, reusable primitive, reference app, fork-friendly, stable contract, open format, composable product, agentic factory, outsourced R&D, mainline vs forks.",
+      "category": "domains",
+      "subcategory": "systems-architecture",
+      "path": "domains/systems-architecture/hashimoto",
+      "files": [
+        "SKILL.md"
+      ],
+      "tags": [
+        "domains",
+        "systems_architecture",
+        "hashimoto"
+      ]
+    },
+    {
+      "id": "lamport-distributed-consensus",
       "name": "lamport",
-      "description": "Design distributed systems using Leslie Lamport's rigorous approach. Emphasizes formal reasoning, logical time, consensus protocols, and state machine replication. Use when building systems where correctness under concurrency and partial failure is critical.",
+      "description": "Design, review, and debug Lamport-style consensus, leases, quorum math, and reconfiguration under crash faults and partial synchrony. Use when changing Paxos or Raft-style replication, leader election, membership transitions, read leases, quorum layouts, recovery semantics, or TLA+-backed safety arguments. Triggers: Paxos, Raft, quorum intersection, lease, epoch, term, ballot, split brain, stale read, learner, catch-up, reconfiguration, commit wait, TrueTime, Vertical Paxos, Flexible Paxos.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/lamport",
@@ -553,19 +422,18 @@
         "systems_architecture",
         "lamport",
         "paxos",
-        "consensus",
-        "tla+",
-        "formal_verification",
-        "logical_clocks",
-        "state_machine_replication",
-        "byzantine",
-        "distributed_transactions"
+        "raft",
+        "quorum",
+        "leases",
+        "reconfiguration",
+        "logical_time",
+        "tla_plus"
       ]
     },
     {
       "id": "lampson-system-design",
       "name": "lampson",
-      "description": "Design systems using Butler Lampson's principles of abstraction, interfaces, and practical wisdom. Emphasizes clean abstractions, security foundations, and time-tested design hints. Use when making architectural decisions, designing APIs, or building systems that must evolve over decades.",
+      "description": "Design long-lived computer systems in Butler Lampson's style: write abstract state and actions first, keep lower layers replaceable, put correctness end-to-end, and optimize for repair, tail latency, and evolvability. Use when choosing interfaces, retry/replication/transaction strategies, control-plane vs data-plane splits, storage hardening, or security boundaries. Trigger keywords: abstraction, spec, end-to-end, idempotence, retry, OCC, snapshot isolation, commit record, failover, repair, capability, least common mechanism, control plane.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/lampson",
@@ -577,22 +445,13 @@
       "tags": [
         "domains",
         "systems_architecture",
-        "lampson",
-        "system_design",
-        "abstraction",
-        "interfaces",
-        "security",
-        "hints",
-        "architecture",
-        "naming",
-        "performance",
-        "modularity"
+        "lampson"
       ]
     },
     {
       "id": "vogels-cloud-architecture",
       "name": "vogels",
-      "description": "Design cloud-native systems using Werner Vogels' principles of failure-first design, eventual consistency, and API-driven architecture. Emphasizes building for failure, customer obsession, and practical distributed systems. Use when building AWS-scale services, microservices, or any system that must be highly available.",
+      "description": "Turn vague distributed-systems plans into Vogels-style availability designs: statically stable, blast-radius-limited, explicit about consistency trade-offs, and safe under overload. Use when designing or reviewing AWS-scale APIs, control-plane/data-plane splits, multi-AZ or multi-region services, retry/idempotency policies, queue-based workflows, cells, or noisy-neighbor isolation. Triggers include Werner Vogels, Dynamo, AWS-scale, eventual consistency, static stability, shuffle sharding, blast radius, control plane, data plane, retry storm, overload, and noisy neighbors.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/vogels",
@@ -605,22 +464,21 @@
         "domains",
         "systems_architecture",
         "vogels",
-        "cloud",
         "aws",
+        "distributed_systems",
+        "reliability",
         "eventual_consistency",
-        "api",
-        "microservices",
-        "scalability",
-        "failure",
-        "distributed",
-        "serverless",
-        "dynamo"
+        "static_stability",
+        "shuffle_sharding",
+        "control_plane",
+        "data_plane",
+        "cells"
       ]
     },
     {
       "id": "bach-exploratory-testing",
       "name": "bach",
-      "description": "Test software in the style of James Bach, pioneer of exploratory testing and context-driven testing. Emphasizes skilled human investigation, heuristics-based test design, and adapting to context rather than following rigid scripts. Use when designing test strategies, performing exploratory testing, or building thinking testers.",
+      "description": "Apply James Bach-style exploratory testing and Rapid Software Testing to choose session types, size charters, frame bugs with strong oracles, decide when to repeat versus vary tests, improve testability, and debrief testers without collapsing into test-case theater. Use when you need survey, analysis, deep-coverage, or closure sessions; when SBTM is being introduced or audited; when a team is over-counting test cases or over-trusting automation; or when testing GenAI/LLM systems responsibly. Triggers include: exploratory testing, RST, SBTM, session-based test management, charter, oracle, A FEW HICCUPPS, HTSM, SFDPOT, CRUSSPIC STMPL, paired exploratory survey, blink test, pesticide paradox, shallow agreement, Bach, Bolton.",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/bach",
@@ -630,21 +488,13 @@
       "tags": [
         "domains",
         "testing",
-        "bach",
-        "exploratory_testing",
-        "test_design",
-        "heuristics",
-        "risk_based",
-        "session_based",
-        "manual_testing",
-        "quality",
-        "critical_thinking"
+        "bach"
       ]
     },
     {
-      "id": "beck-test-driven-development",
+      "id": "beck-tdd",
       "name": "beck-tdd",
-      "description": "Develop software in the style of Kent Beck, creator of Test-Driven Development and Extreme Programming. Emphasizes red-green-refactor, tests-first design, small steps, and emergent architecture. Use when writing new features, refactoring legacy code, or establishing development discipline.",
+      "description": "Apply Kent Beck style TDD as a step-size and design-control system: decide when not to TDD, choose Obvious Implementation vs Fake It vs Triangulate, keep red phases tiny, separate tidy from behavior, and avoid structure-cementing tests. Use when implementing behavior from a known interface, pinning a reproduced bug, deciding between real collaborator, fake, or mock, coaching an AI agent through red-green-refactor, or routing work out to learning tests, spikes, or legacy characterization when TDD is the wrong tool. Triggers: \"TDD this\", \"red green refactor\", \"Kent Beck\", \"fake it\", \"triangulate\", \"obvious implementation\", \"Tidy First\", \"test list\", \"Detroit school\", \"classicist\", \"TCR\", \"learning test\", \"characterization test\".",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/beck-tdd",
@@ -654,22 +504,13 @@
       "tags": [
         "domains",
         "testing",
-        "beck_tdd",
-        "tdd",
-        "test_driven",
-        "red_green_refactor",
-        "unit_testing",
-        "design",
-        "refactoring",
-        "xp",
-        "agile",
-        "clean_code"
+        "beck_tdd"
       ]
     },
     {
       "id": "bolton-rapid-software-testing",
       "name": "bolton-rst",
-      "description": "Test software in the style of Michael Bolton, Rapid Software Testing co-creator with James Bach. Emphasizes the distinction between testing and checking, critical thinking, oracles, and the social nature of quality. Use when designing test strategies, evaluating test automation, or developing critical thinking in testers.",
+      "description": "Diagnose and improve software testing using Michael Bolton and James Bach's Rapid Software Testing heuristics. Use when evaluating a test strategy, reviewing automation or regression plans, creating or coaching exploratory sessions, writing charters or debriefs, framing release risk, surfacing testability issues, or defending exploratory work to managers, auditors, or developers. Triggers: exploratory testing, session-based test management, testing vs checking, FEW HICCUPPS, SFDIPOT, charter, debrief, coverage, testability, bug advocacy, \"all tests pass\".",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/bolton-rst",
@@ -679,21 +520,13 @@
       "tags": [
         "domains",
         "testing",
-        "bolton_rst",
-        "rapid_testing",
-        "context_driven",
-        "heuristics",
-        "oracles",
-        "risk_based",
-        "exploratory",
-        "skills",
-        "critical_thinking"
+        "bolton_rst"
       ]
     },
     {
       "id": "tigerbeetle-deterministic-simulation",
       "name": "deterministic-simulation",
-      "description": "Test distributed systems in the style of TigerBeetle and Joran Dirk Greef, using deterministic simulation and time compression. Emphasizes controlling all non-determinism, simulating years of operation in minutes, and finding bugs that would take decades to manifest in production. Use when testing distributed systems, consensus protocols, or any system where correctness under failure is critical.",
+      "description": "Build or review deterministic simulation harnesses for distributed systems in the TigerBeetle and FoundationDB style. Use when the task mentions DST, VOPR, replayable fault injection, seed-based reproduction, liveness or safety regressions, quorum-core healing, storage or network or clock fault models, targeted subsystem fuzzers, or time-compressed cluster testing.",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/deterministic-simulation",
@@ -703,19 +536,13 @@
       "tags": [
         "domains",
         "testing",
-        "deterministic_simulation",
-        "distributed",
-        "consensus",
-        "fault_injection",
-        "time_compression",
-        "correctness",
-        "reliability"
+        "deterministic_simulation"
       ]
     },
     {
-      "id": "maciver-hypothesis-testing",
+      "id": "hypothesis-testing-execution-guide",
       "name": "hypothesis",
-      "description": "Test software in the style of David MacIver, creator of Hypothesis. Emphasizes sophisticated shrinking, example databases, stateful testing, and practical property-based testing in Python. Use when testing Python code with complex data structures, APIs, or stateful systems.",
+      "description": "Expert Hypothesis playbook for turning property-based tests into reproducible, high-yield bug hunts. Use when writing or debugging Hypothesis tests with `@given`, `RuleBasedStateMachine`, `target()`, health checks, seeds, deadlines, `max_examples`, `stateful_step_count`, example databases, or flaky CI failures.",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/hypothesis",
@@ -725,20 +552,13 @@
       "tags": [
         "domains",
         "testing",
-        "hypothesis",
-        "property_based_testing",
-        "python",
-        "generators",
-        "shrinking",
-        "fuzzing",
-        "automated_testing",
-        "strategies"
+        "hypothesis"
       ]
     },
     {
       "id": "lipton-mutation-testing",
       "name": "mutation-testing",
-      "description": "Evaluate test quality in the style of Richard Lipton, father of mutation testing. Emphasizes injecting small faults (mutants) to measure test effectiveness, the competent programmer hypothesis, and the coupling effect. Use when assessing test suite quality, improving test coverage, or building mutation testing tools.",
+      "description": "Separate productive mutants from noise so mutation testing improves tests instead of gaming a score. Use when tuning PIT or Stryker runs, triaging survivors, timeouts, static mutants, or NoCoverage results, setting PR or CI mutation gates, or deciding whether a mutant is equivalent, arid, or worth a new test. Trigger keywords: mutation testing, mutation score, PIT, Stryker, survivor triage, equivalent mutant, arid code, static mutant, timeoutFactor, incremental, NoCoverage.",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/mutation-testing",
@@ -751,16 +571,14 @@
         "mutation_testing",
         "test_quality",
         "fault_injection",
-        "test_effectiveness",
-        "coverage",
-        "test_generation",
-        "quality"
+        "coverage_analysis",
+        "CI_gates"
       ]
     },
     {
       "id": "hughes-property-based-testing",
       "name": "property-based",
-      "description": "Test software in the style of John Hughes, inventor of QuickCheck and property-based testing. Emphasizes specifying properties that should hold for all inputs, generating random test cases, and shrinking failures to minimal examples. Use when testing algorithms, data structures, parsers, serializers, or any code with clear invariants.",
+      "description": "Design high-signal property-based tests in the style of John Hughes: choose between model-based, metamorphic, invariant, inductive, and state-machine properties; shape generator distributions; validate shrinkers; and diagnose discard and coverage pathologies. Use when testing algorithms, parsers, serializers, reducers, abstract data types, protocol/stateful APIs, or when requests mention QuickCheck, Hypothesis, generators, shrinking, metamorphic, model-based, stateful, or property tests.",
       "category": "domains",
       "subcategory": "testing",
       "path": "domains/testing/property-based",
@@ -770,22 +588,13 @@
       "tags": [
         "domains",
         "testing",
-        "property_based",
-        "property_based_testing",
-        "quickcheck",
-        "generators",
-        "shrinking",
-        "invariants",
-        "fuzzing",
-        "random_testing",
-        "formal",
-        "specification"
+        "property_based"
       ]
     },
     {
       "id": "scarface-mean-reversion",
       "name": "mean-reversion",
-      "description": "Trade mean reversion setups in the style of Scarface Trades, the mean reversion specialist known for mathematical precision and statistical edge. Emphasizes standard deviation bands, RSI extremes, and calculated entries with defined risk. Use when trading overextended moves, fading extremes, or building systematic reversion strategies.",
+      "description": "Trade dislocations in the style of Scarface Trades: fade statistically stretched moves only after anchor quality, regime, catalyst, and time-decay checks. Use when evaluating Bollinger/%B/z-score/VWAP/weekly-open/pairs-trading mean-reversion setups, deciding whether an extreme is exhaustion or a band-walk continuation, sizing a fade, or building a short-horizon reversion model. Trigger on: mean reversion, Bollinger Bands, z-score, VWAP reversion, weekly open, overextended move, buy the flush, sell the rip, pair spread, cointegration, half-life, fade extreme.",
       "category": "domains",
       "subcategory": "trading",
       "path": "domains/trading/mean-reversion",
@@ -795,20 +604,13 @@
       "tags": [
         "domains",
         "trading",
-        "mean_reversion",
-        "statistical",
-        "quantitative",
-        "pairs_trading",
-        "finance",
-        "signals",
-        "backtesting",
-        "strategy"
+        "mean_reversion"
       ]
     },
     {
       "id": "minervini-swing-trading",
       "name": "swing-trading",
-      "description": "Trade swing setups in the style of Mark Minervini, 3x US Investing Champion with 220%+ annual returns. Emphasizes SEPA methodology, trend templates, volatility contraction patterns (VCP), and strict risk management. Use when swing trading momentum stocks, identifying breakout setups, or building systematic trend-following strategies.",
+      "description": "Apply Mark Minervini's SEPA/VCP swing-trading framework to discretionary chart review, screen design, backtests, and post-trade diagnosis. Use when the task mentions Minervini, SEPA, VCP, trend template, cheat entry, low cheat, power play, high tight flag, base count, climax top, or breakout failure.",
       "category": "domains",
       "subcategory": "trading",
       "path": "domains/trading/swing-trading",
@@ -818,20 +620,13 @@
       "tags": [
         "domains",
         "trading",
-        "swing_trading",
-        "momentum",
-        "technical_analysis",
-        "stocks",
-        "finance",
-        "trend_following",
-        "risk_management",
-        "screening"
+        "swing_trading"
       ]
     },
     {
       "id": "alexandrescu-modern-cpp-design",
       "name": "alexandrescu",
-      "description": "Write C++ code following Andrei Alexandrescu's Modern C++ Design principles. Emphasizes policy-based design, template metaprogramming, and type-safe generic abstractions. Use when designing flexible, reusable libraries or when compile-time computation beats runtime overhead.",
+      "description": "Write C++ in the Alexandrescu / Modern C++ Design tradition, but with the hard-won trade-offs experts use in C++20/23: when policy-based design is worth the API fracture, when it must be replaced by type erasure or named sibling types, and how to avoid the layout, ABI, propagation, and compile-time traps that policy-heavy libraries create. Use when designing generic libraries, deciding whether a behavior belongs in a template parameter, refactoring inheritance into orthogonal policies, reviewing Loki-style code, choosing between policies / CRTP / type erasure / `if constexpr`, or when the user mentions Alexandrescu, Loki, policy-based design, typelists, custom deleters, `[[no_unique_address]]`, or template metaprogramming trade-offs.",
       "category": "languages",
       "subcategory": "cpp",
       "path": "languages/cpp/alexandrescu",
@@ -842,19 +637,22 @@
         "languages",
         "cpp",
         "alexandrescu",
+        "policy_based_design",
         "templates",
         "metaprogramming",
         "generic_programming",
-        "policy_design",
-        "smart_pointers",
-        "move_semantics",
-        "patterns"
+        "c++20",
+        "c++23",
+        "concepts",
+        "ebco",
+        "type_erasure",
+        "crtp"
       ]
     },
     {
       "id": "meyers-effective-cpp",
       "name": "meyers",
-      "description": "Write C++ code following Scott Meyers' Effective C++ principles. Emphasizes practical wisdom, specific guidelines with clear rationale, and avoiding common pitfalls. Use when writing production C++ code that must be correct, maintainable, and efficient.",
+      "description": "Apply Scott Meyers-style itemized review heuristics to C++ code where overload resolution, initialization syntax, special-member generation, perfect forwarding, smart-pointer ownership, lambda capture, and container behavior hide non-obvious failure modes. Use when designing or reviewing constructors, sinks, factories, pImpl types, move/copy operations, forwarding helpers, smart-pointer APIs, or performance-sensitive STL code. Triggers: meyers, effective-cpp, forwarding-reference, universal-reference, brace-init, initializer_list, noexcept-move, pimpl, make_shared, shared_ptr, unique_ptr, lambda-capture, std-async.",
       "category": "languages",
       "subcategory": "cpp",
       "path": "languages/cpp/meyers",
@@ -865,21 +663,13 @@
       "tags": [
         "languages",
         "cpp",
-        "meyers",
-        "raii",
-        "smart_pointers",
-        "const",
-        "move_semantics",
-        "templates",
-        "exceptions",
-        "best_practices",
-        "resource_management"
+        "meyers"
       ]
     },
     {
       "id": "parent-no-raw-loops",
       "name": "parent",
-      "description": "Write C++ code following Sean Parent's \"No Raw Loops\" philosophy. Emphasizes algorithm-based thinking, composition over iteration, and treating code as mathematical reasoning. Use when refactoring or writing new C++ to maximize clarity and correctness.",
+      "description": "Apply Sean Parent's \"no raw loops\" discipline to C++ by promoting control flow into named algorithm contracts, composing `rotate`/`partition`/`remove`/`fold` building blocks, and refusing lazy ranges when their semantics are wrong. Use when refactoring loop-heavy sequence code, replacing erase/insert churn, reviewing iterator-mutation bugs, choosing between `remove_if`, `partition`, `stable_partition`, `rotate`, `slide`, `gather`, and `accumulate` vs `reduce`, or diagnosing stateful predicates and `filter_view` hot-path issues. Triggers: no-raw-loops, Sean Parent, raw loop, rotate, slide, gather, erase-remove, stable_partition, filter_view, ranges hot path.",
       "category": "languages",
       "subcategory": "cpp",
       "path": "languages/cpp/parent",
@@ -890,19 +680,19 @@
         "languages",
         "cpp",
         "parent",
+        "c++",
         "algorithms",
-        "data_structures",
-        "value_semantics",
-        "no_raw_loops",
         "stl",
-        "generic_programming",
-        "clean_code"
+        "ranges",
+        "refactoring",
+        "sean_parent",
+        "no_raw_loops"
       ]
     },
     {
       "id": "stepanov-generic-programming",
       "name": "stepanov",
-      "description": "Write C++ code following Alexander Stepanov's generic programming principles. Emphasizes algorithms over data structures, concepts as requirements, and mathematical rigor in interface design. Use when designing reusable algorithms or data structures that must work across types.",
+      "description": "Derive STL-style C++ algorithms from proofs instead of from containers: choose the weakest iterator or concept that preserves correctness, preserve regular and value semantics, and state exact law and operation-count requirements. Use when designing or reviewing generic algorithms, iterators, ranges, comparators, rotate or merge style operations, function objects, or when prompts mention generic programming, regular types, iterator categories, concepts, value semantics, or \"make this algorithm truly generic\".",
       "category": "languages",
       "subcategory": "cpp",
       "path": "languages/cpp/stepanov",
@@ -918,42 +708,36 @@
         "iterators",
         "concepts",
         "stl",
-        "mathematical",
-        "abstraction",
-        "templates"
+        "value_semantics",
+        "regular_types",
+        "ranges"
       ]
     },
     {
       "id": "stroustrup-cpp-style",
       "name": "stroustrup",
-      "description": "Write C++ code in the style of Bjarne Stroustrup, creator of C++. Emphasizes type safety, resource management via RAII, zero-overhead abstractions, and direct hardware mapping. Use when designing C++ systems, APIs, or when clarity and efficiency must coexist.",
+      "description": "Apply Stroustrup's 21st-century ISO C++ style: subset-of-superset design, tool-enforceable safety rules, semantic concepts, RAII ownership, and zero-overhead interface choices. Use when designing or repairing modern C++17/20/23 APIs, signatures, templates, move/noexcept behavior, raw-pointer migrations, virtual-base contracts, or C/ABI boundaries. Triggers: RAII, rule of zero, owner<T*>, not_null, span, string_view, concepts, enable_if, virtual destructor, noexcept move, pimpl, lifetime, invalidation, shared_ptr, unique_ptr.",
       "category": "languages",
       "subcategory": "cpp",
       "path": "languages/cpp/stroustrup",
       "files": [
         "SKILL.md",
+        "generic-programming.md",
+        "move-and-raii.md",
+        "parameter-passing.md",
         "philosophy.md",
         "references.md"
       ],
       "tags": [
         "languages",
         "cpp",
-        "stroustrup",
-        "oop",
-        "raii",
-        "type_safety",
-        "resource_management",
-        "templates",
-        "exceptions",
-        "language_design",
-        "performance",
-        "systems"
+        "stroustrup"
       ]
     },
     {
       "id": "sutter-exceptional-cpp",
       "name": "sutter",
-      "description": "Write C++ code following Herb Sutter's exceptional C++ principles. Emphasizes exception safety, const correctness, modern idioms, and defensive programming. Use when writing robust, production-quality C++ that must handle errors gracefully.",
+      "description": "Write and review modern C++ in Herb Sutter's style: explicit failure contracts, ownership semantics, polymorphic boundaries, and concurrency-safe const behavior. Use when code involves exception safety, `noexcept`, moved-from state, `const` plus `mutable`, `pimpl`, `clone`, smart pointers, virtual interfaces, or lock-sensitive callbacks. Triggers: exceptional c++, strong guarantee, basic guarantee, commit or rollback, NVI, `make_unique`, `make_shared`, `weak_ptr`, `noexcept`, `shared_ptr`, `unique_ptr`.",
       "category": "languages",
       "subcategory": "cpp",
       "path": "languages/cpp/sutter",
@@ -964,20 +748,20 @@
         "languages",
         "cpp",
         "sutter",
+        "exceptions",
+        "noexcept",
+        "const",
         "concurrency",
         "move_semantics",
-        "smart_pointers",
-        "const",
-        "exceptions",
-        "guidelines",
-        "modern",
-        "best_practices"
+        "pimpl",
+        "polymorphism",
+        "smart_pointers"
       ]
     },
     {
       "id": "cheney-practical-go",
       "name": "cheney",
-      "description": "Write Go code in the style of Dave Cheney, Go community leader. Emphasizes practical patterns, clear error handling, and performance awareness. Use when writing production Go that needs to be maintainable and performant.",
+      "description": "Pragmatic Go API and code design in Dave Cheney's style: shrink public surface area, make the default path trivial, treat errors as API, and measure before optimizing. Use when writing or reviewing production Go, especially constructors, package boundaries, interfaces, error flows, logging, goroutine lifecycles, tests, or performance-sensitive code. Triggers: functional options, small interfaces, context misuse, internal packages, goroutine leaks, benchmarks, package-level logger, same-type parameters, streaming APIs.",
       "category": "languages",
       "subcategory": "go",
       "path": "languages/go/cheney",
@@ -988,21 +772,19 @@
         "languages",
         "go",
         "cheney",
-        "error_handling",
+        "api_design",
+        "errors",
         "interfaces",
-        "composition",
+        "logging",
+        "concurrency",
         "testing",
-        "performance",
-        "profiling",
-        "simplicity",
-        "practical",
-        "production"
+        "performance"
       ]
     },
     {
       "id": "cox-tooling-excellence",
       "name": "cox",
-      "description": "Write Go code in the style of Russ Cox, Go tech lead. Emphasizes tooling, module design, correctness, and backward compatibility. Use when designing packages, modules, or tools that others will depend on.",
+      "description": "Apply Russ Cox style to exported Go APIs, module graphs, and toolchain policy. Use when designing public packages, changing go.mod or toolchain settings, publishing releases, or debugging compatibility, MVS, retract, replace, GODEBUG, go mod tidy, go fix, or semantic import versioning issues. Triggers: backward compatibility, minimal version selection, /v2, private proxy, checksum, gorelease, toolchain, go line.",
       "category": "languages",
       "subcategory": "go",
       "path": "languages/go/cox",
@@ -1012,21 +794,13 @@
       "tags": [
         "languages",
         "go",
-        "cox",
-        "tooling",
-        "modules",
-        "testing",
-        "build_systems",
-        "developer_experience",
-        "code_review",
-        "automation",
-        "standard_library"
+        "cox"
       ]
     },
     {
       "id": "griesemer-precise-go",
       "name": "griesemer",
-      "description": "Write Go code in the style of Robert Griesemer, co-creator of Go. Emphasizes clean syntax, precise semantics, and well-defined type system behavior. Use when designing APIs, type hierarchies, or code that requires precise specification.",
+      "description": "Design and review Go code in the Robert Griesemer style: spec-first semantics, tight constraints, named-type preservation, and compatibility-safe API evolution. Use when writing or reviewing generics, interfaces, method sets, comparison logic, zero-value behavior, or exported APIs where exact language rules matter. Triggers: Go generics, constraints, comparable, type sets, underlying type, method sets, pointer receivers, zero value, public API compatibility.",
       "category": "languages",
       "subcategory": "go",
       "path": "languages/go/griesemer",
@@ -1038,18 +812,18 @@
         "go",
         "griesemer",
         "generics",
-        "type_parameters",
+        "constraints",
+        "comparable",
         "interfaces",
-        "compiler",
-        "language_design",
-        "type_system",
-        "constraints"
+        "method_sets",
+        "api_design",
+        "compatibility"
       ]
     },
     {
       "id": "kennedy-mechanical-sympathy",
       "name": "kennedy",
-      "description": "Write Go code in the style of Bill Kennedy, author of Go in Action. Emphasizes mechanical sympathy, data-oriented design, and understanding how Go code executes. Use when writing performance-critical Go or when teaching Go fundamentals.",
+      "description": "Apply Bill Kennedy's Go engineering style when correctness, latency, or API design depends on how the runtime actually pays for code. Use when working on escape analysis, value vs pointer semantics, channel/goroutine design, scheduler or GC behavior, profiling, tracing, or container tuning. Triggers: mechanical sympathy, data semantics, escape analysis, pprof, go tool trace, schedtrace, GOMAXPROCS, GOMEMLIMIT, channel buffer, sync.Pool, goroutine leaks.",
       "category": "languages",
       "subcategory": "go",
       "path": "languages/go/kennedy",
@@ -1060,21 +834,21 @@
         "languages",
         "go",
         "kennedy",
-        "performance",
-        "data_oriented",
-        "cache",
-        "memory",
-        "profiling",
-        "benchmarking",
-        "goroutines",
+        "runtime",
         "scheduler",
-        "hardware"
+        "gc",
+        "profiling",
+        "tracing",
+        "escape_analysis",
+        "channels",
+        "goroutines",
+        "semantics"
       ]
     },
     {
       "id": "pike-simplicity-first",
       "name": "pike",
-      "description": "Write Go code in the style of Rob Pike, co-creator of Go. Emphasizes radical simplicity, concurrency through communication, and composition over inheritance. Use when writing Go that should be clear, concurrent, and maintainable.",
+      "description": "Apply Rob Pike's simplicity-first Go heuristics for exported API shape, concurrency structure, package boundaries, and dependency restraint. Use when designing or refactoring Go libraries, public types, channel or goroutine pipelines, naming or package layouts, config or option patterns, or compatibility-sensitive changes. Triggers: rob pike, pike, simplicity, goroutines, channels, interfaces, context, package names, options, exported api, go library design.",
       "category": "languages",
       "subcategory": "go",
       "path": "languages/go/pike",
@@ -1084,22 +858,13 @@
       "tags": [
         "languages",
         "go",
-        "pike",
-        "simplicity",
-        "concurrency",
-        "channels",
-        "goroutines",
-        "composition",
-        "unix",
-        "plan9",
-        "interfaces",
-        "communication"
+        "pike"
       ]
     },
     {
       "id": "thompson-unix-philosophy",
       "name": "thompson",
-      "description": "Write Go code in the style of Ken Thompson, co-creator of Go, Unix, and C. Emphasizes Unix philosophy, minimalism, and programs that do one thing well. Use when designing tools, CLIs, or systems that should be composable and focused.",
+      "description": "Shape Go code in the Thompson/Pike/Bell Labs tradition: small tools, concrete types, data-driven control flow, text/file interfaces, and APIs that stay simple under change. Use when designing CLIs, filters, parsers, code generators, log processors, boundary packages, or small libraries where composition and long-term maintainability matter more than framework breadth. Triggers: \"unix philosophy\", \"thompson style\", \"pike style\", \"filter program\", \"compose pipeline\", \"plan 9 style\", \"data dominates\", \"do one thing well\", \"concrete types\", \"table-driven\", \"small tools\".",
       "category": "languages",
       "subcategory": "go",
       "path": "languages/go/thompson",
@@ -1109,25 +874,13 @@
       "tags": [
         "languages",
         "go",
-        "thompson",
-        "unix",
-        "utf_8",
-        "grep",
-        "regex",
-        "plan9",
-        "systems",
-        "encoding",
-        "text_processing",
-        "simplicity",
-        "operating_system",
-        "shell",
-        "pipes"
+        "thompson"
       ]
     },
     {
       "id": "abramov-state-composition",
       "name": "abramov",
-      "description": "Write JavaScript code in the style of Dan Abramov, co-creator of Redux and React core team member. Emphasizes predictable state management, composition over inheritance, and developer experience. Use when building React applications or managing complex state.",
+      "description": "Write React and Redux-flavored JavaScript in Dan Abramov's style: minimal state, honest effects, composition before memoization, reducers for event logs, and boundaries that survive refactors. Use when refactoring hooks, placing state, fixing stale closures, removing prop-state sync bugs, deciding local state vs reducer vs Redux, or untangling render-performance problems. Triggers: react, hooks, useEffect, useReducer, composition, memo, stale closure, derived state, Redux, normalized state.",
       "category": "languages",
       "subcategory": "javascript",
       "path": "languages/javascript/abramov",
@@ -1137,23 +890,13 @@
       "tags": [
         "languages",
         "javascript",
-        "abramov",
-        "react",
-        "components",
-        "state",
-        "hooks",
-        "rendering",
-        "virtual_dom",
-        "ui",
-        "frontend",
-        "mental_models",
-        "declarative"
+        "abramov"
       ]
     },
     {
       "id": "crockford-good-parts",
       "name": "crockford",
-      "description": "'Write JavaScript code in the style of Douglas Crockford, author of \"JavaScript: The Good Parts\". Emphasizes using only the reliable subset of JavaScript, avoiding problematic features, and writing clear, maintainable code. Use when writing robust, quality JavaScript.'",
+      "description": "Write or refactor JavaScript in Douglas Crockford's later defensive subset: class-free, this-free, semicolon-full, JSLint-clean code for long-lived, browser-exposed, JSON-heavy, or security-sensitive modules. Use when auditing or rewriting code with coercion, ASI, prototype leakage, ambient authority, frozen-object, `for...in`, `eval`, or unsafe-number bugs, and when the user mentions Crockford, Good Parts, JSLint, ADsafe, capability security, frozen factories, or class-free JavaScript.",
       "category": "languages",
       "subcategory": "javascript",
       "path": "languages/javascript/crockford",
@@ -1163,23 +906,13 @@
       "tags": [
         "languages",
         "javascript",
-        "crockford",
-        "closures",
-        "prototypes",
-        "objects",
-        "functions",
-        "scope",
-        "json",
-        "patterns",
-        "clean_code",
-        "browser",
-        "web"
+        "crockford"
       ]
     },
     {
       "id": "dodds-testing-practices",
       "name": "dodds",
-      "description": "Write JavaScript code in the style of Kent C. Dodds, testing advocate and React educator. Emphasizes testing best practices, React patterns, and developer productivity. Use when writing tests or building maintainable React applications.",
+      "description": "Pressure-test JavaScript and TypeScript test suites the Kent C. Dodds way: behavior-first, accessibility-first, and network-boundary aware. Use when writing or triaging React Testing Library, DOM Testing Library, Jest, Vitest, user-event, or MSW tests; fixing act warnings; choosing between getByRole, findBy, waitForElementToBeRemoved, test.each, or MSW; or deciding whether a helper abstraction is earning its keep. Trigger keywords: react-testing-library, testing-library, RTL, user-event, MSW, act warning, waitFor, findByRole, getByRole, fake timers, shallow rendering, test IDs, AHA testing.",
       "category": "languages",
       "subcategory": "javascript",
       "path": "languages/javascript/dodds",
@@ -1192,18 +925,19 @@
         "dodds",
         "testing",
         "react",
+        "typescript",
+        "testing_library",
+        "msw",
         "integration_testing",
-        "test_library",
         "accessibility",
-        "best_practices",
-        "frontend",
-        "automation"
+        "jest",
+        "vitest"
       ]
     },
     {
       "id": "eich-language-fundamentals",
       "name": "eich",
-      "description": "Write JavaScript code with deep understanding of the language fundamentals as envisioned by Brendan Eich, creator of JavaScript. Emphasizes first-class functions, prototypes, and the dynamic nature of the language. Use when leveraging JavaScript's unique characteristics.",
+      "description": "Write JavaScript with expert-level control over prototypes, dynamic objects, function binding, coercion, and V8 shape/array behavior. Use when working on hot Node/Chrome paths, serialization-heavy DTO pipelines, prototype-pollution risk, tricky `this` or optional-chaining bugs, or equality/defaulting migrations. Triggers: \"hidden class\", \"shape\", \"deopt\", \"elements kind\", \"prototype pollution\", \"__proto__\", \"Object.assign vs spread\", \"this binding\", \"arrow vs method\", \"optional chaining\", \"nullish coalescing\", \"Object.hasOwn\", \"Map vs Object\", \"coercion\", \"Eich\", \"ECMAScript semantics\".",
       "category": "languages",
       "subcategory": "javascript",
       "path": "languages/javascript/eich",
@@ -1214,20 +948,17 @@
         "languages",
         "javascript",
         "eich",
-        "language_design",
+        "v8",
         "prototypes",
-        "closures",
-        "browser",
-        "web",
-        "ecmascript",
-        "dynamic",
-        "scripting"
+        "coercion",
+        "security",
+        "performance"
       ]
     },
     {
       "id": "osmani-patterns-performance",
       "name": "osmani",
-      "description": "Write JavaScript code in the style of Addy Osmani, author of \"Learning JavaScript Design Patterns\" and Chrome DevTools engineer. Emphasizes design patterns, performance optimization, and progressive web apps. Use when building performant, well-structured applications.",
+      "description": "High-signal heuristics for JavaScript performance work in browser-delivered web apps. Use when choosing how to improve LCP, INP, CLS, startup cost, route transitions, speculative loading, or rendering containment without harming other metrics. Trigger keywords: Addy Osmani, web performance, cost of JavaScript, preload scanner, fetchpriority, prefetch, prerender, quicklink, long tasks, INP, LCP, CLS, bfcache, content-visibility, scheduler.yield, third-party facade.",
       "category": "languages",
       "subcategory": "javascript",
       "path": "languages/javascript/osmani",
@@ -1237,23 +968,13 @@
       "tags": [
         "languages",
         "javascript",
-        "osmani",
-        "design_patterns",
-        "performance",
-        "web",
-        "loading",
-        "caching",
-        "lazy_loading",
-        "bundling",
-        "optimization",
-        "frontend",
-        "browser"
+        "osmani"
       ]
     },
     {
       "id": "simpson-you-dont-know-js",
       "name": "simpson",
-      "description": "Write JavaScript code in the style of Kyle Simpson, author of \"You Don't Know JS\". Emphasizes deep understanding of JavaScript mechanics\u2014scope, closures, this, prototypes, and async. Use when you need to truly understand JavaScript behavior.",
+      "description": "Deep JavaScript semantics in the style of Kyle Simpson. Use when debugging or refactoring bugs involving `this`, scope, closures, prototypes, `class`/`super`, coercion, promises, microtasks, sparse arrays, or host-vs-language confusion. Triggers: \"why does JS do this\", \"lost this\", \"closure bug\", \"prototype chain\", \"safe ==\", \"async ordering\", \"microtask\", \"class field\", \"super\", \"holey array\".",
       "category": "languages",
       "subcategory": "javascript",
       "path": "languages/javascript/simpson",
@@ -1263,23 +984,13 @@
       "tags": [
         "languages",
         "javascript",
-        "simpson",
-        "scope",
-        "closures",
-        "this",
-        "prototypes",
-        "async",
-        "promises",
-        "generators",
-        "coercion",
-        "types",
-        "deep_understanding"
+        "simpson"
       ]
     },
     {
       "id": "beazley-deep-python",
       "name": "beazley",
-      "description": "Write Python code in the style of David Beazley, author of Python Cookbook. Emphasizes generators, coroutines, metaprogramming, and understanding Python's internals. Use when writing advanced Python that requires deep language mastery.",
+      "description": "Protocol-first guidance for advanced Python in David Beazley's style: generator pipelines, send/throw/close semantics, descriptor precedence, metaclass and code-generation trade-offs, GIL behavior, and inspect-driven debugging. Use when working on streaming pipelines, yield-from refactors, generator-based coroutines, descriptors, metaclasses, import hooks, or subtle CPython behavior. Trigger keywords: generator pipeline, yield from, send, throw, close, descriptor, __set_name__, metaclass, __signature__, inspect, GIL, free-threaded.",
       "category": "languages",
       "subcategory": "python",
       "path": "languages/python/beazley",
@@ -1292,19 +1003,18 @@
         "beazley",
         "generators",
         "coroutines",
-        "metaprogramming",
-        "decorators",
-        "async",
+        "descriptors",
+        "metaclasses",
+        "inspect",
+        "cpython",
         "concurrency",
-        "internals",
-        "advanced",
-        "performance"
+        "streaming"
       ]
     },
     {
       "id": "hettinger-idiomatic-python",
       "name": "hettinger",
-      "description": "Write Python code in the style of Raymond Hettinger, Python core developer. Emphasizes beautiful, idiomatic code using iterators, generators, and built-in tools elegantly. Use when transforming code into clean, Pythonic solutions.",
+      "description": "Encode Raymond Hettinger-style Python design judgment: iterator algebra, container choice, sorting and caching trade-offs, and cooperative inheritance. Use when refactoring loops into stdlib primitives, deciding between `defaultdict`/`Counter`/`deque`/`ChainMap`, tuning `lru_cache` or `cached_property`, designing `super()`-friendly hierarchies, or replacing comparison-heavy code with key-based sorts. Trigger keywords: pythonic, idiomatic Python, Hettinger, itertools, collections, functools, sort key, groupby, tee, defaultdict, OrderedDict, ChainMap, lru_cache, cached_property, total_ordering, super, MRO.",
       "category": "languages",
       "subcategory": "python",
       "path": "languages/python/hettinger",
@@ -1314,22 +1024,13 @@
       "tags": [
         "languages",
         "python",
-        "hettinger",
-        "itertools",
-        "collections",
-        "decorators",
-        "idioms",
-        "readability",
-        "functional",
-        "generators",
-        "clean_code",
-        "pythonic"
+        "hettinger"
       ]
     },
     {
       "id": "ramalho-fluent-python",
       "name": "ramalho",
-      "description": "Write Python code in the style of Luciano Ramalho, author of Fluent Python. Emphasizes deep understanding of Python's data model, special methods, and advanced idioms. Use when writing code that leverages Python's full power elegantly.",
+      "description": "Design Python objects that cooperate with the interpreter through protocols, descriptors, dataclasses, weak references, and zero-copy buffers. Use when writing or refactoring custom collections, value objects, operator overloads, `Protocol` types, `__slots__`, descriptors, `memoryview` or `struct` code, or advanced dataclass APIs. Trigger on: dunder methods, `NotImplemented`, `Protocol`, `runtime_checkable`, `__slots__`, `descriptor`, `weakref`, `cached_property`, `dataclass`, `memoryview`, `struct`.",
       "category": "languages",
       "subcategory": "python",
       "path": "languages/python/ramalho",
@@ -1340,21 +1041,20 @@
         "languages",
         "python",
         "ramalho",
-        "data_model",
         "protocols",
-        "type_hints",
-        "iterators",
-        "generators",
+        "dataclasses",
         "descriptors",
-        "metaprogramming",
-        "advanced",
-        "idioms"
+        "slots",
+        "weakref",
+        "memoryview",
+        "typing",
+        "data_model"
       ]
     },
     {
       "id": "reitz-api-design",
       "name": "reitz",
-      "description": "Write Python code in the style of Kenneth Reitz, creator of Requests. Emphasizes beautiful API design, simplicity for users, and the \"for humans\" philosophy. Use when designing libraries, APIs, or any interface that other developers will consume.",
+      "description": "Design Python libraries and developer-facing APIs in Kenneth Reitz's \"for humans\" style: README-first interface design, porcelain-over-mechanics layering, brutally small public surfaces, and humane naming and error semantics. Use when shaping a package's public API, simplifying an HTTP or client SDK, choosing top-level imports, designing Session or Response style objects, or reviewing a library that feels correct but hostile. Triggers: requests-style, developer experience, wrapper library, client SDK, public API, Session, Response, timeout, auth, retries, adapters, ergonomics.",
       "category": "languages",
       "subcategory": "python",
       "path": "languages/python/reitz",
@@ -1364,21 +1064,13 @@
       "tags": [
         "languages",
         "python",
-        "reitz",
-        "api_design",
-        "requests",
-        "http",
-        "packaging",
-        "simplicity",
-        "developer_experience",
-        "library_design",
-        "pythonic"
+        "reitz"
       ]
     },
     {
       "id": "ronacher-pragmatic-design",
       "name": "ronacher",
-      "description": "Write Python code in the style of Armin Ronacher, creator of Flask and Jinja2. Emphasizes pragmatic minimalism, explicit over implicit, and composable design. Use when building frameworks, libraries, or applications that need to be extensible and maintainable.",
+      "description": "Design Python libraries, Flask/Werkzeug/Jinja/Click code, and extension APIs in Armin Ronacher's style: explicit application objects, composable primitives, sharp but documented escape hatches, and minimal magic. Use when shaping framework or library interfaces, Flask extensions, request-context code, blueprints vs WSGI composition, Jinja environments or filters, or Click CLIs. Triggers: Flask, Werkzeug, Jinja, Click, LocalProxy, current_app, app factory, blueprint, WSGI middleware, autoescape, StrictUndefined, init_app.",
       "category": "languages",
       "subcategory": "python",
       "path": "languages/python/ronacher",
@@ -1390,21 +1082,20 @@
         "python",
         "ronacher",
         "flask",
-        "web",
-        "wsgi",
-        "templating",
-        "api",
-        "middleware",
-        "pragmatic",
-        "library_design",
+        "werkzeug",
+        "jinja",
         "click",
-        "cli"
+        "wsgi",
+        "app_factory",
+        "extension_design",
+        "api_design",
+        "library_design"
       ]
     },
     {
       "id": "vanrossum-pythonic-style",
       "name": "vanrossum",
-      "description": "Write Python code in the style of Guido van Rossum, creator of Python. Emphasizes readability, simplicity, and the Pythonic way. Use when writing Python that should be clear, maintainable, and follow the language's design philosophy.",
+      "description": "Design and review Python the way Guido-style library maintainers do: preserve debuggability, keep APIs evolvable, and avoid CPython-only traps. Use when deciding public signatures, dataclass layout, slots, caching, encoding defaults, inheritance boundaries, immutable subclasses, or disputed \"Pythonic\" trade-offs. Triggers: pythonic, Guido, van Rossum, positional-only, keyword-only, dataclass, slots, weakref_slot, __match_args__, cached_property, lru_cache, unsafe_hash, EncodingWarning, __new__, walrus, tail recursion.",
       "category": "languages",
       "subcategory": "python",
       "path": "languages/python/vanrossum",
@@ -1415,21 +1106,20 @@
         "languages",
         "python",
         "vanrossum",
-        "zen",
-        "readability",
-        "simplicity",
-        "pep8",
-        "language_design",
-        "clean_code",
-        "standard_library",
-        "idioms",
-        "beginner_friendly"
+        "pythonic",
+        "van_rossum",
+        "api_design",
+        "dataclass",
+        "slots",
+        "caching",
+        "encoding",
+        "inheritance"
       ]
     },
     {
       "id": "bos-concurrency-rust",
       "name": "bos",
-      "description": "Write Rust code in the style of Mara Bos, Rust library team lead and author of \"Rust Atomics and Locks.\" Emphasizes low-level concurrency, atomics, and understanding the memory model. Use when writing concurrent or lock-free code.",
+      "description": "Design and review Rust concurrency in the style of Mara Bos: atomics, memory ordering, lock internals, wait/notify, false-sharing avoidance, and contention tuning. Use when implementing or auditing custom `Mutex`/`RwLock`/spinlock/condvar code, choosing `Ordering`, reasoning about `Arc`/`Weak` or `OnceLock`, debugging lock-free races, or testing concurrency with Loom. Triggers: `Atomic*`, `Ordering`, `compare_exchange`, lock-free, spinlock, false sharing, `Arc`, `Weak`, `OnceLock`, `wait`, `notify`, Loom, contention, cache line.",
       "category": "languages",
       "subcategory": "rust",
       "path": "languages/rust/bos",
@@ -1442,22 +1132,22 @@
         "bos",
         "concurrency",
         "atomics",
+        "memory_ordering",
         "locks",
-        "threads",
-        "parallel",
-        "memory_model",
-        "mutex",
-        "sync",
-        "async",
-        "low_level",
-        "systems",
+        "spinlocks",
+        "condvar",
+        "arc",
+        "weak",
+        "once_lock",
+        "loom",
+        "false_sharing",
         "performance"
       ]
     },
     {
       "id": "hoare-rust-origins",
       "name": "hoare",
-      "description": "Write Rust code informed by Graydon Hoare's original vision for Rust. Emphasizes memory safety without GC, practical systems programming, and learning from C/C++ mistakes. Use when designing safe systems code or understanding Rust's fundamental choices.",
+      "description": "Design Rust APIs and low-level code around Hoare's original trade-offs: explicit ownership, explicit allocation, move-over-share, and safety without GC. Use when writing unsafe Rust, FFI, async or address-sensitive code, intrusive or graph-shaped data structures, or when borrow-checker friction suggests the ownership model is wrong. Triggers: unsafe, FFI, Pin, Rc, Arc, RefCell, lifetimes, aliasing, self-referential, graph, Send, Sync, arena.",
       "category": "languages",
       "subcategory": "rust",
       "path": "languages/rust/hoare",
@@ -1467,16 +1157,7 @@
       "tags": [
         "languages",
         "rust",
-        "hoare",
-        "ownership",
-        "borrowing",
-        "memory_safety",
-        "type_system",
-        "systems",
-        "compiler",
-        "safety",
-        "zero_cost_abstractions",
-        "performance"
+        "hoare"
       ]
     },
     {
@@ -1508,7 +1189,7 @@
     {
       "id": "levien-native-ui-mastery",
       "name": "levien",
-      "description": "Build native UIs in the style of Raph Levien, architect of Druid, Xilem, and Vello. Emphasizes declarative reactive architecture, synchronized tree transformations, GPU-accelerated rendering, and idiomatic Rust patterns. Use when designing responsive, beautiful native UIs or 2D graphics systems.",
+      "description": "Design Rust native UI stacks in the style of Raph Levien across Xilem, Masonry, Vello, Parley, AccessKit, and Kurbo. Use when building reactive retained or hybrid UIs, GPU vector renderers, virtualized editors or lists, accessibility-sensitive widgets, or multilingual text systems where stable identity, incremental diffing, clip culling, scene encoding, smooth resize, font fallback, or compute-shader tradeoffs matter. Triggers: xilem, vello, masonry, accesskit, parley, kurbo, retained vs immediate, stable widget id, virtualized scroll, text shaping, font fallback, smooth resize.",
       "category": "languages",
       "subcategory": "rust",
       "path": "languages/rust/levien",
@@ -1526,14 +1207,11 @@
         "rendering",
         "gpu",
         "graphics",
-        "2d",
-        "vector",
-        "canvas",
-        "widget",
-        "reactive",
-        "layout",
+        "text",
+        "accessibility",
+        "xilem",
         "vello",
-        "druid"
+        "parley"
       ]
     },
     {
@@ -1564,7 +1242,7 @@
     {
       "id": "nichols-practical-rust",
       "name": "nichols",
-      "description": "Write Rust code in the style of Carol Nichols, co-author of The Rust Book. Emphasizes practical patterns, clear explanations, and real-world applicability. Use when writing production Rust or explaining Rust to others.",
+      "description": "Apply Carol Nichols style practical Rust judgment to libraries, binaries, async services, and crate reviews. Use when changing public APIs, Cargo features, MSRV, tokio control flow, error boundaries, or unsafe edges. Triggers: Rust, Cargo.toml, tokio, semver, feature flags, crates.io, async cancellation, MSRV.",
       "category": "languages",
       "subcategory": "rust",
       "path": "languages/rust/nichols",
@@ -1574,22 +1252,13 @@
       "tags": [
         "languages",
         "rust",
-        "nichols",
-        "idioms",
-        "practical",
-        "error_handling",
-        "testing",
-        "documentation",
-        "crates",
-        "community",
-        "beginner_friendly",
-        "patterns"
+        "nichols"
       ]
     },
     {
       "id": "turon-api-design",
       "name": "turon",
-      "description": "Write Rust code in the style of Aaron Turon, former Rust team lead. Emphasizes API design, async Rust, and ecosystem architecture. Use when designing public APIs, async systems, or library interfaces.",
+      "description": "Design Rust public APIs in Aaron Turon's style: borrowed-first async interfaces, zero-cost lower layers, semver-aware trait boundaries, and ecosystem-friendly layering. Use when shaping async I/O crates, public traits, return types, runtime boundaries, re-exports, or extension points. Triggers: async api, futures, tokio, impl Trait, object safety, blanket impl, specialization, backpressure, cancellation, crate facade.",
       "category": "languages",
       "subcategory": "rust",
       "path": "languages/rust/turon",
@@ -1600,21 +1269,21 @@
         "languages",
         "rust",
         "turon",
-        "api_design",
         "async",
+        "api_design",
         "futures",
-        "ecosystem",
-        "library_design",
+        "semver",
         "traits",
-        "concurrency",
-        "ergonomics",
-        "public_api"
+        "object_safety",
+        "backpressure",
+        "cancellation",
+        "ecosystem"
       ]
     },
     {
       "id": "cro-practical-zig",
       "name": "cro",
-      "description": "Write Zig code in the style of Loris Cro, VP Community at Zig Software Foundation. Emphasizes practical patterns, build system mastery, and teaching Zig effectively. Use when building real applications or learning Zig idioms.",
+      "description": "Practical Zig decision guide in Loris Cro's style: use Zig as a toolchain and integration layer first, keep build.zig and build.zig.zon as the source of truth, migrate C/C++ gradually, and express I/O and concurrency requirements precisely. Use when writing production Zig, designing build.zig, packaging cross-platform apps, wrapping C libraries, or evaluating async and event-loop code. Triggers: zig, build.zig, build.zig.zon, zig cc, zig translate-c, @cImport, std.Build, cross-compilation, system library, Io, asyncConcurrent, snapshot testing.",
       "category": "languages",
       "subcategory": "zig",
       "path": "languages/zig/cro",
@@ -1625,19 +1294,18 @@
         "languages",
         "zig",
         "cro",
-        "comptime",
-        "allocators",
-        "safety",
-        "systems",
         "build_system",
+        "c_interop",
+        "async",
         "cross_compilation",
-        "simplicity"
+        "package_management",
+        "testing"
       ]
     },
     {
       "id": "kelley-zig-philosophy",
       "name": "kelley",
-      "description": "Write Zig code in the style of Andrew Kelley, creator of Zig. Emphasizes simplicity, explicit behavior, compile-time metaprogramming, and being a better C. Use when writing systems code that prioritizes clarity and safety.",
+      "description": "Write Zig in Andrew Kelley's style: explicit ownership, visible control flow, compile-time used for proof or specialization instead of cleverness, and ABI-aware data layout. Use when writing or reviewing Zig systems code, choosing allocators and lifetime models, debugging comptime or result-location bugs, or designing FFI/MMIO boundaries. Triggers: zig, comptime, allocator, ownership, lifetime, packed struct, extern struct, sentinel slice, OutOfMemory, result location semantics, ArrayList.items.",
       "category": "languages",
       "subcategory": "zig",
       "path": "languages/zig/kelley",
@@ -1647,21 +1315,13 @@
       "tags": [
         "languages",
         "zig",
-        "kelley",
-        "comptime",
-        "allocators",
-        "manual_memory",
-        "simplicity",
-        "explicit",
-        "no_hidden_control_flow",
-        "systems",
-        "safety"
+        "kelley"
       ]
     },
     {
       "id": "aqr-factor-investing",
       "name": "aqr",
-      "description": "Build investment systems in the style of AQR Capital Management, the quantitative investment firm pioneering factor investing. Emphasizes academic rigor, transparent methodology, and systematic factor exposure. Use when building factor models, conducting asset pricing research, or designing systematic portfolios.",
+      "description": "AQR-style factor-investing heuristics for building and diagnosing live value, momentum, quality, defensive, and size-when-quality-controlled portfolios. Use when constructing long-only or long-short factor books, fixing backtests that look too academic, deciding how to integrate factors, model costs, or interpret a brutal drawdown, or when terms like HML Devil, 12-1 momentum, QMJ, BAB, integrated portfolio, value spread, factor timing, size minus junk, or implementation shortfall appear.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/aqr",
@@ -1676,15 +1336,13 @@
         "risk_management",
         "portfolio",
         "backtesting",
-        "finance",
-        "statistics",
-        "hedge_fund"
+        "finance"
       ]
     },
     {
       "id": "citadel-low-latency-systems",
       "name": "citadel",
-      "description": "Build trading systems in the style of Citadel Securities, the world's largest market maker. Emphasizes ultra-low latency, deterministic execution, kernel bypass networking, and high-frequency trading infrastructure. Use when building latency-critical systems, market making engines, or high-performance trading platforms.",
+      "description": "Engineer trading and market-data paths for tail-latency rather than benchmark vanity metrics. Use when requests mention sub-microsecond or jitter-sensitive systems, market making, order gateways, feed handlers, DPDK, Onload, AF_XDP, busy polling, NUMA pinning, interrupt coalescing, or NIC/CPU topology.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/citadel",
@@ -1698,18 +1356,18 @@
         "low_latency",
         "market_making",
         "hft",
-        "fpga",
+        "dpdk",
+        "onload",
+        "af_xdp",
+        "numa",
         "networking",
-        "systems",
-        "performance",
-        "finance",
         "real_time"
       ]
     },
     {
       "id": "cloudflare-performance-engineering",
       "name": "cloudflare",
-      "description": "Engineer high-performance network systems in the style of Cloudflare's performance team. Emphasizes kernel bypass (XDP/eBPF), edge computing with V8 isolates, Rust for systems programming, smart routing, and measuring everything. Use when building globally distributed systems, DDoS mitigation, CDN infrastructure, or any system where every millisecond matters at massive scale.",
+      "description": "Design and review latency-critical edge, proxy, cache, and packet-processing systems using Cloudflare-style heuristics for XDP/eBPF, connection reuse, tiered cache, anycast routing, and QUIC/HTTP/3. Use when building or debugging CDN, reverse proxy, DDoS mitigation, origin routing, or edge compute paths where tail latency and failure amplification matter. Triggers: xdp, ebpf, pingora, quic, http/3, anycast, tiered cache, origin shield, connection reuse, tail latency, ddos, cache collapse.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/cloudflare",
@@ -1722,11 +1380,10 @@
         "cdn",
         "networking",
         "performance",
-        "edge_computing",
+        "edge",
         "dns",
         "http",
         "tls",
-        "security",
         "proxy",
         "scale",
         "systems",
@@ -1736,7 +1393,7 @@
     {
       "id": "de-shaw-computational-finance",
       "name": "de-shaw",
-      "description": "Build trading systems in the style of D.E. Shaw, the pioneering computational finance firm. Emphasizes systematic strategies, rigorous quantitative research, and world-class technology infrastructure. Use when building research platforms, systematic trading strategies, or quantitative finance infrastructure.",
+      "description": "Make research, portfolio, and execution decisions in a D.E. Shaw style: hypothesis-first, leak-intolerant, capacity-aware systematic trading. Use when building alpha research, stat-arb, factor portfolios, transaction-cost models, risk systems, or research infrastructure. Triggers: quant, stat arb, alpha decay, market impact, borrow fee, crowding, backtest, factor model, execution, capacity.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/de-shaw",
@@ -1749,17 +1406,16 @@
         "trading",
         "computational_finance",
         "quantitative",
-        "simulation",
-        "risk_management",
-        "hpc",
-        "finance",
-        "algorithms"
+        "stat_arb",
+        "market_microstructure",
+        "risk",
+        "portfolio_construction"
       ]
     },
     {
       "id": "google-continuous-fuzzing",
       "name": "continuous-fuzzing",
-      "description": "Apply Google's continuous fuzzing methodology using OSS-Fuzz and ClusterFuzz. Emphasizes coverage-guided fuzzing, automated bug triage, and integration into CI/CD. Use when building robust testing infrastructure or finding security vulnerabilities at scale.",
+      "description": "Improve OSS-Fuzz, ClusterFuzz, and CIFuzz integrations for real bug yield: choose harness shape, diagnose plateaued fuzzers, triage unreliable crashes, and avoid corpus-destroying or coverage-killing mistakes. Use when working on OSS-Fuzz project.yaml/build.sh/Dockerfile/CIFuzz, writing or splitting fuzz targets, tuning seed corpora or dictionaries, or debugging timeouts, OOMs, and low-coverage fuzzers. Triggers: oss-fuzz, clusterfuzz, cifuzz, fuzz target, seed corpus, dictionary, timeout, oom, sanitizer, fuzz introspector, unreliable crash.",
       "category": "organizations",
       "subcategory": "google",
       "path": "organizations/google/continuous-fuzzing",
@@ -1769,22 +1425,13 @@
       "tags": [
         "organizations",
         "google",
-        "continuous_fuzzing",
-        "fuzzing",
-        "oss_fuzz",
-        "coverage_guided",
-        "sanitizers",
-        "security",
-        "testing",
-        "crash",
-        "vulnerability",
-        "automated"
+        "continuous_fuzzing"
       ]
     },
     {
       "id": "google-material-design",
       "name": "material-design",
-      "description": "Design interfaces following Google's Material Design system, the unified visual language bridging digital and physical worlds. Emphasizes bold graphic design, intentional motion, adaptive layouts, and the material metaphor. Use when building modern, accessible, delightful user interfaces across platforms.",
+      "description": "Apply modern Material Design 3 and Material 3 Expressive using current spec behavior, not M2 or early-M3 folklore. Use when designing or reviewing Android, Compose, Flutter, or web UIs that rely on Material tokens, dynamic color, adaptive navigation, window size classes, or M3 Expressive motion; when upgrading compose-material3 and visuals change unexpectedly; or when requests mention material design, material 3, material you, m3 expressive, dynamic color, surface container, primaryFixed, navigation suite, wide navigation rail, list-detail scaffold, supporting pane, shared element, tonal elevation, or HCT.",
       "category": "organizations",
       "subcategory": "google",
       "path": "organizations/google/material-design",
@@ -1794,23 +1441,13 @@
       "tags": [
         "organizations",
         "google",
-        "material_design",
-        "ui",
-        "ux",
-        "design_system",
-        "components",
-        "animation",
-        "accessibility",
-        "responsive",
-        "mobile",
-        "web",
-        "visual"
+        "material_design"
       ]
     },
     {
       "id": "google-sre",
       "name": "sre",
-      "description": "Apply Google's Site Reliability Engineering methodology. Emphasizes error budgets, SLO-driven operations, toil elimination, and blameless postmortems. Use when building and operating reliable services at scale.",
+      "description": "Apply Google's Site Reliability Engineering decision heuristics for SLO design, burn-rate alerting, error-budget policy, on-call sustainability, and postmortem quality. Use when defining or revising SLIs/SLOs, deciding whether to freeze releases, tuning burn-rate alerts, diagnosing operational overload, reviewing pager design, or rejecting hero-based reliability practices. Triggers: \"SRE\", \"SLI\", \"SLO\", \"error budget\", \"burn rate\", \"toil\", \"on-call\", \"pager\", \"postmortem\", \"reliability\", \"incident\", \"availability\", \"latency\", \"freeze releases\", \"heroism\".",
       "category": "organizations",
       "subcategory": "google",
       "path": "organizations/google/sre",
@@ -1820,22 +1457,13 @@
       "tags": [
         "organizations",
         "google",
-        "sre",
-        "reliability",
-        "monitoring",
-        "slo",
-        "error_budget",
-        "incident_response",
-        "toil",
-        "automation",
-        "observability",
-        "on_call"
+        "sre"
       ]
     },
     {
       "id": "gremlin-enterprise-chaos",
       "name": "enterprise-chaos",
-      "description": "Apply Gremlin's enterprise chaos engineering methodology. Emphasizes categorized failure injection, safety controls, and structured experimentation. Use when implementing chaos engineering in enterprise environments with compliance requirements.",
+      "description": "Design and review Gremlin chaos experiments, Scenarios, Reliability Tests, and Failure Flags for enterprise systems. Use when choosing between latency, packet loss, blackhole, DNS, shutdown, time travel, certificate expiry, or application-layer failure injection; when defining Health Checks and halt logic; when growing blast radius safely; or when interpreting reliability score changes and GameDay outcomes. Triggers: gremlin, chaos engineering, scenario, health check, reliability test, reliability score, failure flags, gameday, latency, packet loss, blackhole, dns, time travel, certificate expiry.",
       "category": "organizations",
       "subcategory": "gremlin",
       "path": "organizations/gremlin/enterprise-chaos",
@@ -1847,19 +1475,18 @@
         "gremlin",
         "enterprise_chaos",
         "chaos_engineering",
-        "fault_injection",
-        "resilience",
-        "gameday",
-        "blast_radius",
         "reliability",
-        "failure_modes",
-        "testing"
+        "fault_injection",
+        "failure_flags",
+        "gameday",
+        "resiliency",
+        "health_checks"
       ]
     },
     {
       "id": "hashicorp",
       "name": "hashicorp",
-      "description": "Build systems and organizations using the \"Tao of HashiCorp\". Emphasizes workflows over technologies, simple modular composable tools, immutability, and versioning driven by code. Use when designing platform engineering initiatives, DevOps workflows, or infrastructure automation.",
+      "description": "Design workflow-first platform engineering, Terraform/Vault/Consul/Nomad operating models, and self-service infrastructure boundaries in a HashiCorp style. Use when defining golden paths, workspace and state topology, secrets or service-discovery architecture, scheduler trade-offs, or migration plans that must survive technology swaps. Trigger keywords: workflow-first, immutability, Terraform workspace, remote state, Vault token, Consul stale read, Nomad binpack, platform team, self-service, golden path.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/hashicorp",
@@ -1868,24 +1495,13 @@
       ],
       "tags": [
         "organizations",
-        "hashicorp",
-        "infrastructure",
-        "terraform",
-        "vault",
-        "consul",
-        "nomad",
-        "iac",
-        "devops",
-        "automation",
-        "workflows",
-        "cloud",
-        "deployment"
+        "hashicorp"
       ]
     },
     {
       "id": "jane-street-functional-trading",
       "name": "jane-street",
-      "description": "Build trading systems in the style of Jane Street, the elite market maker known for functional programming and intellectual rigor. Emphasizes OCaml, correctness by construction, real-time systems, and principled risk management. Use when building market making systems, pricing engines, or mission-critical financial software.",
+      "description": "Design or review trading systems in a Jane Street style: atomic risk boundaries, replay-first architecture, determinism before headline speed, and OCaml/typed-functional techniques only where they buy real safety or latency. Use when building or debugging market making, pricing, market-data, exchange, or risk infrastructure, especially when users mention OCaml, order books, inventory limits, replay, jitter, queue growth, zero-allocation hot paths, or microsecond latency.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/jane-street",
@@ -1896,20 +1512,21 @@
         "organizations",
         "jane_street",
         "ocaml",
-        "functional",
         "trading",
         "market_making",
-        "finance",
-        "type_safety",
-        "correctness",
-        "low_latency",
-        "quantitative"
+        "exchange",
+        "latency",
+        "determinism",
+        "replay",
+        "risk",
+        "queueing",
+        "concurrency"
       ]
     },
     {
       "id": "jump-trading-fpga-hft",
       "name": "jump-trading",
-      "description": "Build trading systems in the style of Jump Trading, the high-frequency trading firm pioneering FPGA-based trading. Emphasizes hardware acceleration, network optimization, and nanosecond-level execution. Use when building FPGA trading systems, network-optimized infrastructure, or ultra-low-latency order execution.",
+      "description": "Expert playbook for FPGA-first electronic trading systems where wire-to-wire latency, determinism, and feed correctness dominate. Use when building or reviewing tick-to-trade paths, pre-trade risk gates, multicast A/B feed arbitration, 10G or 25G low-latency links, PTP or 1PPS timestamping, microwave-vs-fiber path choices, or FPGA/CPU partitioning for HFT. Triggers: FPGA trading, HFT, low latency, FEC, PTP, multicast gap recovery, cut-through, pre-trade risk, microwave, tick-to-trade.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/jump-trading",
@@ -1925,16 +1542,14 @@
         "trading",
         "hardware",
         "networking",
-        "market_making",
-        "colocation",
-        "systems",
-        "real_time"
+        "market_data",
+        "timestamping"
       ]
     },
     {
       "id": "netflix-chaos-engineering",
       "name": "chaos-engineering",
-      "description": "Apply Netflix's chaos engineering methodology to build resilient systems. Emphasizes controlled failure injection, steady-state hypothesis testing, and building confidence through experimentation. Use when you need to verify system resilience under turbulent conditions.",
+      "description": "Design and review Netflix-style production chaos experiments for distributed systems. Use when scoping FIT or ChAP style failure injection, choosing steady-state and abort metrics, prioritizing dependency experiments, or diagnosing noisy results from canary versus control chaos runs. Triggers: chaos engineering, FIT, ChAP, failure injection, steady state, blast radius, canary, fallback, retry storm, Hystrix, resilience.",
       "category": "organizations",
       "subcategory": "netflix",
       "path": "organizations/netflix/chaos-engineering",
@@ -1946,19 +1561,15 @@
         "netflix",
         "chaos_engineering",
         "resilience",
-        "fault_tolerance",
-        "microservices",
-        "distributed",
-        "failure",
-        "testing",
-        "reliability",
-        "cloud"
+        "failure_injection",
+        "distributed_systems",
+        "reliability"
       ]
     },
     {
       "id": "renaissance-statistical-arbitrage",
       "name": "renaissance",
-      "description": "Build trading systems in the style of Renaissance Technologies, the most successful quantitative hedge fund in history. Emphasizes statistical arbitrage, signal processing, and rigorous scientific methodology. Use when developing alpha research, signal extraction, or systematic trading strategies.",
+      "description": "Use when designing, reviewing, or debugging equity statistical arbitrage, market-neutral factor books, residual mean reversion, or alpha research pipelines exposed to crowding, borrow, and data-mining risk. Teaches practitioner heuristics for alpha half-life, funding stress, short-book asymmetry, point-in-time data, DSR/PBO-style validation, and capacity limits. Trigger on stat arb, market neutral, residuals, mean reversion, factor book, borrow, crowding, alpha decay, backtest overfitting, DSR, or PBO.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/renaissance",
@@ -1967,21 +1578,13 @@
       ],
       "tags": [
         "organizations",
-        "renaissance",
-        "statistical_arbitrage",
-        "quantitative",
-        "machine_learning",
-        "finance",
-        "signals",
-        "backtesting",
-        "hedge_fund",
-        "data"
+        "renaissance"
       ]
     },
     {
       "id": "two-sigma-ml-at-scale",
       "name": "two-sigma",
-      "description": "Build trading systems in the style of Two Sigma, the systematic investment manager pioneering machine learning at scale. Emphasizes alternative data, distributed computing, feature engineering, and rigorous ML infrastructure. Use when building ML pipelines for alpha research, feature stores, or large-scale backtesting systems.",
+      "description": "Build execution-aware financial ML systems in the style of a Two Sigma research factory: point-in-time data contracts, factor-construction discipline, purged and embargoed validation, theory-gated search, and portfolio-aware model selection. Use when the user mentions quant ML, alpha research, alternative data, feature stores, cross-sectional signals, purged CV, embargo, deflated Sharpe, factor neutralization, regime models, capacity, or large-scale backtesting.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/two-sigma",
@@ -1990,22 +1593,13 @@
       ],
       "tags": [
         "organizations",
-        "two_sigma",
-        "machine_learning",
-        "data_science",
-        "scale",
-        "pipelines",
-        "finance",
-        "quantitative",
-        "modeling",
-        "infrastructure",
-        "ml_ops"
+        "two_sigma"
       ]
     },
     {
       "id": "uunet",
       "name": "uunet",
-      "description": "Engineer at global scale in the style of UUNET (now Verizon Business). Emphasizes massive infrastructure resilience, \"plumbing\" the internet, pragmatic problem solving, and the evolution from moving bits to securing them (DBIR). Use when designing backbone networks, security operations centers, or large-scale distributed systems.",
+      "description": "Think like a UUNET/Verizon backbone operator or DBIR analyst when internet-scale routing, interconnection, physical diversity, or breach-classification mistakes have large blast radius. Use when judging BGP route leaks, RPKI/ROV scope, BGP Role/OTC rollout, hot-potato vs cold-potato delivery, SRLG diversity claims, DDoS blackholing, peering disputes, or VERIS/DBIR-style incident analysis. Triggers: AS701, AS702, AS703, route leak, hijack, max-prefix, OTC, BGP Role, RPKI, maxLength, hot potato, cold potato, peering, depeering, SRLG, diverse circuits, RTBH, VERIS, DBIR, incident vs breach.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/uunet",
@@ -2015,22 +1609,23 @@
       "tags": [
         "organizations",
         "uunet",
-        "networking",
-        "infrastructure",
         "bgp",
-        "peering",
-        "isp",
         "routing",
-        "scale",
+        "peering",
+        "rpki",
+        "srlg",
         "backbone",
-        "internet",
-        "operations"
+        "tier1",
+        "rtbh",
+        "veris",
+        "dbir",
+        "incident_response"
       ]
     },
     {
       "id": "virtu-market-microstructure",
       "name": "virtu",
-      "description": "Build trading systems in the style of Virtu Financial, the leading electronic market maker and execution services firm. Emphasizes market microstructure, optimal execution, order routing, and minimizing market impact. Use when building execution algorithms, smart order routers, or analyzing market microstructure.",
+      "description": "Design or review equity execution systems in the style of Virtu/ITG: smart order routing, queue-position models, dark and conditional routing, implementation shortfall control, markout-driven TCA, and anti-toxicity logic for fragmented markets. Use when the task mentions Virtu, ITG, POSIT, smart order routing, maker-taker vs inverted venues, queue position, implementation shortfall, adverse selection, minimum quantity, dark liquidity curation, conditional invitations, crumbling quotes, odd lots, or venue markouts.",
       "category": "organizations",
       "subcategory": null,
       "path": "organizations/virtu",
@@ -2041,19 +1636,19 @@
         "organizations",
         "virtu",
         "market_microstructure",
-        "electronic_trading",
-        "order_book",
+        "smart_order_routing",
         "execution",
-        "hft",
-        "finance",
-        "latency",
-        "market_making"
+        "dark_liquidity",
+        "tca",
+        "adverse_selection",
+        "queue_position",
+        "hft"
       ]
     },
     {
       "id": "dean-large-scale-systems",
       "name": "dean",
-      "description": "Design distributed systems in the style of Jeff Dean, Google Senior Fellow behind MapReduce, BigTable, Spanner, and TensorFlow. Emphasizes practical large-scale system design, performance optimization, and building infrastructure that serves billions. Use when designing systems that must scale massively.",
+      "description": "Jeff Dean style for interactive, warehouse-scale distributed systems where fanout, skew, and shared-cluster interference dominate. Use when designing or debugging multi-tenant services, large fanout RPC graphs, data platforms, storage schemas, sharding strategies, tail-latency mitigation, straggler handling, or load-balancing at Google-like scale. Triggers: p99, hedge requests, tail latency, stragglers, Bigtable, MapReduce, hot shards, selective replication, noisy neighbors.",
       "category": "paradigms",
       "subcategory": "distributed",
       "path": "paradigms/distributed/dean",
@@ -2063,22 +1658,13 @@
       "tags": [
         "paradigms",
         "distributed",
-        "dean",
-        "mapreduce",
-        "bigtable",
-        "spanner",
-        "scale",
-        "fault_tolerance",
-        "infrastructure",
-        "google",
-        "data_processing",
-        "parallel"
+        "dean"
       ]
     },
     {
       "id": "kleppmann-data-intensive",
       "name": "kleppmann",
-      "description": "Design distributed systems in the style of Martin Kleppmann, author of \"Designing Data-Intensive Applications\". Emphasizes understanding data systems deeply, making informed trade-offs, and building reliable data infrastructure. Use when designing databases, streaming systems, or data pipelines.",
+      "description": "Decision heuristics for data-intensive distributed systems: invariants, isolation anomalies, CDC/outbox cutovers, log-first architectures, quorum edge cases, multi-partition workflows, and CRDT or local-first trade-offs. Use when designing or reviewing databases, event-driven systems, stream processors, multi-region replication, offline sync, or consistency guarantees. Triggers: distributed systems, DDIA, Martin Kleppmann, replication, serializability, CDC, outbox, event log, materialized view, quorum, CRDT, local-first.",
       "category": "paradigms",
       "subcategory": "distributed",
       "path": "paradigms/distributed/kleppmann",
@@ -2088,24 +1674,13 @@
       "tags": [
         "paradigms",
         "distributed",
-        "kleppmann",
-        "crdt",
-        "replication",
-        "streaming",
-        "consistency",
-        "event_sourcing",
-        "databases",
-        "partitioning",
-        "consensus",
-        "data_pipelines",
-        "real_time",
-        "collaborative"
+        "kleppmann"
       ]
     },
     {
       "id": "lamport-formal-distributed",
       "name": "lamport",
-      "description": "Design distributed systems in the style of Leslie Lamport, creator of Paxos, TLA+, and LaTeX. Emphasizes formal specification, logical time, and rigorous reasoning about concurrent systems. Use when designing consensus protocols or proving system correctness.",
+      "description": "Formalize, model-check, and de-risk distributed protocols the Lamport way: isolate safety first, add liveness only with explicit synchrony assumptions, use refinement mappings to connect specs to optimized implementations, and choose the right Paxos-family variant for reconfiguration, leases, quorum shape, or Byzantine faults. Use when designing or reviewing consensus, replication, logical clocks, TLA+, PlusCal, TLC, TLAPS, Multi-Paxos, Fast Paxos, Flexible Paxos, Vertical Paxos, Cheap Paxos, leases, quorums, or refinement mappings.",
       "category": "paradigms",
       "subcategory": "distributed",
       "path": "paradigms/distributed/lamport",
@@ -2117,19 +1692,23 @@
         "distributed",
         "lamport",
         "paxos",
-        "consensus",
         "tla+",
-        "formal_verification",
+        "pluscal",
+        "tlc",
+        "tlaps",
+        "consensus",
+        "quorum_systems",
+        "refinement_mapping",
         "logical_clocks",
-        "state_machine_replication",
-        "byzantine",
-        "distributed_transactions"
+        "leases",
+        "reconfiguration",
+        "byzantine"
       ]
     },
     {
       "id": "graham-hackers-painters",
       "name": "graham",
-      "description": "Write code in the style of Paul Graham, essayist, Lisp advocate, and co-founder of Y Combinator. Emphasizes bottom-up programming, expressive power, rapid prototyping, and treating code as a creative medium. Use when building exploratory software, designing DSLs, or writing Lisp that should be as dense and powerful as prose.",
+      "description": "Write exploratory, macro-aware code in Paul Graham's Hackers & Painters style. Use when building Lisp, Arc, Common Lisp, Scheme, REPL-first prototypes, embedded DSLs, terse internal tools, or when the user asks for bottom-up programming, brevity-as-power, macros, or Paul Graham style. Covers when to invent operators, when a utility or macro has earned its cost, how to keep code loadable in one brain, and when to prefer closures and data over OO scaffolding.",
       "category": "paradigms",
       "subcategory": "functional",
       "path": "paradigms/functional/graham",
@@ -2139,22 +1718,13 @@
       "tags": [
         "paradigms",
         "functional",
-        "graham",
-        "lisp",
-        "macros",
-        "bottom_up",
-        "brevity",
-        "abstraction",
-        "startups",
-        "essays",
-        "language_design",
-        "metaprogramming"
+        "graham"
       ]
     },
     {
       "id": "hickey-simple-made-easy",
       "name": "hickey",
-      "description": "Write functional code in the style of Rich Hickey, creator of Clojure. Emphasizes simplicity over easiness, immutability, data-oriented programming, and managing state explicitly. Use when designing systems that need to be understood and maintained.",
+      "description": "Use Rich Hickey's simplicity lens to decomplect value, identity, time, coordination, and side effects in Clojure systems. Use when reviewing atoms/refs/agents/volatiles, choosing seq vs transducer vs eduction vs transient pipelines, or redesigning APIs where \"functional\" code still behaves unpredictably. Triggers: simple vs easy, complecting, value+time, swap! retries, commute/ensure, chunked laziness, transients, agent failure.",
       "category": "paradigms",
       "subcategory": "functional",
       "path": "paradigms/functional/hickey",
@@ -2164,21 +1734,13 @@
       "tags": [
         "paradigms",
         "functional",
-        "hickey",
-        "simplicity",
-        "immutability",
-        "data_oriented",
-        "values",
-        "state_management",
-        "composition",
-        "clojure",
-        "decoupling"
+        "hickey"
       ]
     },
     {
       "id": "peyton-jones-practical-haskell",
       "name": "peyton-jones",
-      "description": "Write functional code in the style of Simon Peyton Jones, lead architect of GHC. Emphasizes practical laziness, compiler-friendly code, and making functional programming work in the real world. Use when writing performant Haskell or understanding evaluation strategies.",
+      "description": "Practical GHC-facing Haskell guidance for diagnosing space leaks, specialization failures, RULES misfires, and unsafe sharing bugs without cargo-cult pragmas. Use when tuning hot Haskell paths, reading Core or demand output, setting `INLINE`/`INLINABLE`/`SPECIALIZE`, or debugging `foldl'`, `StrictData`, `Data.Map.Strict`, `SpecConstr`, `unsafePerformIO`, heap profiles, and worker-wrapper behavior. Keywords: Haskell, GHC, strictness, space leak, RULES, specialization, Core, profiling, unsafePerformIO.",
       "category": "paradigms",
       "subcategory": "functional",
       "path": "paradigms/functional/peyton-jones",
@@ -2190,20 +1752,19 @@
         "functional",
         "peyton_jones",
         "haskell",
-        "monads",
-        "type_classes",
-        "lazy_evaluation",
-        "purity",
         "ghc",
-        "compiler",
-        "type_system",
-        "academic"
+        "optimization",
+        "strictness",
+        "laziness",
+        "profiling",
+        "rewrite_rules",
+        "specialization"
       ]
     },
     {
       "id": "wadler-monadic-elegance",
       "name": "wadler",
-      "description": "Write functional code in the style of Philip Wadler, type theorist and monad evangelist. Emphasizes monadic composition, type-driven design, and the deep connection between logic and computation. Use when designing composable abstractions or understanding categorical patterns.",
+      "description": "Decide how far to escalate from parametric polymorphism to Applicative, Selective, Monad, transformers, or effect handlers in Haskell and similar typed FP systems, with emphasis on rollback, concurrency, and performance traps. Use when designing or refactoring effectful code, choosing between ReaderT/StateT/WriterT/ExceptT, diagnosing transformer-order bugs, recovering lost Applicative structure, or evaluating free/freer/effect-system trade-offs. Trigger keywords: monad, applicative, selective, applicativedo, ReaderT, StateT, WriterT, ExceptT, MonadFail, free monad, Codensity, effect handler, polysemy, fused-effects, effectful.",
       "category": "paradigms",
       "subcategory": "functional",
       "path": "paradigms/functional/wadler",
@@ -2213,20 +1774,13 @@
       "tags": [
         "paradigms",
         "functional",
-        "wadler",
-        "monads",
-        "type_theory",
-        "propositions_as_types",
-        "lambda_calculus",
-        "category_theory",
-        "haskell",
-        "formal"
+        "wadler"
       ]
     },
     {
       "id": "bellard-minimalist-wizardry",
       "name": "bellard",
-      "description": "Write systems software in the style of Fabrice Bellard, creator of QEMU, FFmpeg, TinyCC, and JSLinux. Emphasizes extreme minimalism, solo mastery of complex domains, and making the impossible seem simple. Use when building emulators, compilers, codecs, or any system where performance and code density matter.",
+      "description": "Design single-author, size-constrained systems in the style of Fabrice Bellard: one-pass compilers, dynamic translators, embeddable runtimes, and hand-tuned codec kernels. Use when translation is cheaper than representation, when self-hosting or booting a proof matters more than portability, or when you need Bellard-specific tradeoffs such as no AST/SSA, value-stack codegen, fixed register mapping, translation blocks, direct block chaining, physically indexed code caches, refcount-plus-cycle GC, qjsc-style bytecode embedding, or scalar-oracle-plus-asm verification. Triggers: TinyCC, TCC, OTCC, QuickJS, QEMU, TCG, dyngen, translation block, direct block chaining, self-modifying code, no yacc, no SSA, no IR, x86inc, checkasm, NaN boxing, JS_SetMemoryLimit, js_std_eval_binary.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/bellard",
@@ -2236,22 +1790,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "bellard",
-        "emulators",
-        "compilers",
-        "minimal_code",
-        "qemu",
-        "ffmpeg",
-        "tinycc",
-        "virtualization",
-        "performance",
-        "low_level"
+        "bellard"
       ]
     },
     {
       "id": "blow-compiler-gamedev",
       "name": "blow",
-      "description": "Design languages and write game engine code in the style of Jonathan Blow, creator of Braid, The Witness, and the Jai programming language. Emphasizes programmer productivity, compile-time execution, and rejecting complexity that doesn't serve the programmer. Use when designing languages, game engines, or performance-critical creative tools.",
+      "description": "Build languages, compilers, asset pipelines, and game-engine subsystems in a Jonathan Blow style: prioritize compile-edit-run latency, explicit costs, data-first transforms, and compile-time power without a second meta-language. Use when designing or refactoring hot engine loops, ECS/data-layout code, build systems, asset tooling, language features, or creative tools where iteration speed and debuggability matter. Triggers: Jonathan Blow, Jai, compile-time execution, data-oriented, ECS, fast compile, no hidden costs, engine architecture, asset pipeline, metaprogramming, game tooling.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/blow",
@@ -2262,21 +1807,21 @@
         "paradigms",
         "systems",
         "blow",
-        "game_engine",
         "compiler",
         "language_design",
-        "performance",
-        "jai",
         "game_dev",
-        "rendering",
-        "real_time",
-        "iteration"
+        "game_engine",
+        "data_oriented",
+        "metaprogramming",
+        "jai",
+        "performance",
+        "tooling"
       ]
     },
     {
       "id": "click-jvm-optimization",
       "name": "click",
-      "description": "Design JIT compilers and optimize managed runtimes in the style of Cliff Click, architect of the HotSpot JVM C2 compiler and creator of sea-of-nodes IR. Emphasizes advanced compiler optimizations, intermediate representation design, and making dynamic languages fast. Use when building JIT compilers, VMs, or working on compiler backends.",
+      "description": "Use for HotSpot JIT triage where C1/C2/Graal behavior, not generic Java code style, is the likely bottleneck. Applies when diagnosing deoptimization storms, code-cache saturation, tiered warmup cliffs, OSR pathologies, unstable inlining, or when deciding whether to use CompilerDirectives, CompileCommand, or source-shape changes. Keywords: click, hotspot, c1, c2, graal, deopt, osr, tiered, code cache, compiler directives, printcompilation, printinlining, logcompilation.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/click",
@@ -2286,23 +1831,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "click",
-        "jit",
-        "jvm",
-        "hotspot",
-        "optimization",
-        "compiler",
-        "garbage_collection",
-        "escape_analysis",
-        "inlining",
-        "performance",
-        "sea_of_nodes"
+        "click"
       ]
     },
     {
       "id": "hejlsberg-language-design",
       "name": "hejlsberg",
-      "description": "Design languages and type systems in the style of Anders Hejlsberg, creator of Turbo Pascal, Delphi, C#, and TypeScript. Emphasizes practical type systems, developer productivity, gradual typing, and IDE-driven language design. Use when designing languages, type systems, or developer tools.",
+      "description": "Design semver-sensitive public type surfaces, language features, and compiler-visible APIs in the style of Anders Hejlsberg. Use when evolving TypeScript or C# generics, nullability, overloads, callback/event contracts, extension seams, default interface methods, optional parameters, utility types, or checker-facing abstractions where source compatibility, binary compatibility, runtime behavior, inference quality, and editor performance must all be balanced. Triggers: TypeScript, C#, generics, variance, overloads, optional params, public API, nullability, utility types, default interface methods, extension methods, structural typing, inference, compiler performance, versioning.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/hejlsberg",
@@ -2312,23 +1847,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "hejlsberg",
-        "typescript",
-        "language_design",
-        "type_system",
-        "c#",
-        "turbo_pascal",
-        "delphi",
-        "generics",
-        "ide",
-        "tooling",
-        "developer_experience"
+        "hejlsberg"
       ]
     },
     {
       "id": "kay-inventing-the-future",
       "name": "kay",
-      "description": "Design and build software in the style of Alan Kay, inventor of object-oriented programming, Smalltalk, and the Dynabook concept. Emphasizes message-passing over method-calling, late binding, biological metaphors for system design, and building systems that can evolve. Use when designing extensible architectures, programming environments, or systems meant to outlast their creators.",
+      "description": "Design languages, runtimes, UI platforms, and programmable environments in Alan Kay's style: message-centered boundaries, late binding, executable meta-systems, learning-environment UI, and systems built to survive 10-15 years of change. Use when designing live systems, plugin architectures, reflective tools, end-user programming, educational software, or when requests mention Smalltalk, Dynabook, message passing, live programming, extensibility, or systems that must keep evolving.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/kay",
@@ -2339,21 +1864,21 @@
         "paradigms",
         "systems",
         "kay",
-        "oop",
-        "message_passing",
+        "alan_kay",
         "smalltalk",
+        "dynabook",
+        "message_passing",
         "late_binding",
-        "biological_metaphor",
-        "gui",
-        "xerox_parc",
-        "education",
-        "vision"
+        "live_systems",
+        "reflective_systems",
+        "ui",
+        "language_design"
       ]
     },
     {
       "id": "lattner-compiler-infrastructure",
       "name": "lattner",
-      "description": "Write compiler and toolchain code in the style of Chris Lattner, creator of LLVM, Clang, Swift, and MLIR. Emphasizes modular compiler design, reusable infrastructure, progressive lowering, and pragmatic language evolution. Use when building compilers, language tools, or performance-critical infrastructure.",
+      "description": "Expert guidance for LLVM, Clang, Swift, and MLIR compiler infrastructure in Chris Lattner's style: choosing IR boundaries, pass placement, legality strategy, diagnostics, and semantic traps. Use when building or reviewing frontends, dialects, passes, lowerings, canonicalization, dialect conversion, optimizer pipelines, or debug-info-sensitive transforms. Triggers: llvm, mlir, clang, pass manager, canonicalize, fold, dialect conversion, opaque pointers, gep, freeze, debugify.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/lattner",
@@ -2363,23 +1888,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "lattner",
-        "llvm",
-        "clang",
-        "swift",
-        "mlir",
-        "compiler",
-        "ir",
-        "optimization",
-        "toolchain",
-        "language_design",
-        "code_generation"
+        "lattner"
       ]
     },
     {
       "id": "muratori-performance-aware",
       "name": "muratori",
-      "description": "Write performance-aware code in the style of Casey Muratori, creator of Handmade Hero and performance optimization educator. Emphasizes understanding what the hardware actually does, rejecting unnecessary abstraction, and measuring everything. Use when writing performance-critical code or when you need to understand what's really happening on the machine.",
+      "description": "Apply Casey Muratori-style performance reasoning to CPU hot paths by separating wasted work from machine limits, triaging front-end vs bad speculation vs memory stalls, and choosing data-oriented rewrites only when counters justify them. Use when optimizing tight loops, devirtualizing hot dispatch, diagnosing cache/TLB/store-forwarding/4K-aliasing issues, fixing false sharing, or deciding whether branchless, SIMD, or threading changes will really help; triggers: muratori, performance-aware, hotspot, top-down, cmov, branch mispredict, hot/cold split, false sharing, store forwarding, 4k aliasing, memory wall, data-oriented.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/muratori",
@@ -2393,10 +1908,8 @@
         "performance",
         "profiling",
         "cache",
-        "simd",
+        "false_sharing",
         "optimization",
-        "hardware_sympathy",
-        "benchmarking",
         "low_level",
         "data_oriented"
       ]
@@ -2404,7 +1917,7 @@
     {
       "id": "pall-jit-mastery",
       "name": "pall",
-      "description": "Write high-performance JIT compilers and interpreters in the style of Mike Pall, creator of LuaJIT. Emphasizes trace-based compilation, aggressive optimization, and understanding CPU microarchitecture. Use when building JITs, interpreters, or any code where every cycle counts.",
+      "description": "Mike Pall-style trace-JIT diagnosis and LuaJIT/FFI tuning for hot dynamic-language runtimes. Use when a path flips between interpreted and native code, guard or side-exit churn dominates, FFI callbacks or C boundaries poison traces, or you need to decide whether to reshape code, retune hotloop/hotexit, or disable JIT for one function. Trigger keywords: luajit, trace abort, side trace, guard, -jv, -jdump, -jp, hotloop, hotexit, maxrecord, maxsnap, mcode, bad callback, ffi.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/pall",
@@ -2414,22 +1927,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "pall",
-        "jit",
-        "luajit",
-        "trace_compilation",
-        "interpreter",
-        "bytecode",
-        "optimization",
-        "dynamic_languages",
-        "performance",
-        "low_level"
+        "pall"
       ]
     },
     {
       "id": "ritchie-c-mastery",
       "name": "ritchie",
-      "description": "Write systems code in the style of Dennis Ritchie, co-creator of Unix and creator of C. Emphasizes clean abstraction, portable systems code, and the art of language design. Use when writing C or designing system interfaces.",
+      "description": "Decision-heavy systems C guidance for code that sits on undefined-behavior, ABI, allocator, signal, atomic, or wire-format fault lines. Use when writing or reviewing C where optimizer assumptions, packed layouts, hostile inputs, or portability can turn \"works here\" into production-only corruption. Trigger on: strict aliasing, effective type, packed structs, reallocarray, malloc(0), realloc(p,0), signal handlers, PIPE_BUF, lock-free atomics, object-size, string_copying, sanitizer triage, and ABI boundaries.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/ritchie",
@@ -2439,23 +1943,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "ritchie",
-        "c",
-        "unix",
-        "systems_programming",
-        "pointers",
-        "memory",
-        "standard_library",
-        "portable",
-        "low_level",
-        "kernel",
-        "operating_system"
+        "ritchie"
       ]
     },
     {
       "id": "thompson-elegant-systems",
       "name": "thompson",
-      "description": "Write systems code in the style of Ken Thompson, co-creator of Unix, C, Go, UTF-8, and Plan 9. Emphasizes radical simplicity, elegant algorithms, and small composable tools. Use when designing systems that must endure.",
+      "description": "Apply Ken Thompson's systems style to choices where simplicity is easy to fake but hard to earn: regex engine selection, UTF-8 byte-boundary handling, filename-safe pipelines, Go concurrency ownership, dependency pruning, and compiler trust. Use when building Unix-style CLIs or services, handling untrusted text or regexes, sharding UTF-8 logs by byte offset, deciding mutex vs channel, reducing dependency trees, auditing toolchains, or deciding rewrite vs patch. Trigger keywords: Thompson, RE2, NFA, ReDoS, UTF-8, overlong, CESU-8, self-synchronizing, find -print0, xargs -0, execdir, mutex or channel, RWMutex, trusting trust, DDC, reproducible build, small tools.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/thompson",
@@ -2467,22 +1961,18 @@
         "systems",
         "thompson",
         "unix",
-        "utf_8",
-        "grep",
         "regex",
+        "utf_8",
         "plan9",
-        "encoding",
-        "text_processing",
-        "simplicity",
-        "operating_system",
-        "shell",
-        "pipes"
+        "go",
+        "trust",
+        "concurrency"
       ]
     },
     {
       "id": "torvalds-kernel-pragmatism",
       "name": "torvalds",
-      "description": "Write systems code in the style of Linus Torvalds, creator of Linux and Git. Emphasizes pragmatic excellence, performance awareness, subsystem design, and uncompromising code review. Use when writing kernel-level code or high-performance systems.",
+      "description": "Kernel-maintainer heuristics for Linux C, review, and patch flow: regression triage, bisect-safe patch slicing, calling-context decisions, UAPI immutability, and review-scarred anti-patterns. Use when writing or reviewing Linux kernel code, drivers, modules, lockless/RCU/IRQ paths, ioctl/sysfs/proc/syscall changes, or LKML/stable-ready patch series. Triggers: kernel patch, device driver, kernel module, LKML, stable backport, regression, RCU, spinlock, GFP_ATOMIC, READ_ONCE, ioctl, sysfs, procfs, Fixes tag, checkpatch, git bisect.",
       "category": "paradigms",
       "subcategory": "systems",
       "path": "paradigms/systems/torvalds",
@@ -2492,22 +1982,13 @@
       "tags": [
         "paradigms",
         "systems",
-        "torvalds",
-        "linux",
-        "kernel",
-        "git",
-        "open_source",
-        "pragmatic",
-        "performance",
-        "drivers",
-        "scheduling",
-        "memory_management"
+        "torvalds"
       ]
     },
     {
       "id": "forensics-team",
       "name": "forensics-team",
-      "description": "Analyze network traffic and security incidents with the depth of an \"Ultimate Forensics Team\". Emphasizes deep packet analysis (PCAP) as the source of truth, OSI layer decomposition, and the use of native Linux tools to uncover temporal patterns, attack types, and attribution.",
+      "description": "Operator-grade network forensics for packet captures, SPAN/TAP evidence, and trace-file triage. Use when analyzing `pcap`/`pcapng`, `tcpdump`, `tshark`, `Wireshark`, or `Zeek`; when hunting beaconing/C2; when explaining retransmissions, loss, or disputed network behavior; or when deciding what a capture can and cannot prove. Triggers: pcap, pcapng, packet capture, tcpdump, tshark, Wireshark, Zeek, SPAN, TAP, snaplen, packet loss, beaconing, JA3, JA4, loopback, cooked capture, TLS fingerprinting.",
       "category": "specialists",
       "subcategory": "security",
       "path": "specialists/security/forensics-team",
@@ -2517,15 +1998,7 @@
       "tags": [
         "specialists",
         "security",
-        "forensics_team",
-        "forensics",
-        "network_analysis",
-        "incident_response",
-        "pcap",
-        "malware_analysis",
-        "memory_forensics",
-        "disk_forensics",
-        "investigation"
+        "forensics_team"
       ]
     }
   ]

@@ -5,22 +5,60 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime, timezone
+import yaml
 
 REPO_ROOT = Path(__file__).parent.parent
 SKILL_FILE = "SKILL.md"
 
 def parse_frontmatter(content: str) -> dict:
     """Extract YAML frontmatter from markdown."""
-    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    match = re.match(r'^---\s*\n(.*?)\n---(?:\s*\n|$)', content, re.DOTALL)
     if not match:
         return {}
-    
+
+    raw_frontmatter = match.group(1)
+
+    try:
+        frontmatter = yaml.safe_load(raw_frontmatter) or {}
+    except yaml.YAMLError:
+        frontmatter = None
+
+    if isinstance(frontmatter, dict):
+        return frontmatter
+
+    # Legacy fallback: support the repo's older "key: value" frontmatter
+    # even when the value itself contains YAML-significant ":" characters.
     frontmatter = {}
-    for line in match.group(1).strip().split('\n'):
-        if ':' in line:
-            key, value = line.split(':', 1)
-            frontmatter[key.strip()] = value.strip()
+    for line in raw_frontmatter.strip().split('\n'):
+        if ':' not in line:
+            continue
+        key, value = line.split(':', 1)
+        frontmatter[key.strip()] = value.strip()
     return frontmatter
+
+def normalize_manifest_text(value: object) -> str:
+    """Collapse YAML scalars into CLI-friendly single-line metadata."""
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"\s+", " ", value).strip()
+
+def extract_frontmatter_tags(frontmatter: dict) -> list[str]:
+    """Normalize tags from either YAML strings or YAML lists."""
+    raw_tags = frontmatter.get("tags", "")
+
+    if isinstance(raw_tags, str):
+        candidates = raw_tags.split(",")
+    elif isinstance(raw_tags, list):
+        candidates = [str(tag) for tag in raw_tags]
+    else:
+        return []
+
+    tags = []
+    for tag in candidates:
+        normalized = tag.strip().replace('-', '_')
+        if normalized and normalized not in tags:
+            tags.append(normalized)
+    return tags
 
 def extract_category_and_tags(path: Path, frontmatter: dict) -> tuple[str, list[str]]:
     """Extract category and generate tags from path + frontmatter."""
@@ -35,13 +73,9 @@ def extract_category_and_tags(path: Path, frontmatter: dict) -> tuple[str, list[
         if part not in ('SKILL.md',):
             tags.append(part.replace('-', '_'))
     
-    # Merge in frontmatter tags (comma-separated string)
-    fm_tags = frontmatter.get("tags", "")
-    if fm_tags:
-        for t in fm_tags.split(","):
-            t = t.strip().replace('-', '_')
-            if t and t not in tags:
-                tags.append(t)
+    for tag in extract_frontmatter_tags(frontmatter):
+        if tag not in tags:
+            tags.append(tag)
     
     return category, tags
 
@@ -79,7 +113,7 @@ def generate_manifest() -> dict:
         skill = {
             "id": frontmatter.get("name", engineer),
             "name": engineer,
-            "description": frontmatter.get("description", ""),
+            "description": normalize_manifest_text(frontmatter.get("description", "")),
             "category": category,
             "subcategory": subcategory,
             "path": str(rel_path),

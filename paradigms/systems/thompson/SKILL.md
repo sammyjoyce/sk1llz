@@ -1,282 +1,87 @@
 ---
 name: thompson-elegant-systems
-description: Write systems code in the style of Ken Thompson, co-creator of Unix, C, Go, UTF-8, and Plan 9. Emphasizes radical simplicity, elegant algorithms, and small composable tools. Use when designing systems that must endure.
-tags: unix, utf-8, grep, regex, plan9, systems, encoding, text-processing, simplicity, operating-system, shell, pipes
+description: "Apply Ken Thompson's systems style to choices where simplicity is easy to fake but hard to earn: regex engine selection, UTF-8 byte-boundary handling, filename-safe pipelines, Go concurrency ownership, dependency pruning, and compiler trust. Use when building Unix-style CLIs or services, handling untrusted text or regexes, sharding UTF-8 logs by byte offset, deciding mutex vs channel, reducing dependency trees, auditing toolchains, or deciding rewrite vs patch. Trigger keywords: Thompson, RE2, NFA, ReDoS, UTF-8, overlong, CESU-8, self-synchronizing, find -print0, xargs -0, execdir, mutex or channel, RWMutex, trusting trust, DDC, reproducible build, small tools."
+tags: unix, regex, utf-8, plan9, go, systems, trust, concurrency
 ---
 
-# Ken Thompson Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​​​‌​‌‌‍‌​‌​​​‌‌‍​​‌​​​​​‍‌‌​‌​​‌​‍​​​​‌​‌​‍​​​​‌​‌​⁠‍⁠
+# Thompson: Elegant Systems
 
-## Overview
+Thompson simplicity is not "use fewer features." It is removing hidden states until you can predict behavior before running the program.
 
-Ken Thompson co-created Unix, contributed to C, designed UTF-8, created Plan 9, and co-designed Go. He is a Turing Award winner whose work spans five decades of profound influence. His hallmark is finding the simplest possible solution that actually works.
+## Core Stance
 
-## Core Philosophy
+- Prefer representations whose failure modes stay visible: text over clever binary, automata over ad hoc backtracking, ownership transfer over shared mutable soup.
+- When a system gets harder to reason about, reduce moving parts before adding machinery.
+- If you cannot explain the invariant that makes the bug impossible, you are not ready to rewrite.
 
-> "When in doubt, use brute force."
+## Decision Tree
 
-> "One of my most productive days was throwing away 1000 lines of code."
+1. Is attacker-controlled input involved?
+   - User regex or internet-facing search: use a linear-time engine.
+   - External text at a trust boundary: validate UTF-8 bytes before decoding or normalizing.
+   - Filenames crossing process boundaries: use NUL-delimited plumbing or `find -execdir`.
+2. Is the problem shared state or ownership transfer?
+   - Ownership, work distribution, async result: channel.
+   - Cache, field, counter, short critical section: `sync.Mutex`.
+3. Are you proving build determinism or build trust?
+   - Same source, same bits: reproducible build.
+   - Binary corresponds to reviewed source: DDC or independent bootstrap.
+4. Are you reaching for a rewrite because the code is ugly or because a stronger invariant exists?
+   - Ugly only: patch.
+   - New invariant makes the failure impossible: rewrite the smallest unit that can enforce it.
 
-> "I think the major good idea in Unix was its clean and simple interface: open, close, read, and write."
+## Before Doing X, Ask Yourself
 
-Thompson believes complexity is the enemy. The best code is the code you don't write. The best abstraction is the one that disappears.
+- Before debugging: what exact state do I predict at the failing point? If you cannot state the prediction, you are still sampling, not debugging.
+- Before choosing a regex engine: do I need backtracking-only features, or do I just need captures, alternation, and Unicode classes? If user input reaches the pattern, treat look-around and backreferences as disqualifying unless the haystack is strictly bounded.
+- Before chunking UTF-8 text: where are the legal restart points? UTF-8 is self-synchronizing, so you can recover from any byte offset by backing up over at most 3 continuation bytes.
+- Before inventing a binary format: who debugs the corrupted file at 3 AM? If the answer is "humans with grep, less, or awk", keep it textual or use a boring schema.
+- Before adding concurrency: who owns cancellation, who waits for exit, and what state remains shared? If you cannot answer all three, do not add the goroutine yet.
+- Before adding a dependency: does it reduce semantic risk or just typing? In Go, any package that contributes to the build can run `init`; count the realized build graph, not the `go.mod` file.
+- Before calling a toolchain "verified": am I claiming determinism, correspondence, or correctness? They are different claims.
 
-## Design Principles
+## Non-Obvious Heuristics
 
-1. **Radical Simplicity**: The simplest solution that works is the best.
+- Safe regex engines are linear but not magic. Go's `regexp` rejects counted repetitions above 1000, limits parse-tree height to 1000, and caps compiled size around 128 MiB; `\pL` alone expands to 1292 runes, so generated Unicode-heavy patterns hit compile limits surprisingly early.
+- RE2 chooses strategy by pattern shape: DFA for match location, NFA for submatch boundaries, one-pass execution when branch choice is locally unambiguous, and a bit-state backtracker only while the bitmap stays under 32 KiB. "Linear time" does not mean "same fast path for every pattern."
+- A one-pass regex is one where it is always obvious when a repetition ends and which alternation branch wins. If that is not locally obvious, submatch bookkeeping dominates even in a safe engine.
+- `\b` in Go/RE2 is ASCII-only. It is usually wrong for multilingual boundary logic even when the engine choice is otherwise right.
+- UTF-8 validity is a byte-level contract. Valid 2-byte starters are `C2-DF`; `C0`, `C1`, and `F5-FF` never appear in legal UTF-8. Surrogates `U+D800-U+DFFF` and code points above `U+10FFFF` are invalid even if something "decodes" them.
+- UTF-8 works well with byte-oriented tools because ASCII bytes never appear as continuation bytes and character boundaries are recoverable from arbitrary offsets. That is why Boyer-Moore-style search and shard recovery work on UTF-8 text.
+- Unix filenames are bytes, not characters. Only slash and NUL are forbidden. Assume spaces, newlines, leading dashes, and invalid UTF-8 are all possible.
+- `find -print0 | xargs -0` fixes whitespace parsing, not time-of-check/time-of-use races. If an attacker can rename files while you act on them, prefer `find -delete` or `find -execdir` with a trusted `PATH`.
+- Reproducible builds remove accidental inputs. They do not prove the compiler binary matches reviewed source. DDC answers the correspondence question; source review answers the correctness question.
+- If the build environment might be hostile, widen "compiler" to include assembler, linker, loader, privileged build helpers, and possibly the kernel. DDC is only as strong as the boundary you choose.
+- `RWMutex` is usually a regression. Go's own review guidance says to benchmark it unless reads last hundreds of milliseconds and writes are rare.
 
-2. **Small Sharp Tools**: Programs should do one thing excellently.
+## NEVER Do These
 
-3. **Composition**: Combine simple tools to solve complex problems.
+- NEVER run attacker-controlled patterns on a backtracking engine because feature completeness is seductive and friendly test data hides the bad path. The concrete consequence is trivial ReDoS: Russ Cox measured a 29-byte case where Perl took over 60 seconds while Thompson NFA took about 20 microseconds. Instead use RE2/Go/Rust regex, or split the task into a safe prefilter plus a bounded second-stage parser.
+- NEVER assume a "safe" regex engine accepts arbitrarily large generated patterns because linear-time matching makes that feel safe. The concrete consequence is compile-time failure or strategy fallback when counted repeats exceed 1000 or DFA budgets churn. Instead simplify the pattern, pre-tokenize, or replace the regex with a parser when the pattern is machine-generated.
+- NEVER treat UTF-8 validation as "the bytes decoded to a rune" because CESU-8, overlong encodings, and surrogate encodings are seductive half-valid forms. The concrete consequence is filter bypass: RFC 3629 explicitly calls out `C0 80` becoming NUL and path-filter evasions using illegal octets. Instead validate byte classes first, reject surrogates and overlong forms, and only then normalize or compare.
+- NEVER cut UTF-8 shards on arbitrary byte boundaries because the self-synchronizing property makes repair look optional. The concrete consequence is false corruption at chunk edges or duplicated and dropped code points during parallel scans. Instead back up over continuation bytes or overlap by 3 bytes and discard the partial prefix.
+- NEVER feed filesystem paths through blank- or newline-delimited plumbing because most filenames look safe and the bad cases are rare. The concrete consequence is acting on files the producer never meant to name; GNU findutils documents examples where newline-containing names make `xargs` target unrelated paths. Instead use `-print0` and `-0`, or better, `-execdir` when the action mutates files.
+- NEVER use a channel to protect an integer, cache, or struct field because "share memory by communicating" is seductive when learning Go. The concrete consequence is slower code plus lifecycle bugs. Instead use channels for ownership transfer and async results; use `sync.Mutex` for state.
+- NEVER default to `RWMutex` because read-mostly intuition feels sophisticated. The concrete consequence is extra overhead and worse scalability on ordinary short reads. Instead start with `sync.Mutex` and switch only with a benchmark proving the read hold times are long and writes are rare.
+- NEVER call a toolchain "verified" because it is reproducible or because you read the source. The concrete consequence is missing a self-propagating compiler backdoor. Instead use DDC or an independent bootstrap chain when correspondence matters, then review the source for correctness.
 
-4. **Brute Force Works**: Don't be clever when simple is good enough.
+## Freedom Calibration
 
-## When Writing Code
+- High freedom: decomposing a tool into smaller text-stream stages, deleting code, replacing a dependency with local code, or moving a boundary from shared state to ownership transfer.
+- Low freedom: regex on untrusted input, UTF-8 at trust boundaries, filename plumbing, compiler/bootstrap verification, and concurrency shutdown paths. On these tasks, follow the invariants exactly and do not improvise around them.
 
-### Always
+## Fallback Moves
 
-- Question every line of code—is it necessary?
-- Design for composition via simple interfaces
-- Use text as the universal interface
-- Throw away code that doesn't serve the goal
-- Prototype with brute force, optimize only if needed
-- Trust the tools you build
+- If RE2 or Go rejects a needed construct, first ask whether the construct is only a convenience. Replace look-around with explicit capture and filter logic; replace backreferences with a parser or a second-stage equality check.
+- If `-print0 | xargs -0` is still too risky, use `find -execdir ... {} +` or keep the work inside a directory file descriptor instead of stringly-typed paths.
+- If DDC is impossible, state that you only have reproducibility evidence, pin the bootstrap compiler chain, and remove nondeterminism such as map iteration and lock-serialized work ordering before claiming anything stronger.
+- If a rewrite is tempting but not yet justified, write the narrower invariant-preserving wrapper first. Thompson style prefers proving the new seam before deleting the old core.
 
-### Never
+## Reference Loading
 
-- Add features "just in case"
-- Optimize before measuring
-- Create complex abstractions for simple problems
-- Fear starting over
-- Conflate clever with good
-
-### Prefer
-
-- Simple linear algorithms over clever ones
-- Text streams over binary formats
-- Regular expressions for text processing
-- Iteration over recursion when simpler
-- Small programs over monolithic ones
-
-## Code Patterns
-
-### The Unix Filter Pattern
-
-```c
-// A perfect Unix filter: read stdin, transform, write stdout
-#include <stdio.h>
-#include <ctype.h>
-
-// uppercase: convert input to uppercase
-int main(void) {
-    int c;
-    while ((c = getchar()) != EOF) {
-        putchar(toupper(c));
-    }
-    return 0;
-}
-
-// Usage: cat file.txt | uppercase | sort | uniq
-// Composition through pipes
-```
-
-### Simple Interfaces
-
-```c
-// The Unix file interface: elegant simplicity
-// Everything is open/close/read/write
-
-int fd = open("file.txt", O_RDONLY);
-char buf[4096];
-ssize_t n;
-
-while ((n = read(fd, buf, sizeof(buf))) > 0) {
-    write(STDOUT_FILENO, buf, n);
-}
-
-close(fd);
-
-// This same interface works for:
-// - Files
-// - Pipes
-// - Sockets
-// - Devices
-// - /proc entries
-```
-
-### Brute Force First
-
-```c
-// Problem: find if a pattern exists in text
-// Thompson's approach: just search
-
-// Simple, obvious, correct
-int contains(const char *text, const char *pattern) {
-    while (*text) {
-        const char *t = text;
-        const char *p = pattern;
-        while (*p && *t == *p) {
-            t++;
-            p++;
-        }
-        if (*p == '\0') return 1;
-        text++;
-    }
-    return 0;
-}
-
-// Don't reach for KMP or Boyer-Moore until you've
-// measured and proven you need them.
-// For most inputs, brute force is fast enough.
-```
-
-### Minimal Data Structures
-
-```c
-// Arrays and structs solve most problems
-// Don't reach for complexity
-
-typedef struct {
-    char *key;
-    char *value;
-} Entry;
-
-typedef struct {
-    Entry *entries;
-    int count;
-    int capacity;
-} Table;
-
-// Linear search is fine for small tables
-char *table_get(Table *t, const char *key) {
-    for (int i = 0; i < t->count; i++) {
-        if (strcmp(t->entries[i].key, key) == 0) {
-            return t->entries[i].value;
-        }
-    }
-    return NULL;
-}
-
-// Only add hash table when profiling proves you need it
-```
-
-### UTF-8: Elegant Encoding
-
-```c
-// UTF-8: Thompson and Pike's masterpiece
-// Self-synchronizing, ASCII-compatible, variable-width
-
-// Decode one UTF-8 codepoint
-int utf8_decode(const char *s, int *codepoint) {
-    unsigned char c = s[0];
-    
-    if (c < 0x80) {
-        *codepoint = c;
-        return 1;
-    }
-    if ((c & 0xE0) == 0xC0) {
-        *codepoint = (c & 0x1F) << 6 | (s[1] & 0x3F);
-        return 2;
-    }
-    if ((c & 0xF0) == 0xE0) {
-        *codepoint = (c & 0x0F) << 12 | (s[1] & 0x3F) << 6 | (s[2] & 0x3F);
-        return 3;
-    }
-    if ((c & 0xF8) == 0xF0) {
-        *codepoint = (c & 0x07) << 18 | (s[1] & 0x3F) << 12 | 
-                     (s[2] & 0x3F) << 6 | (s[3] & 0x3F);
-        return 4;
-    }
-    return -1;  // Invalid
-}
-
-// Simple rules, profound implications
-```
-
-### Go: Modern Thompson
-
-```go
-// Go reflects Thompson's philosophy for modern systems
-
-// Simple concurrency: goroutines and channels
-func pipeline() {
-    naturals := make(chan int)
-    squares := make(chan int)
-
-    // Generator
-    go func() {
-        for x := 0; ; x++ {
-            naturals <- x
-        }
-    }()
-
-    // Squarer
-    go func() {
-        for x := range naturals {
-            squares <- x * x
-        }
-    }()
-
-    // Consumer
-    for i := 0; i < 10; i++ {
-        fmt.Println(<-squares)
-    }
-}
-
-// No inheritance, no generics (initially), no exceptions
-// Just structs, interfaces, goroutines, channels
-// Radical simplicity
-```
-
-### Regular Expressions
-
-```c
-// Thompson's NFA regex algorithm: elegant and efficient
-
-// Match: reports whether regexp matches text
-// Simplified from Thompson's original
-int match(const char *regexp, const char *text) {
-    if (regexp[0] == '^')
-        return matchhere(regexp + 1, text);
-    
-    do {  // must look even if string is empty
-        if (matchhere(regexp, text))
-            return 1;
-    } while (*text++ != '\0');
-    
-    return 0;
-}
-
-int matchhere(const char *regexp, const char *text) {
-    if (regexp[0] == '\0')
-        return 1;
-    if (regexp[1] == '*')
-        return matchstar(regexp[0], regexp + 2, text);
-    if (regexp[0] == '$' && regexp[1] == '\0')
-        return *text == '\0';
-    if (*text != '\0' && (regexp[0] == '.' || regexp[0] == *text))
-        return matchhere(regexp + 1, text + 1);
-    return 0;
-}
-
-// ~30 lines for a working regex engine
-// That's Thompson elegance
-```
-
-## Mental Model
-
-Thompson approaches problems by asking:
-
-1. **What's the simplest thing that could work?** Start there
-2. **Can I throw away code?** Less is more
-3. **Does this compose?** Small pieces, loosely joined
-4. **Is brute force good enough?** Usually yes
-5. **Would I want to maintain this?** Simplicity endures
-
-## Signature Thompson Moves
-
-- Text streams as universal interface
-- Brute force before cleverness
-- Throwing away code
-- Small programs that compose
-- Regular expressions for text
-- Clean, minimal interfaces
+- Before auditing or designing regex behavior, READ `references/regex-nfa-vs-backtrack.md`.
+- Before validating, chunking, or comparing UTF-8 or Unicode text, READ `references/utf8-invariants.md`.
+- Before compiler, bootstrap, attestation, or supply-chain work, READ `references/trusting-trust-defense.md`.
+- Before Go concurrency changes, READ `references/go-concurrency-gotchas.md`.
+- Load `references/philosophy.md` only for historical context or prose. Do NOT load it for technical decisions.
+- Do NOT load all references up front. Pull only the one that matches the current failure mode.

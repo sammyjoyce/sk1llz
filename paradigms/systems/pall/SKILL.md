@@ -1,359 +1,118 @@
 ---
 name: pall-jit-mastery
-description: Write high-performance JIT compilers and interpreters in the style of Mike Pall, creator of LuaJIT. Emphasizes trace-based compilation, aggressive optimization, and understanding CPU microarchitecture. Use when building JITs, interpreters, or any code where every cycle counts.
-tags: jit, luajit, trace-compilation, interpreter, bytecode, optimization, dynamic-languages, performance, low-level
+description: "Mike Pall-style trace-JIT diagnosis and LuaJIT/FFI tuning for hot dynamic-language runtimes. Use when a path flips between interpreted and native code, guard or side-exit churn dominates, FFI callbacks or C boundaries poison traces, or you need to decide whether to reshape code, retune hotloop/hotexit, or disable JIT for one function. Trigger keywords: luajit, trace abort, side trace, guard, -jv, -jdump, -jp, hotloop, hotexit, maxrecord, maxsnap, mcode, bad callback, ffi."
 ---
 
-# Mike Pall Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​‌‌​​‌‌‍‌​‌​‌‌​‌‍​‌‌‌‌​‌‌‍​‌‌‌​​​​‍​​​​‌​‌​‍‌​‌‌​‌​‌⁠‍⁠
+# Pall JIT Mastery
 
-## Overview
+## Use this skill for
 
-Mike Pall created LuaJIT, widely considered one of the most impressive JIT compilers ever written. A single developer achieved performance competitive with production JVMs while maintaining a tiny codebase. His work demonstrates that deep understanding of hardware and algorithms beats large teams with brute force.
+- Trace-JIT triage in LuaJIT-style runtimes where tiny source edits can flip whole execution modes.
+- FFI boundary design when "cleaner C code" is tempting but traceability matters more than language purity.
 
-## Core Philosophy
+Do NOT load generic JIT/compiler primers for this task. This skill assumes you already know what a trace, guard, and side exit are.
 
-> "Measure, don't guess."
+## Before you change anything
 
-> "The fastest code is code that doesn't run."
+Before touching code shape or runtime flags, collect all three from the target workload:
 
-> "Understand your hardware or it will humble you."
+- `-jp=vf` or `-jp=fv` to split time by VM state: `N` native, `I` interpreted, `C` C code, `G` GC, `J` JIT compiler.
+- `-jv` to confirm whether roots and side traces are actually starting.
+- The first meaningful abort from `-jdump`; the first real abort is usually worth more than the fiftieth.
 
-Pall believes in ruthless optimization through deep understanding—knowing the CPU so well that you can predict cycle counts by reading assembly.
+Before doing X, ask yourself:
 
-## Design Principles
+- Is this a capacity problem, a churn problem, or a foreign-boundary problem?
+- Am I reducing the number of guards the trace must prove, or only moving them around?
+- If I change a knob globally, what cold code will now become hot enough to waste compile budget?
+- If I cross into C here, can the recorder still inline, hoist, sink, and specialize, or did I just freeze the optimization boundary?
 
-1. **Trace-Based Compilation**: Optimize what actually runs, not what might run.
+## Operating stance
 
-2. **Microarchitecture Awareness**: Write code for the real CPU, not an abstract machine.
+- Treat traces as speculative contracts. A fast trace is not "optimized code"; it is a narrow bet that the same types, branches, and layouts recur.
+- The highest-leverage fix is usually reducing assumption surface, not writing cleverer code.
+- One unstable guard can be worse than a slower algorithm because it keeps paying interpreter re-entry, hot-exit counting, and re-recording costs.
+- Raising limits is the last move. First prove whether the trace budget is too small or whether the program is feeding it unstable shape.
 
-3. **Minimal Abstraction**: Every layer costs cycles.
+## Triage by symptom
 
-4. **Data-Oriented Design**: Memory layout dominates performance.
+### 1. `-jp` says time is mostly `I`
 
-## When Writing Performance-Critical Code
+- Meaning: the hot path never became trace-worthy, was blacklisted, or keeps aborting before stabilization.
+- Check `-jv`. If it stays quiet, verify hotness and JIT enablement before rewriting code.
+- If roots start and then disappear, inspect the first abort, not the aggregate sample.
 
-### Always
+### 2. `-jp` says time is mostly `J`
 
-- Benchmark before and after every change
-- Understand the generated assembly
-- Profile to find actual hot spots
-- Consider cache behavior for every data structure
-- Know your target CPU's pipeline
-- Test on multiple architectures
+- Meaning: compile churn. You are spending time recording and assembling rather than executing.
+- Common causes: `hotloop` too low, side exits being retried, repeated flush-retrace loops, or one mega-trace hitting `maxrecord` or `maxsnap`.
+- Remedy: simplify the kernel first. Tuning comes second.
 
-### Never
+### 3. `-jp` says time is mostly `C`
 
-- Assume an optimization helps without measuring
-- Ignore branch prediction effects
-- Use abstractions that hide memory access patterns
-- Optimize cold code paths
-- Trust microbenchmarks for macro decisions
-- Assume compiler optimizations happen
-
-### Prefer
-
-- Trace compilation over method compilation
-- Linear memory access over pointer chasing
-- Branchless code in hot paths
-- Tables over computed branches
-- Inline caching for polymorphic calls
-- Specialized code paths over generic
-
-## Code Patterns
-
-### Trace-Based Compilation
-
-```c
-// LuaJIT's key insight: trace hot paths, not methods
-// A trace is a linear sequence of operations
-
-typedef struct Trace {
-    uint32_t *mcode;       // Generated machine code
-    IRIns *ir;             // IR instructions
-    uint16_t nins;         // Number of IR instructions
-    uint16_t nk;           // Number of constants
-    SnapShot *snap;        // Side exit snapshots
-    uint16_t nsnap;
-    // Link to next trace (for loops)
-    struct Trace *link;
-} Trace;
-
-// Recording: capture operations as they execute
-void record_instruction(JitState *J, BCIns ins) {
-    switch (bc_op(ins)) {
-    case BC_ADDVN:
-        // Record: result = slot[A] + constant[D]
-        TRef tr = emitir(IR_ADD, J->slots[bc_a(ins)], 
-                         lj_ir_knum(J, bc_d(ins)));
-        J->slots[bc_a(ins)] = tr;
-        break;
-    // ... other bytecodes
-    }
-}
-
-// Key: traces are LINEAR
-// No control flow in the trace itself
-// Side exits handle divergence
-```
-
-### IR Design for Speed
-
-```c
-// LuaJIT IR: compact, cache-friendly, no pointers
-
-typedef struct IRIns {
-    uint16_t op;       // Operation + type
-    uint16_t op1;      // First operand (IR ref or slot)
-    uint16_t op2;      // Second operand
-    uint16_t prev;     // Previous instruction (for CSE chains)
-} IRIns;  // 8 bytes, fits in cache line nicely
-
-// IR references are indices, not pointers
-// Enables: compact storage, easy serialization, cache efficiency
-
-#define IRREF_BIAS  0x8000
-#define irref_isk(r)  ((r) < IRREF_BIAS)  // Is constant?
-
-// Constants stored separately, referenced by negative indices
-// Instructions stored linearly, referenced by positive indices
-
-// Example IR sequence for: x = a + b * c
-// K001  NUM  3.14        -- constant
-// 0001  SLOAD #1         -- load slot 1 (a)
-// 0002  SLOAD #2         -- load slot 2 (b)
-// 0003  SLOAD #3         -- load slot 3 (c)
-// 0004  MUL  0002 0003   -- b * c
-// 0005  ADD  0001 0004   -- a + (b * c)
-```
-
-### Side Exits and Guards
-
-```c
-// Traces assume types and values
-// Guards verify assumptions, exit if wrong
-
-void emit_guard(JitState *J, IRType expected, TRef tr) {
-    IRIns *ir = &J->cur.ir[tref_ref(tr)];
-    
-    if (ir->t != expected) {
-        // Emit type guard
-        emitir(IR_GUARD, tr, expected);
-        
-        // Record snapshot for side exit
-        snapshot_add(J);
-    }
-}
-
-// Side exit: restore interpreter state, continue there
-typedef struct SnapShot {
-    uint16_t ref;        // First IR ref in snapshot
-    uint8_t nslots;      // Number of slots to restore
-    uint8_t topslot;     // Top slot number
-    uint32_t *map;       // Slot -> IR ref mapping
-} SnapShot;
-
-// When guard fails:
-// 1. Look up snapshot for this guard
-// 2. Restore Lua stack from IR values
-// 3. Jump back to interpreter
-// 4. Maybe record a new trace from exit point
-```
-
-### Assembly-Level Optimization
-
-```c
-// LuaJIT generates assembly directly
-// Every instruction chosen deliberately
-
-// x86-64 code emission helpers
-static void emit_rr(ASMState *as, x86Op op, Reg r1, Reg r2) {
-    // REX prefix if needed
-    if (r1 >= 8 || r2 >= 8) {
-        *--as->mcp = 0x40 | ((r1 >> 3) << 2) | (r2 >> 3);
-    }
-    *--as->mcp = 0xc0 | ((r1 & 7) << 3) | (r2 & 7);
-    *--as->mcp = op;
-}
-
-// Register allocation: linear scan, but smarter
-// Allocate backwards from trace end for better results
-
-void ra_allocate(ASMState *as) {
-    // Process IR in reverse order
-    for (IRRef ref = as->curins; ref >= as->stopins; ref--) {
-        IRIns *ir = &as->ir[ref];
-        
-        // Allocate destination register
-        Reg dest = ra_dest(as, ir);
-        
-        // Allocate source registers
-        ra_left(as, ir, dest);
-        ra_right(as, ir);
-    }
-}
-
-// Key insight: backwards allocation sees all uses
-// Can make better spill decisions
-```
-
-### Memory Access Patterns
-
-```c
-// Cache-friendly data structures are critical
-
-// BAD: Linked list of variable-size nodes
-struct Node {
-    struct Node *next;
-    int type;
-    union {
-        double num;
-        struct String *str;
-        // ...
-    } value;
-};
-
-// GOOD: Separate arrays by type (SoA)
-struct ValueArray {
-    uint8_t *types;      // Type tags: sequential access
-    TValue *values;      // Values: sequential access
-    size_t count;
-};
-
-// Iteration patterns matter enormously
-// This is ~10x faster than pointer chasing:
-for (size_t i = 0; i < arr->count; i++) {
-    if (arr->types[i] == TYPE_NUMBER) {
-        sum += arr->values[i].n;
-    }
-}
-```
-
-### Inline Caching
-
-```c
-// Polymorphic inline cache for property access
-// Avoids hash lookup in common case
-
-typedef struct InlineCache {
-    uint32_t shape_id;    // Expected object shape
-    uint16_t offset;      // Cached property offset
-    uint16_t _pad;
-} InlineCache;
-
-TValue get_property_cached(Object *obj, String *key, InlineCache *ic) {
-    // Fast path: shape matches
-    if (likely(obj->shape_id == ic->shape_id)) {
-        return obj->slots[ic->offset];  // Direct access!
-    }
-    
-    // Slow path: lookup and update cache
-    uint16_t offset = shape_lookup(obj->shape, key);
-    ic->shape_id = obj->shape_id;
-    ic->offset = offset;
-    return obj->slots[offset];
-}
-
-// Monomorphic: one shape, one offset
-// Polymorphic: small set of shapes
-// Megamorphic: too many shapes, fall back to hash
-```
-
-### Branch Prediction Awareness
-
-```c
-// CPUs predict branches; help them be right
-
-// BAD: Unpredictable branches in hot loop
-for (int i = 0; i < n; i++) {
-    if (data[i] > threshold) {  // 50% taken = unpredictable
-        sum += data[i];
-    }
-}
-
-// GOOD: Branchless version
-for (int i = 0; i < n; i++) {
-    int mask = -(data[i] > threshold);  // 0 or -1
-    sum += data[i] & mask;
-}
-
-// GOOD: Sort first if possible
-qsort(data, n, sizeof(int), compare);
-for (int i = 0; i < n && data[i] <= threshold; i++) {
-    // All branches now predictable
-}
-
-// Loop unrolling: reduce branch overhead
-for (int i = 0; i + 4 <= n; i += 4) {
-    sum += data[i];
-    sum += data[i + 1];
-    sum += data[i + 2];
-    sum += data[i + 3];
-}
-```
-
-### Type Specialization
-
-```c
-// Generate specialized code for each type combination
-// LuaJIT specializes aggressively
-
-// Generic add (slow)
-TValue generic_add(TValue a, TValue b) {
-    if (tvisnum(a) && tvisnum(b)) {
-        return numV(numV(a) + numV(b));
-    } else if (tvisstr(a) || tvisstr(b)) {
-        return concat(tostring(a), tostring(b));
-    }
-    // ... metamethod lookup
-}
-
-// Specialized add for numbers (fast)
-// Generated when trace shows both args are numbers
-double specialized_add_nn(double a, double b) {
-    return a + b;  // Single instruction
-}
-
-// Type guards ensure specialization is valid
-// Side exit if types don't match expected
-```
-
-## Performance Mental Model
-
-```
-CPU Pipeline Awareness
-══════════════════════════════════════════════════════════════
-
-Latency (cycles)    Operation
-────────────────────────────────────────────────────────────
-1                   Register-to-register ALU
-3-4                 L1 cache hit
-~12                 L2 cache hit
-~40                 L3 cache hit
-~200                Main memory
-~10-20              Branch mispredict penalty
-~100+               Page fault
-
-Key insight: Memory is the bottleneck
-            Computation is nearly free by comparison
-            Optimize for memory access patterns first
-```
-
-## Mental Model
-
-Pall approaches optimization by asking:
-
-1. **What's the hot path?** Trace it, optimize it
-2. **What does the assembly look like?** If you can't read it, you can't optimize it
-3. **Where are the cache misses?** Memory dominates everything
-4. **What are the branch patterns?** Predictable branches are free
-5. **Can I specialize?** Generic code is slow code
-
-## Signature Pall Moves
-
-- **Trace compilation**: JIT what runs, not what's written
-- **Compact IR**: 8-byte instructions, index-based references
-- **Backwards register allocation**: See all uses before deciding
-- **NaN boxing**: Encode type and value in 64-bit doubles
-- **Side exit snapshots**: Restore interpreter state precisely
-- **Assembly-level thinking**: Know the cost of every instruction
-- **FFI that's actually fast**: C calls without overhead
+- Meaning: the foreign boundary is the bottleneck, or the optimizer cannot see through it.
+- Default move: pull the tight loop back into Lua/IR space. LuaJIT can inline a Lua callback into an integration loop; it cannot inline C calling back into Lua.
+- If the C API is fixed, prefer pull-style APIs over push-style callbacks.
+
+### 4. `-jp` says time is mostly `G`
+
+- Meaning: allocation sinking failed or the hot path allocates on every iteration.
+- Fix object lifetime and temporary structure churn before micro-tuning arithmetic.
+
+## First abort decoder
+
+- `NYI: bytecode ...`: the recorder cannot encode an observed operation. Knob tuning will not save this path. Move the operation out of the hot loop or change the representation it sees.
+- `NYI: unsupported C function type`: the seductive move is "just wrap it in C." The usual result is a permanently opaque call boundary. Keep the hot part in Lua or push the call onto a cold edge.
+- `trace too long` or `too many snapshots`: you are mixing hot kernel logic with branchy or stateful control flow. Split the kernel; do not hand-unroll harder.
+- `machine code too long` or `hit mcode limit`: first ask whether one trace is obese or whether the program has many stable traces. Only the second case justifies more cache.
+- `bad callback`: stop debugging the symptom. The surrounding Lua function must not run JIT-compiled if that C call can re-enter Lua.
+
+## Knobs that matter, and what they actually mean
+
+- `hotloop=56`: a warmup threshold, not a speed knob. Lower it only when stable kernels are short-lived and startup latency matters. Lowering it globally pulls noise into the recorder.
+- `hotexit=10`: a side-trace promotion threshold. Lowering it is seductive when exits look expensive, but it also turns rare mispredictions into compiled artifacts.
+- `tryside=4`: a stop sign. If a side trace cannot stabilize within four attempts, treat the path as semantically unstable until proven otherwise.
+- `maxrecord=4000` and `maxsnap=500`: almost always a shape problem before a capacity problem. Large traces usually mean mixed hot and cold logic, not a compiler that needs "more room".
+- `maxtrace=1000`, `maxside=100`, `sizemcode=64`, `maxmcode=2048` in KB: only raise these after proving you have many independent stable kernels. If one kernel is churning, bigger caches mostly preserve a larger mistake.
+- `-Ofma`: off by default for a reason. It trades determinism for speed and changes floating-point behavior. Never flip it on casually in finance, simulation, or test-sensitive workloads.
+- OpenResty's LuaJIT fork raises `maxtrace`, `maxrecord`, `maxmcode`, and sets `minstitch=3` for very large applications. That is a capacity workaround for huge stable programs, not a first-line answer to abort churn.
+
+## Hidden mechanics practitioners forget
+
+- The hot-penalty cache in 2.1 source is small (64 slots) and penalties can ramp from about 72 toward 60000. Repeated aborting sites are deliberately backed off. If you keep flushing and retracing the same pathological loop, you may benchmark penalty behavior instead of steady-state behavior.
+- `jit.on()` and `jit.off()` set compile eligibility; they do not force immediate compilation. Using them as a "compile now" switch is a category error.
+- `jit.flush(trace)` only flushes a root and its side traces; linked code can stay live. A flush-based benchmark reset can be partial.
+
+## FFI and boundary traps
+
+- Callback resource ceilings are real: only about 500-1000 callbacks can exist at once, depending on architecture. Implicit callback conversions are permanent, anchored, and unreclaimable until process exit.
+- A JIT-compiled FFI call that later calls back into Lua can panic with `bad callback` if the interpreter heuristic missed it. Message-polling APIs are the classic trap. If the C call may eventually re-enter Lua, put `jit.off()` around the surrounding Lua function instead of hoping the heuristic saves you.
+- Vararg C functions default Lua numbers to `double`. If the callee expects `int`, it can see garbled or uninitialized data. The only legitimate reason to box scalars with `ffi.new("int", x)` is overriding vararg conversion.
+- Boxing scalars with `ffi.new()` or `ffi.cast()` does not force cheap integer math. It adds boxing and unboxing overhead and cdata arithmetic becomes 64-bit sticky, which can silently change comparison and shift behavior.
+- Strict aliasing is enforced even for `char *` accesses. Type punning by cast is unsafe territory; if you need punning, use a declared `union`, which LuaJIT detects and allows.
+- Cdata table keys hash by address, not value. `t[1LL+1LL]`, `t[2LL]`, and `t[2]` are different lookups. Convert to number or string keys, or build a dedicated by-value hash table.
+- Pointers do not keep the pointed-to cdata alive. `ffi.new("foo_t", ffi.new("int[10]"))` creates a stale-pointer bug on the next GC cycle.
+
+## NEVER do these
+
+- NEVER lower `hotloop` globally because a benchmark looks under-jitted. That is seductive because it produces quick wins on the demo path. Instead, first prove the target kernel is stable enough to deserve earlier compilation.
+- NEVER lower `hotexit` to paper over branch instability, because it manufactures side traces for noise and burns compile budget on rare paths. Instead, remove the polymorphism causing the exits or isolate that branch as cold code.
+- NEVER respond to `maxrecord` or `maxsnap` by immediately raising the limits, because the seductive story is "the compiler almost had it." The usual consequence is a larger trace with worse spill pressure and code-cache churn. Instead, split the kernel and reduce live state.
+- NEVER wrap hot logic in C callbacks because the API looks elegant. The concrete cost is no cross-language inlining, slow C-to-Lua transitions, anchored callback resources, and occasional `bad callback` panics. Instead, keep the loop in Lua and call C in a pull-style way.
+- NEVER use `ffi.cast()` or `ffi.new()` on scalars to "help the JIT", because it feels explicit and low-level. The consequence is extra conversions plus 64-bit-sticky arithmetic surprises. Instead, stay in plain Lua numbers unless you are overriding vararg conversion or matching a precise ABI boundary.
+- NEVER use cdata values as table keys because they look like exact machine values. The consequence is address-based hashing, silent misses, and impossible cache behavior. Instead, canonicalize to Lua numbers or strings, or own the hash table yourself.
+- NEVER assume `char *` can safely alias anything, because C programmers learn that habit early. LuaJIT's JIT does not honor that C99 escape hatch. Instead, use a union when you truly need type punning.
+- NEVER benchmark after repeated `jit.flush()` loops without checking `-jp=vf`, because it feels like a clean reset. The consequence is measuring compile churn and penalty backoff instead of steady-state execution. Instead, validate whether traces actually restabilize after the flush.
+
+## Freedom calibration
+
+- High freedom: choosing trace boundaries, deciding whether to split kernels, and reshaping data to reduce guard surface.
+- Low freedom: ABI declarations, callback lifetimes, global `-Oparam` changes, and any benchmark claim. For those, make one change at a time and keep a rollback path.
+
+## When the primary move fails
+
+- If the hot path stays interpreted after cleanup, disable JIT on exactly that function and measure again. If performance barely changes, you were chasing the wrong hotspot.
+- If raising cache limits helps, verify the win survives a long run. Temporary wins often come from postponing eviction, not fixing instability.
+- If moving work into Lua makes it faster, do not be surprised. Under Pall-style tracing, "higher-level" source often wins because the recorder can see and specialize the whole composition.
+
+This style is guard-first, boundary-aware, and hostile to fake wins. Small semantic changes can flip entire execution modes; optimize the assumptions before you optimize the instructions.

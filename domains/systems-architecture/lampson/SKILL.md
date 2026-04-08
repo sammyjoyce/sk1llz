@@ -1,358 +1,141 @@
 ---
 name: lampson-system-design
-description: Design systems using Butler Lampson's principles of abstraction, interfaces, and practical wisdom. Emphasizes clean abstractions, security foundations, and time-tested design hints. Use when making architectural decisions, designing APIs, or building systems that must evolve over decades.
-tags: system-design, abstraction, interfaces, security, hints, architecture, naming, performance, modularity
+description: "Design long-lived computer systems in Butler Lampson's style: write abstract state and actions first, keep lower layers replaceable, put correctness end-to-end, and optimize for repair, tail latency, and evolvability. Use when choosing interfaces, retry/replication/transaction strategies, control-plane vs data-plane splits, storage hardening, or security boundaries. Trigger keywords: abstraction, spec, end-to-end, idempotence, retry, OCC, snapshot isolation, commit record, failover, repair, capability, least common mechanism, control plane."
 ---
 
-# Butler Lampson Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​‌​​‌​‌‍‌‌​​​‌‌​‍​​‌‌​​​‌‍​‌​​​‌‌‌‍​​​​‌​​‌‍‌‌​​‌‌​‌⁠‍⁠
+# Lampson System Design
 
-## Overview
+Use this skill for boundary decisions and failure-model choices. It is not for naming, formatting, or code-style cleanup inside an already-stable design.
 
-Butler Lampson is the architect's architect. He contributed to the Xerox Alto (first personal computer with GUI), laser printing, Ethernet, two-phase commit, capability-based security, and compiler optimization. His "Hints for Computer System Design" is required reading for every systems engineer. Turing Award winner (1992).
+## Mandatory loading triggers
 
-## Core Philosophy
+- Before changing an interface, consistency promise, retry policy, or failure contract: READ `philosophy.md`.
+- Before writing a design rationale, review, or architecture memo: READ `references.md`.
+- Do NOT load either file for mechanical edits that do not change semantics at a boundary.
 
-> "All problems in computer science can be solved by another level of indirection... except for the problem of too many layers of indirection."
+## Before doing anything architectural, ask yourself
 
-> "Do one thing at a time, and do it well."
+- What is the **abstract state**? Write it as data the client can name, not as tables, caches, threads, or shards.
+- What are the **actions** on that state, and which visible effects are safety properties versus liveness properties?
+- Which costs are actually binding in this regime: compute, storage, network, or queueing? Re-check; bottlenecks move over time.
+- Which guarantees belong **end-to-end** because only the application has enough knowledge?
+- Where do you need **prompt answers** versus merely **eventual repair**?
+- What is the **repair loop** after the first fault? If the answer is "operator later", you do not yet have a dependable design.
+- Which parts must be distributed for scale or fault domains, and which parts should stay centralized because distribution only adds partial failures?
 
-> "Keep secrets of the implementation from the user of the abstraction."
+If you cannot answer these questions in one page, you are still designing the wrong layer.
 
-## Design Principles
+## Lampson working loop
 
-1. **Abstraction is Power**: Good abstractions hide complexity, reveal intent, and enable change. Bad abstractions leak details and create coupling.
+1. **Write the state and actions first**
+   - A spec is a constraint on visible behavior, not a disguised implementation.
+   - Include resources and time when clients must reason about them. Hiding queueing or timeout behavior that clients must survive creates a leaky spec.
+   - Keep nondeterminism in the spec when it frees the implementation. Publishing incidental order, timing, or placement semantics is how teams accidentally freeze bad internals.
 
-2. **Interfaces are Forever**: Implementation can change; interfaces cannot. Design interfaces for the long term.
+2. **Decide where correctness lives**
+   - If a function can be implemented correctly only with application knowledge, lower layers may offer it only as a performance enhancement.
+   - End-to-end checks remain required for duplicate suppression, ordering, commit acknowledgment, encryption authenticity, and "did the action really happen?"
+   - Do not confuse a transport ACK with an application ACK. "I got the packet" and "I applied the effect" are different contracts.
 
-3. **Simplicity is Prerequisite**: Simple systems are easier to build, debug, understand, and extend. Complexity is the enemy.
+3. **Separate fast path, slow path, and repair path**
+   - Treat retry as a slow path with explicit economics. If success costs `f`, one retry costs `r`, and failure probability is `p`, slowdown stays small only when `p << f/r`.
+   - Lampson's concrete warning: if retry costs `10f`, failure probability must be well below 10%; otherwise retries become a major part of steady-state cost.
+   - If a component fails half the time and one retry costs 3x a success, the operation takes about 6x too long. At that point you need repair, not optimism.
 
-4. **Security as Architecture**: Security cannot be bolted on. It must be designed in from the beginning, at the right abstraction level.
+4. **Control tails before chasing averages**
+   - Design to p99/p99.9, not just mean latency.
+   - When tails matter, quotas, admission control, and load shedding beat micro-optimization.
+   - Fragment bursty work into many more pieces than workers, and bound the largest fragment so stragglers cannot dominate. But stop before per-fragment overhead becomes the bottleneck.
 
-5. **Make it Work, Make it Right, Make it Fast**: In that order. Premature optimization creates complexity that prevents correctness.
+5. **Centralize by default; distribute deliberately**
+   - If you have a choice, centralize. Distributed systems buy you partial failures, concurrency hazards, and communication cost.
+   - Distribute only for real fault tolerance, locality, or scale beyond one box.
+   - Keep the control plane centralized even when the data plane is distributed; large cloud systems do this because management rarely needs the same scale as data movement.
 
-## Hints for Computer System Design
+6. **Prefer repairable state representations**
+   - Represent state as both **being** and **becoming** when you can: current snapshot for reads, log/history for replay, audit, and reconstruction.
+   - Logs and checkpoints compose well with redo, replicated state machines, and postmortems.
+   - Pure current-state replication is harder to repair because it loses the explanation of how corruption or divergence happened.
 
-Lampson's famous hints, organized by goal:
+## Heuristics that usually separate experts from beginners
 
-### Functionality (Does it work?)
+- **Do not overspec latency-shaped interfaces.** RPC that looks like a local call is dangerous because it hides unpredictable network cost. If a user interaction can touch the network, make the UI asynchronous unless the network dependency is obvious to the user.
+- **Recompute old intuitions.** AES of a cache line can be about 50 cycles while a cache miss is about 200 cycles; abstractions built around "crypto is always the slow part" are often stale.
+- **"Good enough" needs a number.** Examples Lampson uses: 99.5% availability rather than 100%, response under 200 ms with 99% probability, 98% cache hit rate rather than perfection, within 10% of optimal rather than optimal.
+- **Availability is mostly MTTR, not heroic MTTF.** A useful approximation is `availability loss ~= MTTR / MTTF`, and MTTR is failover time, not bench repair time. Five nines is about five minutes of downtime per year.
+- **Redundancy without repair is a countdown, not resilience.** Mirroring without scrubbing only hides the first fault. Measure corrected errors, latent corruption, and partial failures, then repair continuously.
+- **Identify the real endpoints before invoking the end-to-end argument.** Live voice prefers an occasional damaged packet over retransmission delay; stored voice often wants the opposite. The same payload can justify opposite lower-layer behavior because the endpoint contract changed.
+- **Optimize degraded mode, not just pristine mode.** In Azure storage, transient and offline-node cases were the dominant failures, so reconstruction bandwidth and degraded-read latency mattered more than elegant steady-state code properties.
+- **Code hot mutable data differently from cold sealed data.** Azure kept data triply replicated while extents were hot and mutable, then lazily erasure-coded sealed ~1 GB extents in the background. That pattern avoids pushing erasure-coding penalties into the write path.
+- **Erasure coding is an operational trade, not a purity win.** LRC `(12,2,2)` hit a 1.33x storage overhead target and cut repair I/O/bandwidth compared with Reed-Solomon, but only after choosing layouts across fault and upgrade domains and accepting more machinery.
+- **Use OCC only when conflicts are truly rare.** Its fast path is seductive, but under load it can collapse into abort storms. When conflicts are common, waiting is cheaper than wasted work.
+- **Wait-free is not magic.** CAS-based updates prevent a slow lock holder from stopping others, but under contention retries can livelock unless conflicting threads help complete one another's updates.
 
-| Hint | Meaning |
-|------|---------|
-| **Separate normal and worst case** | Optimize for common case; handle edge cases separately |
-| **Do one thing well** | Don't generalize beyond what's needed |
-| **Don't hide power** | Let users access underlying capabilities when needed |
-| **Use procedure arguments** | Parameterize behavior, not just data |
-| **Leave it to the client** | Don't do things the client can do better |
-| **Keep secrets** | Hide implementation from interface |
-| **Divide and conquer** | Split problems into independent parts |
+## Decision trees
 
-### Speed (Is it fast?)
+### Interface and spec
 
-| Hint | Meaning |
-|------|---------|
-| **Split resources orthogonally** | Avoid contention through independence |
-| **Safety first, then optimize** | Correct code before fast code |
-| **Use static analysis** | Catch errors at compile time |
-| **Dynamic translation** | Optimize hot paths at runtime |
-| **Cache answers** | Reuse expensive computations |
-| **Use hints** | Use approximate information to speed common cases |
-| **Batch processing** | Amortize fixed costs over many operations |
+- If clients need the behavior to reason about correctness, put it in the spec.
+- If only the implementation needs it, keep it out of the spec.
+- If lower layers offer reliability, ordering, or deduplication, specify them as hints unless they are the final correctness boundary.
 
-### Fault Tolerance (Does it recover?)
+### Atomicity and concurrency
 
-| Hint | Meaning |
-|------|---------|
-| **End-to-end** | Only end-to-end checks guarantee correctness |
-| **Log updates** | Write-ahead logging enables recovery |
-| **Make actions atomic** | All-or-nothing simplifies recovery |
-| **Replicate for availability** | Redundancy survives failures |
+- If conflicts are rare and work is short: consider OCC or MVCC.
+- If conflicts are common: prefer locks or other explicit serialization.
+- If transactions are long-running: snapshot-style approaches beat holding locks for the whole duration.
+- If updates must stay non-blocking: use multi-version plus CAS only with a help path for contention.
 
-## When Designing Systems
+### Retry, redo, or replicate
 
-### Always
+- If failures are transient and detectable: retry with idempotence and exponential backoff.
+- If failures are crashes with persistent intent: use redo logs and replay.
+- If failures are node/media loss: replicate or code data, then design the repair bandwidth and topology explicitly.
+- If reconstruction dominates user-visible latency: reduce the amount of data read during repair before inventing a fancier durability story.
 
-- Define interfaces before implementation
-- Document what the abstraction guarantees (and doesn't)
-- Design for the common case first
-- Make operations atomic or idempotent
-- Use capabilities for security when possible
-- Consider how the system will evolve over 10 years
-- Hide implementation details aggressively
+### Transactions across boundaries
 
-### Never
+- If all participants are in one ownership domain and strict atomicity matters: use a log-backed transaction and a consensus-backed commit record for fault tolerance.
+- If participants cross organizations or teams with independent operations: do not assume global ACID will survive politics or lock ownership. Use compensating steps and idempotent messages.
+- If the real requirement is "eventual business completion" rather than strict atomic visibility: model compensation first, not last.
 
-- Expose internal state through interfaces
-- Add features "just in case"
-- Design security as an afterthought
-- Optimize before measuring
-- Create abstractions that leak
-- Let optimization compromise correctness
+### Authorization path
 
-### Prefer
-
-- Simple interfaces over flexible ones
-- Composition over inheritance
-- Stateless protocols over stateful
-- Explicit over implicit behavior
-- Capabilities over access control lists
-- Failure isolation over shared fate
-
-## Key Concepts
-
-### The Power of Indirection
-
-```text
-Every problem can be solved by adding a layer of indirection:
-
-Physical → Virtual Memory      (hide memory management)
-Files → Database               (hide storage layout)
-Sockets → HTTP                 (hide network details)
-Threads → Actors               (hide concurrency)
-
-But each layer has costs:
-- Performance overhead
-- Debugging complexity
-- Learning curve
-- Potential abstraction leaks
-
-Add indirection only when the abstraction is valuable.
-```
-
-### End-to-End Argument
-
-```text
-The end-to-end argument (Saltzer, Reed, Clark—influenced by Lampson):
-
-Low-level mechanisms (checksums, retries) can't guarantee 
-correctness; only end-to-end verification can.
-
-Example: File transfer
-- Network checksums catch bit errors
-- BUT: disk corruption, software bugs, truncation can still occur
-- ONLY end-to-end verification (hash of complete file) guarantees integrity
-
-Implication: Implement reliability at the ends, 
-not in the middle layers.
-```
-
-### Capability-Based Security
-
-```text
-Traditional: Ask "Who are you?" then check permissions
-Capabilities: "Here's a token that grants specific rights"
-
-Capability advantages:
-- Principle of least privilege is natural
-- Delegation is simple (pass the capability)
-- No confused deputy problem
-- Revocation is possible (revoke the capability)
-
-Example:
-  // ACL approach: check caller identity
-  if (user.canAccessFile(path)) {
-    read(path)  // might be wrong path
-  }
-  
-  // Capability approach: token IS permission
-  let file = openFile(path)  // get capability
-  read(file)                  // can only read what was granted
-```
-
-### Interface Design
-
-```text
-Good interfaces:
-1. Are minimal (no unnecessary operations)
-2. Are complete (can do everything needed)
-3. Have clear semantics (behavior is obvious)
-4. Are consistent (similar things work similarly)
-5. Hide implementation (can change underneath)
-
-Questions to ask:
-- What invariants does this interface maintain?
-- What can't be done with this interface?
-- How will this interface evolve?
-- What errors can occur?
-```
-
-## Code Patterns
-
-### Abstraction Boundaries
-
-```python
-class StorageEngine(Protocol):
-    """
-    Interface for storage backends.
-    
-    Lampson's principle: Keep secrets of implementation.
-    Users see only this interface, never the implementation.
-    """
-    
-    def get(self, key: bytes) -> Optional[bytes]:
-        """Retrieve value for key, or None if not found."""
-        ...
-    
-    def put(self, key: bytes, value: bytes) -> None:
-        """Store value at key. Atomic and durable."""
-        ...
-    
-    def delete(self, key: bytes) -> bool:
-        """Delete key. Returns True if key existed."""
-        ...
-    
-    # Note: NO methods exposing implementation details like:
-    # - flush_cache()      # Exposes caching strategy
-    # - get_file_handle()  # Exposes file-based storage
-    # - set_block_size()   # Exposes storage layout
-```
-
-### Separate Normal and Worst Case
-
-```python
-def get_user(user_id: str) -> User:
-    """
-    Lampson's hint: Separate normal and worst case.
-    
-    Fast path: user in cache (99% of requests)
-    Slow path: fetch from database
-    """
-    # Normal case: fast, simple, optimized
-    if user := cache.get(user_id):
-        return user
-    
-    # Worst case: slower, but still correct
-    user = database.fetch_user(user_id)
-    if user:
-        cache.set(user_id, user, ttl=300)
-    return user
-
-# The normal case is optimized for speed.
-# The worst case is handled correctly but separately.
-```
-
-### Capability Pattern
-
-```python
-from dataclasses import dataclass
-from typing import Callable
-
-@dataclass(frozen=True)
-class FileCapability:
-    """
-    A capability grants specific rights to a specific resource.
-    
-    Lampson's security model: capabilities over ACLs.
-    """
-    path: str
-    can_read: bool
-    can_write: bool
-    can_delete: bool
-    
-    def read(self) -> bytes:
-        if not self.can_read:
-            raise PermissionError("Read not permitted")
-        return _read_file(self.path)
-    
-    def write(self, data: bytes) -> None:
-        if not self.can_write:
-            raise PermissionError("Write not permitted")
-        _write_file(self.path, data)
-    
-    def attenuate(self, can_read=None, can_write=None) -> 'FileCapability':
-        """
-        Create a weaker capability from this one.
-        Can only remove rights, never add them.
-        """
-        return FileCapability(
-            path=self.path,
-            can_read=can_read if can_read is not None else self.can_read,
-            can_write=can_write if can_write is not None else self.can_write,
-            can_delete=False  # Never delegate delete
-        )
-
-# Usage: Pass capabilities, not identity
-def process_file(file_cap: FileCapability):
-    data = file_cap.read()  # Can only do what capability allows
-    result = transform(data)
-    file_cap.write(result)
-```
-
-### Hints for Speed
-
-```python
-class QueryCache:
-    """
-    Lampson's hint: "Use hints"
-    
-    A hint is information that can speed up computation
-    but is not required for correctness.
-    """
-    
-    def __init__(self):
-        self._cache: dict[str, tuple[float, Any]] = {}
-        self._ttl = 60.0
-    
-    def get_with_hint(
-        self, 
-        key: str, 
-        compute: Callable[[], Any]
-    ) -> Any:
-        """
-        Use cached value as hint; verify if stale.
-        """
-        now = time.time()
-        
-        if key in self._cache:
-            timestamp, value = self._cache[key]
-            if now - timestamp < self._ttl:
-                # Hint is fresh, use directly
-                return value
-            else:
-                # Hint is stale, but start with it
-                # (e.g., for conditional GET)
-                return self._refresh(key, value, compute)
-        
-        # No hint available, compute from scratch
-        value = compute()
-        self._cache[key] = (now, value)
-        return value
-```
-
-## Mental Model
-
-Lampson approaches design as an architect:
-
-1. **Define the abstraction**: What does the user see? What is hidden?
-2. **Specify the interface**: What operations? What guarantees?
-3. **Consider evolution**: How will this change over 10 years?
-4. **Design for failure**: What happens when things go wrong?
-5. **Optimize last**: Get it right, then get it fast.
-
-### The Design Review Questions
-
-```text
-When reviewing a design, ask:
-1. What problem does this solve?
-2. What is the interface?
-3. What are the invariants?
-4. What are the failure modes?
-5. How will this evolve?
-6. What is the security model?
-7. How will you know it works?
-```
-
-## Warning Signs
-
-You're violating Lampson's principles if:
-
-- Interfaces expose implementation details
-- "Temporary" hacks become permanent
-- Security is "added later"
-- The abstraction serves the implementation, not the user
-- You can't explain the invariants
-- Optimization happens before correctness
-
-## Additional Resources
-
-- For detailed philosophy, see [philosophy.md](philosophy.md)
-- For references (papers, talks), see [references.md](references.md)
+- Store policy where administrators can answer "who has access to this resource?" That usually means list-oriented ACL management.
+- Use short-lived ticket or capability-like handles for fast checks on the hot path; ticket-oriented checks are cheaper than associative ACL lookup.
+- If revocation must be immediate, be skeptical of cached authorization decisions; complete mediation and cached answers are in tension.
+- If you combine ACL administration with capability execution, design the synchronization path first; revocation bugs usually live in the gap between the two.
+
+## Anti-patterns
+
+- **NEVER put a correctness guarantee in a low layer just because many clients want it.** That is seductive because it looks like reuse, but applications still need end-to-end checks for crashes, duplicates, or misapplied effects. Instead expose the lower-layer feature as an optional acceleration and keep the final correctness proof at the endpoint.
+- **NEVER publish incidental timing or ordering behavior as part of the interface.** It feels "honest," but clients will ossify around today's bottleneck profile and you will lose the freedom to change the implementation. Instead specify only the latency classes or ordering guarantees clients truly need.
+- **NEVER default to a distributed design because distribution sounds scalable.** The seductive part is horizontal-growth rhetoric; the consequence is partial failures, queueing, and debugging states that do not exist in one box. Instead centralize until locality, availability, or throughput forces distribution.
+- **NEVER treat redundancy as sufficient.** It is seductive because replicas make dashboards look green, but a failed replica without scrubbing or rebuild means the next fault becomes user-visible loss. Instead define repair cadence, corrected-error telemetry, and failover MTTR up front.
+- **NEVER use OCC on a hotly contended path because the no-lock fast path looks elegant.** Under real contention it degenerates into wasted work and retry storms. Instead serialize the hot region or add structure that reduces conflicts before reaching for OCC.
+- **NEVER hold prepared distributed work across organizational boundaries because ACID feels safer.** The consequence is lock ownership tied to other people's outages and deployment schedules. Instead use consensus-backed commit only within one authority domain; across domains use compensation and idempotence.
+- **NEVER factor shared infrastructure to the union of everyone's needs.** That is seductive because it looks like maximal reuse, but it drags specialized behavior into a shared mechanism and enlarges the failure surface. Instead use the **greatest common mechanism** outside security-sensitive code and the **least common mechanism** inside the TCB.
+- **NEVER cache authorization results without an explicit revocation story.** It is tempting because permission checks are hot-path overhead, but stale privilege is a silent security bug. Instead cache short-lived capabilities or build invalidation into policy changes.
+
+## Security and trust boundaries
+
+- Use the smallest TCB you can explain. End-to-end encryption shrinks the set of components that must be trusted for secrecy and integrity.
+- Physical isolation is simpler than software isolation; VMs are simpler than OS process isolation because the interface is smaller and better specified.
+- Different parties optimize different failures. A vendor may prefer hidden corruption over visible parity faults because the blame lands elsewhere; design your telemetry for the operator's interests, not the vendor's PR interests.
+- Protection dynamics matter as much as static policy. Revocation during active use, re-auth on recovery, and maintenance-mode access are where "check every access" usually breaks.
+
+## Fallback playbook when the first design stops working
+
+- If retries start driving the tail: cap retries, add backoff, and move completion to async reconciliation before tuning the happy path.
+- If a shared subsystem keeps accreting special cases: cut it back to the greatest common mechanism and push specialized behavior to adapters or libraries.
+- If erasure-coded recovery hurts live traffic: keep hot writes replicated longer and postpone coding until objects seal or cool down.
+- If revocation latency becomes unacceptable: shorten ticket lifetime, reduce cache duration, and shift more checks back to centralized policy.
+
+## Stop only when these are explicit
+
+- The abstract state and the allowed actions on it.
+- Which guarantees are end-to-end contracts and which are performance hints.
+- Tail targets and what you will shed or defer to keep them.
+- The repair loop: detection, failover, rebuild, audit.
+- The concurrency choice and the failure mode when contention rises.
+- The ownership boundary where global atomicity stops and compensation starts.

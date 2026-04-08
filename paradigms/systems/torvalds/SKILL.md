@@ -1,327 +1,67 @@
 ---
 name: torvalds-kernel-pragmatism
-description: Write systems code in the style of Linus Torvalds, creator of Linux and Git. Emphasizes pragmatic excellence, performance awareness, subsystem design, and uncompromising code review. Use when writing kernel-level code or high-performance systems.
-tags: linux, kernel, git, systems, open-source, pragmatic, performance, drivers, scheduling, memory-management
+description: "Kernel-maintainer heuristics for Linux C, review, and patch flow: regression triage, bisect-safe patch slicing, calling-context decisions, UAPI immutability, and review-scarred anti-patterns. Use when writing or reviewing Linux kernel code, drivers, modules, lockless/RCU/IRQ paths, ioctl/sysfs/proc/syscall changes, or LKML/stable-ready patch series. Triggers: kernel patch, device driver, kernel module, LKML, stable backport, regression, RCU, spinlock, GFP_ATOMIC, READ_ONCE, ioctl, sysfs, procfs, Fixes tag, checkpatch, git bisect."
 ---
 
-# Linus Torvalds Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌​‌‌‌‍​‌‌​​‌​‌‍‌​‌​​‌‌‌‍​‌‌​‌‌‌‌‍​​​​‌​‌​‍​‌​‌‌‌​​⁠‍⁠
-
-## Overview
-
-Linus Torvalds created the Linux kernel and Git, managing one of the largest collaborative software projects in history. His approach combines deep technical excellence with pragmatic decision-making and famously direct code review.
-
-## Core Philosophy
-
-> "Talk is cheap. Show me the code."
-
-> "Bad programmers worry about the code. Good programmers worry about data structures and their relationships."
-
-> "Given enough eyeballs, all bugs are shallow."
-
-Torvalds believes in practical excellence: code that works, performs well, and can be maintained by a distributed team of thousands.
-
-## Design Principles
-
-1. **Data Structures First**: Get the data structures right; the code follows.
-
-2. **Performance Matters**: Understand cache, branches, and memory.
-
-3. **Pragmatism Over Purity**: Working code beats elegant theory.
-
-4. **Code Review Is Essential**: Every patch must withstand scrutiny.
-
-## When Writing Code
-
-### Always
-
-- Design data structures before algorithms
-- Think about cache locality
-- Profile before optimizing
-- Write clear commit messages
-- Keep patches small and focused
-- Test on real hardware
-
-### Never
-
-- Submit untested code
-- Ignore performance implications
-- Use abstractions that hide costs
-- Write clever code that obscures intent
-- Break userspace API/ABI
-- Ignore reviewer feedback
-
-### Prefer
-
-- Arrays over linked lists (cache friendly)
-- Simple loops over recursion
-- Inline functions over macros
-- Explicit state over hidden magic
-- Measured optimizations over speculative
-
-## Code Patterns
-
-### Linux Kernel Style
-
-```c
-// kernel style: tabs, 80 columns, spaces around operators
-
-#include <linux/kernel.h>
-#include <linux/slab.h>
-
-struct device_data {
-        struct list_head list;
-        unsigned long flags;
-        void __iomem *base;
-        int irq;
-};
-
-static int device_init(struct device_data *dev)
-{
-        int ret;
-
-        dev->base = ioremap(DEVICE_BASE, DEVICE_SIZE);
-        if (!dev->base) {
-                pr_err("Failed to map device memory\n");
-                return -ENOMEM;
-        }
-
-        ret = request_irq(dev->irq, device_handler, 0, "mydev", dev);
-        if (ret) {
-                iounmap(dev->base);
-                return ret;
-        }
-
-        return 0;
-}
-```
-
-### Data Structures Matter
-
-```c
-// BAD: Linked list for frequently traversed data
-struct node {
-    struct node *next;
-    int value;
-};
-
-// Traversal: terrible cache behavior
-// Each node is a cache miss
-
-// GOOD: Array-based for cache locality
-struct array {
-    int *values;
-    size_t count;
-    size_t capacity;
-};
-
-// Traversal: sequential memory access
-// Prefetcher works, cache is happy
-
-
-// When you need linked lists, use the kernel's
-#include <linux/list.h>
-
-struct my_item {
-    struct list_head list;  // Embed the list node
-    int data;
-};
-
-struct list_head my_list;
-INIT_LIST_HEAD(&my_list);
-
-// Iterate safely
-struct my_item *item;
-list_for_each_entry(item, &my_list, list) {
-    process(item->data);
-}
-```
-
-### Error Handling Patterns
-
-```c
-// Single exit point with goto for cleanup
-int complex_init(struct device *dev)
-{
-        int ret;
-
-        dev->buffer = kmalloc(BUF_SIZE, GFP_KERNEL);
-        if (!dev->buffer) {
-                ret = -ENOMEM;
-                goto err_buffer;
-        }
-
-        dev->workqueue = create_workqueue("mydev");
-        if (!dev->workqueue) {
-                ret = -ENOMEM;
-                goto err_workqueue;
-        }
-
-        ret = register_device(dev);
-        if (ret)
-                goto err_register;
-
-        return 0;
-
-err_register:
-        destroy_workqueue(dev->workqueue);
-err_workqueue:
-        kfree(dev->buffer);
-err_buffer:
-        return ret;
-}
-
-// Cleanup in reverse order of initialization
-// One error path, easy to audit
-```
-
-### Commit Message Excellence
-
-```
-subsystem: short summary (50 chars or less)
-
-More detailed explanatory text, if necessary. Wrap it to about 72
-characters. The blank line separating the summary from the body is
-critical.
-
-Explain the problem that this commit is solving. Focus on why you
-are making this change as opposed to how. The code shows the how.
-
-If there are any side effects or other unintuitive consequences of
-this change, explain them here.
-
-Fixes: abc123def456 ("commit that introduced bug")
-Reported-by: Someone <someone@example.com>
-Signed-off-by: Your Name <you@example.com>
-```
-
-### Performance-Conscious Code
-
-```c
-// Branch prediction: common case first
-if (likely(fast_path_condition)) {
-    // Common case
-    return quick_result;
-}
-// Slow path
-return handle_slow_case();
-
-
-// Cache-friendly iteration
-// BAD: strided access
-for (int i = 0; i < rows; i++)
-    for (int j = 0; j < cols; j++)
-        process(matrix[j][i]);  // Column-major = cache misses
-
-// GOOD: sequential access
-for (int i = 0; i < rows; i++)
-    for (int j = 0; j < cols; j++)
-        process(matrix[i][j]);  // Row-major = cache friendly
-
-
-// Avoid unnecessary memory barriers
-// Use READ_ONCE/WRITE_ONCE for shared data
-int value = READ_ONCE(shared_variable);
-WRITE_ONCE(shared_variable, new_value);
-```
-
-### Git Usage
-
-```bash
-# Torvalds Git workflow
-
-# Commit often, commit small
-git add -p                    # Stage hunks, not files
-git commit -m "subsystem: specific change"
-
-# Rebase for clean history (before sharing)
-git rebase -i HEAD~5          # Clean up local commits
-
-# Never rebase published history
-# History is sacred once pushed
-
-# Bisect to find bugs
-git bisect start
-git bisect bad HEAD
-git bisect good v5.10
-# Git finds the breaking commit
-
-# Blame to understand code
-git blame -w -C -C file.c     # Ignore whitespace, track moves
-```
-
-### Subsystem Design
-
-```c
-// Define clear boundaries between subsystems
-// Each subsystem has:
-// 1. Public API (exported symbols)
-// 2. Internal implementation
-// 3. Data structures
-
-// Public API
-int subsystem_init(void);
-void subsystem_cleanup(void);
-int subsystem_do_thing(struct thing *t);
-
-// Internal - not exported
-static int internal_helper(void);
-static struct cache internal_cache;
-
-// Use proper namespacing
-// subsystem_verb_noun()
-
-int netdev_register_device(struct net_device *dev);
-int netdev_unregister_device(struct net_device *dev);
-int blkdev_read_sector(struct block_device *bdev, sector_t sector);
-```
-
-### Reference Counting
-
-```c
-#include <linux/kref.h>
-
-struct my_object {
-    struct kref refcount;
-    // ... other fields
-};
-
-static void my_object_release(struct kref *kref)
-{
-    struct my_object *obj = container_of(kref, struct my_object, refcount);
-    kfree(obj);
-}
-
-// Get reference
-struct my_object *my_object_get(struct my_object *obj)
-{
-    if (obj)
-        kref_get(&obj->refcount);
-    return obj;
-}
-
-// Release reference
-void my_object_put(struct my_object *obj)
-{
-    if (obj)
-        kref_put(&obj->refcount, my_object_release);
-}
-```
-
-## Mental Model
-
-Torvalds approaches systems code by asking:
-
-1. **What are the data structures?** Design these first
-2. **What's the cache behavior?** Memory access patterns matter
-3. **What's the common case?** Optimize for it
-4. **Can I review this easily?** Clear code, small patches
-5. **What breaks if this is wrong?** Systems code must be reliable
-
-## Signature Torvalds Moves
-
-- Data structures before algorithms
-- goto for cleanup (in kernel code)
-- likely/unlikely for branch hints
-- Cache-conscious data layout
-- Small, focused commits
-- Direct, honest code review
+# Torvalds / Kernel Pragmatism
+
+Treat kernel work as damage control on a live ecosystem, not as a greenfield coding exercise. The winning move is usually the one that preserves userspace, preserves bisectability, and lets an annoyed maintainer verify the change without reconstructing your intent from scratch.
+
+## Before you touch code, ask yourself
+
+- **Is this a regression?** If yes, the default is revert-first, not clever-fix-first. The regression docs explicitly say to always consider reverting the culprit, to aim for a fix within 2-3 days when impact is severe, and to avoid letting even current-cycle regressions drift to the end of the cycle.
+- **Is anything userspace-visible?** Syscalls, `ioctl`, `/proc`, `/sys`, netlink payloads, module parameter names, and structured `printk` output are contracts. Internal kernel APIs are disposable; userspace ABI is not.
+- **What exact context am I running in?** Process vs softirq vs hardirq vs NMI vs RCU read-side is not an implementation detail; it determines whether sleeping, locking, and allocation are legal at all.
+- **Can each commit stand trial alone?** If `git bisect` lands on commit N, that commit must build, boot, and justify itself without commit N+1.
+- **Am I solving one real bug, or am I shipping review bait?** Tree-wide cleanups, style churn, and mass API conversions consume reviewer budget while reducing signal.
+
+## Heuristics that matter more than style
+
+- Stable backports are deliberately narrow: upstream first, obviously correct, tested, and typically no bigger than 100 lines including context. A fix that needs a long verbal defense is usually not a `stable@` candidate yet.
+- `GFP_ATOMIC` is not "safer kmalloc"; it burns atomic reserves. The MM docs also note that current `GFP_ATOMIC` handling does not cover NMI or contexts that disable preemption under PREEMPT_RT such as `raw_spin_lock()` and plain `preempt_disable()`.
+- `__GFP_NOFAIL` is only honest when the caller truly has no failure policy, may sleep indefinitely, and is not asking the buddy allocator for order > 1. For larger "must succeed" buffers, the docs point you at `kvmalloc()` or a redesign.
+- Plain shared-memory accesses are wrong even on x86. The compiler can fold, refetch, or tear them. For add-only RCU structures, `READ_ONCE()` can be enough; once removal or lifetime changes enter the picture, use `rcu_dereference()` / `rcu_assign_pointer()`.
+- Kernel stacks are small enough to be a design constraint: about 3K-6K on many 32-bit configurations and about 14K on many 64-bit ones, often shared with interrupt handling. VLAs are banned because they generate worse code and can walk off the remaining stack budget.
+- `BUG()` is not a tougher `WARN()`. It destabilizes the machine and can destroy the evidence needed to debug the real problem. Kernel docs now say new code should use `WARN*()`, usually `WARN_ON_ONCE()`, with recovery when possible.
+- UAPI padding is future budget. If you do not reject non-zero unknown fields and padding, random userspace stack garbage becomes part of the ABI forever and you lose extension room.
+- A `Fixes:` tag needs at least 12 hex chars plus the exact original one-line summary. The same docs say not to split the tag across lines because scripts parse it.
+- If you move code between files, do not modify it in the same patch. Kernel submission docs call this out because mixed move+edit commits destroy history tracking and force reviewers to diff noise instead of behavior.
+- For non-trivial series, use `git format-patch --base=auto --cover-letter`. The `base-commit:` trailer is not decorative; it tells reviewers and CI exactly which tree to replay instead of guessing from your branch name.
+- Review throughput drops off hard after about 15 patches in flight. If the series cannot be condensed, post in chunks instead of asking maintainers to hold the entire graph in their heads.
+- Reviewers trust explicit interleavings more than adjectives. For races or ordering bugs, draw the CPU0/CPU1 timeline in the changelog instead of writing "obviously synchronized".
+
+## NEVER do the seductive thing
+
+- **NEVER send tree-wide mechanical conversions** because they look low-risk, reviewers skim them, `git blame` gets noisier, and the one semantic drift hidden in file 173 survives to production. Instead convert only bug-adjacent code or new call sites, and justify each old-site conversion with a real defect.
+- **NEVER rebase published or borrowed history** because reparenting invalidates prior testing and poisons downstream bisects; rebasing onto a random in-between kernel commit is especially bad. Instead clean up only private branches and, if rebasing is unavoidable, move to a stable point such as a release or `-rc` and retest from scratch.
+- **NEVER use `volatile` for shared kernel state** because it suppresses optimization inside already-correct critical sections while leaving the real race untouched. Instead encode the concurrency model with locks, `READ_ONCE`/`WRITE_ONCE`, release/acquire operations, or RCU primitives.
+- **NEVER open-code allocator arithmetic** because overflow becomes an undersized allocation and the eventual heap corruption happens far from the call site. Instead use `kmalloc_array()`, `kcalloc()`, `struct_size()`, and `size_*()` helpers.
+- **NEVER treat `GFP_ATOMIC` as generic defensive coding** because it consumes emergency reserves and still does not make sleeping callers legal. Instead identify the real context and choose `GFP_KERNEL`, `GFP_NOWAIT`, a preallocated pool, or a different call path.
+- **NEVER add or extend an `ioctl` without fixed-width types, explicit padding, zero checks, and feature discovery** because ignored tail fields and garbage padding become ABI commitments. Instead design for 32/64-bit compat on day one and reject unknown bits immediately.
+- **NEVER mark a patch `Cc: stable@vger.kernel.org` just because it feels harmless** because stable rules explicitly reject theoretical races and oversized or under-tested fixes. Instead land upstream first, prove user impact, and test against the actual stable branch you want to target.
+- **NEVER use `BUG_ON()` as a shortcut for error handling** because the seductive part is that it hides unwind code, but the consequence is a less debuggable and sometimes unrecoverable system. Instead use `WARN_ON_ONCE()` for truly impossible states or unwind and return an error.
+
+## Mandatory routing into the local references
+
+| Before you do this | Read this first | Do not load this for that task |
+|---|---|---|
+| Touch shared state, ordering, RCU, IRQ/softirq interactions, or lockless polling | `references/concurrency.md` | Do not load `references/userspace-contract.md` unless the change is also userspace-visible |
+| Add allocations, pointer-or-error returns, refcounts, or multi-step cleanup | `references/kernel-idioms.md` | Do not load `references/philosophy.md` unless the core problem is data-shape or special-case elimination |
+| Feel tempted to write `if (first)`, `if (!prev)`, dummy one-off head/tail logic, or duplicate branches with different LHS | `references/philosophy.md` | Do not load `references/concurrency.md` for a purely structural refactor |
+| Change a syscall, `ioctl`, `/proc`, `/sys`, netlink format, commit tags, series splitting, or backport intent | `references/userspace-contract.md` | Do not load `references/kernel-idioms.md` for a commit-message-only task |
+
+## Decision tree when the first idea feels "too big"
+
+1. If a regression has a safe revert, ship the revert first and the improved version later.
+2. If the fix is too large for stable or depends on refactoring, split it into: minimal user-visible fix now, cleanup later.
+3. If a race explanation needs adjectives like "subtle" or "probably safe", stop and write the event timeline; if you cannot explain the ordering in columns, you do not understand it yet.
+4. If the patch changes both behavior and cleanup, separate them unless the cleanup is mechanically required for the behavior change.
+5. If this is userland C rather than kernel code, keep the no-regression mindset, bisect-friendly slicing, overflow-safe allocation helpers, and cleanup ladders; drop the kernel-only GFP/RCU/UAPI rules.
+
+## Done looks like this
+
+- The patch solves one real problem and leaves unrelated cleanup for later.
+- The calling context is explicit enough that sleeping/allocation/locking legality is obvious.
+- Any userspace-visible change was treated as ABI work, not as an internal refactor.
+- Every commit builds and can be reverted independently.
+- The references above were loaded only when the task actually needed them.

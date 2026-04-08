@@ -1,536 +1,115 @@
 ---
 name: mitre-attack-framework
-description: Apply the MITRE ATT&CK framework for threat intelligence and detection. Provides a universal taxonomy of adversary tactics, techniques, and procedures (TTPs). Use when mapping threats, building detections, or assessing defensive coverage.
-tags: mitre, attack-framework, ttps, tactics, techniques, detection, adversary, threat-model, defense, coverage
+description: "Turn ATT&CK into defender-grade mappings, hunt hypotheses, and coverage decisions that survive peer review. Use when mapping CTI, incident evidence, raw telemetry, Sigma/EDR detections, Navigator layers, or coverage claims to ATT&CK techniques and sub-techniques. Trigger keywords: map to attack, mitre attack, t10xx, ta00xx, sub-technique, navigator layer, detection coverage, dettect, attack flow, ttp mapping, hunt hypothesis, technique id, attack version."
+tags: mitre, attack, ttp, detection, threat-hunting, cti, coverage, navigator, dettect, sub-technique
 ---
 
-# MITRE ATT&CK Framework⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌​‌​‌‍​​​​‌‌‌​‍‌‌‌‌‌‌​​‍‌​‌​‌​​‌‍​​​​‌​‌​‍‌​​‌​​‌​⁠‍⁠
+# MITRE ATT&CK for Threat Hunting and Detection Engineering
 
-## Overview
+ATT&CK is useful only when it changes defender decisions. The failure mode is not "wrong ID"; it is building detections, metrics, and priorities on a neat but false mapping.
 
-MITRE ATT&CK (Adversarial Tactics, Techniques, and Common Knowledge) is a globally-accessible knowledge base of adversary behavior based on real-world observations. Created by MITRE Corporation, it has become the universal language for describing how adversaries operate.
+## Before you map anything, ask yourself
 
-## References
+- **What exact observable am I mapping?** If you cannot quote the command line, API call, registry key, cloud API action, network pattern, or file path, you are not at technique level yet.
+- **Am I mapping adversary behavior or my sensor artifact?** "Sysmon Event ID 10 fired" is telemetry, not a technique. "Process opened lsass.exe with suspicious access mask" is behavior.
+- **How much procedure freedom does this technique have?** Low-freedom techniques can be covered. High-freedom techniques only make sense when decomposed into narrow procedure families.
+- **Is this prevalence or visibility bias?** Vendor top-technique lists are useful seeds, but rankings move when telemetry improves. Red Canary's identity detections rose about 5x in 1H 2025 largely from better visibility and baselining, not a 5x change in attacker behavior.
 
-- **Website**: https://attack.mitre.org/
-- **Navigator**: https://mitre-attack.github.io/attack-navigator/
-- **GitHub**: https://github.com/mitre-attack
+## Use the right ATT&CK model for the task
 
-## Core Philosophy
+- If the task is **CTI or incident mapping**, think in `behavior -> tactic -> technique -> sub-technique -> procedure example`.
+- If the task is **detection or coverage**, think in `technique/sub-technique -> Detection Strategy (DET) -> Analytics (AN) -> Data Components (DC) -> concrete log sources -> mutable tuning elements`.
+- ATT&CK's defensive model changed materially in v18. If your tooling still relies on old `x_mitre_detection` prose or treats "data source present" as coverage, mark it as legacy before comparing it with v18 defensive content.
+- ATT&CK versions are not interchangeable. Pin version permalinks in every artifact. A technique that looked stable in v14 may have different detection guidance, sub-technique shape, or tactic placement in v18+.
 
-> "Know your adversary."
+## Procedure-space heuristic
 
-> "You can't defend against what you don't understand."
+Use this before promising "coverage":
 
-ATT&CK shifts the focus from IOCs (what attackers use) to TTPs (how attackers behave). This behavioral focus provides more durable detection strategies.
+| Procedure freedom | What it means | How to use ATT&CK |
+|---|---|---|
+| **Low** | Few realistic ways to perform it | Good coverage candidates. Example families: LSASS access, scheduled-task creation, Registry Run key writes. |
+| **Medium** | Bounded but variant-heavy | Cover with multiple analytics plus context. Example families: WMI execution, service execution, cloud firewall changes. |
+| **High / unbounded** | Too many valid procedures to "cover the technique" | Never claim full coverage. Split into narrow procedure families and test each one. Example families: Command and Scripting Interpreter, Masquerading, User Execution. |
 
-## The ATT&CK Matrix Structure
+If you cannot name the procedure family, you are still doing taxonomy, not detection engineering.
+
+## Decision tree - what can I map?
 
 ```
-Enterprise ATT&CK Matrix
-
-TACTICS (The "Why" - Adversary Goals)
-├── Reconnaissance        ← Gather information
-├── Resource Development  ← Build infrastructure  
-├── Initial Access        ← Get into the network
-├── Execution             ← Run malicious code
-├── Persistence           ← Maintain foothold
-├── Privilege Escalation  ← Get higher privileges
-├── Defense Evasion       ← Avoid detection
-├── Credential Access     ← Steal credentials
-├── Discovery             ← Learn the environment
-├── Lateral Movement      ← Move through network
-├── Collection            ← Gather target data
-├── Command and Control   ← Communicate with implants
-├── Exfiltration          ← Steal data
-└── Impact                ← Damage or disrupt
-
-TECHNIQUES (The "How" - Methods Used)
-└── Each tactic contains multiple techniques
-    └── Techniques may have sub-techniques
-        └── Example: T1059.001 (PowerShell) under T1059 (Command and Scripting Interpreter)
+Do I have a direct observable?
+|- No -> map only to a tactic and label "tactic-only, insufficient detail"
+\- Yes -> does the observable uniquely distinguish one technique or sub-technique?
+    |- Yes -> use the most specific sub-technique the evidence supports
+    \- No -> check for concurrent mappings, not a forced single winner
+              then mark any remaining ambiguity explicitly
 ```
 
-## Key Components
+Most non-trivial behaviors map concurrently. HTTP C2 on port 8088 is not a tie between T1071.001 and T1571; it is both.
 
-| Component | Description | Example |
-|-----------|-------------|---------|
-| **Tactics** | Adversary goals | Credential Access |
-| **Techniques** | How goals are achieved | OS Credential Dumping (T1003) |
-| **Sub-techniques** | Specific implementations | LSASS Memory (T1003.001) |
-| **Procedures** | Real-world examples | APT28 uses Mimikatz |
-| **Mitigations** | How to prevent | Credential Guard |
-| **Detections** | How to find | Monitor LSASS access |
+## Decision tree - should I build detection now?
 
-## When Implementing
-
-### Always
-
-- Map detections to ATT&CK techniques
-- Assess coverage across all tactics
-- Use ATT&CK Navigator for visualization
-- Reference technique IDs in alerts
-- Track adversary groups and their TTPs
-- Update mapping as ATT&CK evolves
-
-### Never
-
-- Assume full coverage from a few detections
-- Ignore techniques without current detections
-- Treat ATT&CK as a compliance checklist
-- Map inaccurately to inflate coverage
-- Forget sub-techniques in analysis
-
-### Prefer
-
-- Behavioral detection over signature matching
-- Coverage breadth over depth initially
-- Technique-based hunting hypotheses
-- ATT&CK-aligned threat intelligence
-- Continuous coverage assessment
-
-## Implementation Patterns
-
-### ATT&CK Coverage Assessment
-
-```python
-# attack_coverage.py
-# Assess and visualize ATT&CK coverage
-
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Set
-from enum import Enum
-import json
-
-class CoverageLevel(Enum):
-    NONE = 0
-    MINIMAL = 1      # Basic detection exists
-    PARTIAL = 2      # Some variants covered
-    SUBSTANTIAL = 3  # Most variants covered
-    COMPREHENSIVE = 4 # Full coverage with validation
-
-@dataclass
-class Technique:
-    """ATT&CK Technique representation"""
-    id: str                          # e.g., "T1003.001"
-    name: str                        # e.g., "LSASS Memory"
-    tactic: str                      # e.g., "Credential Access"
-    platforms: List[str]             # e.g., ["Windows"]
-    data_sources: List[str]          # Required telemetry
-    
-    # Coverage tracking
-    detections: List[str] = field(default_factory=list)
-    coverage_level: CoverageLevel = CoverageLevel.NONE
-    last_validated: Optional[str] = None
-    
-    @property
-    def is_sub_technique(self) -> bool:
-        return "." in self.id
-
-@dataclass
-class Detection:
-    """A detection rule mapped to ATT&CK"""
-    name: str
-    techniques: List[str]           # ATT&CK technique IDs
-    query: str
-    platform: str                   # SIEM/EDR platform
-    false_positive_rate: float
-    validated: bool = False
-
-class ATTACKCoverageAnalyzer:
-    """Analyze detection coverage against ATT&CK"""
-    
-    def __init__(self):
-        self.techniques: Dict[str, Technique] = {}
-        self.detections: List[Detection] = []
-        self.tactics = [
-            "Reconnaissance", "Resource Development", "Initial Access",
-            "Execution", "Persistence", "Privilege Escalation",
-            "Defense Evasion", "Credential Access", "Discovery",
-            "Lateral Movement", "Collection", "Command and Control",
-            "Exfiltration", "Impact"
-        ]
-    
-    def load_attack_data(self, attack_json_path: str):
-        """Load ATT&CK STIX data"""
-        # In practice, load from MITRE's STIX bundle
-        pass
-    
-    def add_detection(self, detection: Detection):
-        """Add detection and update coverage"""
-        self.detections.append(detection)
-        
-        for tech_id in detection.techniques:
-            if tech_id in self.techniques:
-                self.techniques[tech_id].detections.append(detection.name)
-                self._update_coverage_level(tech_id)
-    
-    def _update_coverage_level(self, tech_id: str):
-        """Recalculate coverage level for technique"""
-        tech = self.techniques[tech_id]
-        detection_count = len(tech.detections)
-        
-        if detection_count == 0:
-            tech.coverage_level = CoverageLevel.NONE
-        elif detection_count == 1:
-            tech.coverage_level = CoverageLevel.MINIMAL
-        elif detection_count < 3:
-            tech.coverage_level = CoverageLevel.PARTIAL
-        elif detection_count < 5:
-            tech.coverage_level = CoverageLevel.SUBSTANTIAL
-        else:
-            tech.coverage_level = CoverageLevel.COMPREHENSIVE
-    
-    def coverage_by_tactic(self) -> Dict[str, dict]:
-        """Get coverage statistics per tactic"""
-        results = {}
-        
-        for tactic in self.tactics:
-            tactic_techs = [t for t in self.techniques.values() 
-                          if t.tactic == tactic]
-            
-            if not tactic_techs:
-                continue
-            
-            covered = sum(1 for t in tactic_techs 
-                         if t.coverage_level != CoverageLevel.NONE)
-            
-            results[tactic] = {
-                'total_techniques': len(tactic_techs),
-                'covered': covered,
-                'coverage_percent': (covered / len(tactic_techs)) * 100,
-                'gaps': [t.id for t in tactic_techs 
-                        if t.coverage_level == CoverageLevel.NONE]
-            }
-        
-        return results
-    
-    def identify_gaps(self) -> List[Technique]:
-        """Find techniques with no detection coverage"""
-        return [t for t in self.techniques.values() 
-                if t.coverage_level == CoverageLevel.NONE]
-    
-    def prioritize_gaps(self) -> List[Technique]:
-        """Prioritize gaps by adversary usage"""
-        gaps = self.identify_gaps()
-        
-        # Prioritize by:
-        # 1. Commonly used by threat groups
-        # 2. Data sources already available
-        # 3. Tactic importance
-        
-        high_priority_tactics = [
-            "Initial Access", "Execution", "Persistence",
-            "Credential Access", "Lateral Movement"
-        ]
-        
-        prioritized = sorted(
-            gaps,
-            key=lambda t: (
-                t.tactic in high_priority_tactics,  # Prioritize key tactics
-                len(t.data_sources)                  # Easier to detect
-            ),
-            reverse=True
-        )
-        
-        return prioritized
-    
-    def generate_navigator_layer(self) -> dict:
-        """Generate ATT&CK Navigator layer JSON"""
-        layer = {
-            "name": "Detection Coverage",
-            "version": "4.4",
-            "domain": "enterprise-attack",
-            "description": "Current detection coverage",
-            "techniques": []
-        }
-        
-        color_map = {
-            CoverageLevel.NONE: "#ffffff",
-            CoverageLevel.MINIMAL: "#ffcccc",
-            CoverageLevel.PARTIAL: "#ffff99",
-            CoverageLevel.SUBSTANTIAL: "#99ff99",
-            CoverageLevel.COMPREHENSIVE: "#00ff00"
-        }
-        
-        for tech in self.techniques.values():
-            layer["techniques"].append({
-                "techniqueID": tech.id,
-                "color": color_map[tech.coverage_level],
-                "comment": f"Detections: {len(tech.detections)}"
-            })
-        
-        return layer
+```
+Is this a priority threat scenario for my environment?
+|- No -> do not build it just because the matrix has a blank cell
+\- Yes -> do I have the required data components with enough retention and parsing?
+    |- No -> this is a telemetry engineering problem, not a detection problem
+    \- Yes -> is the technique low/medium freedom?
+        |- Yes -> build analytics and record mutable tuning elements
+        \- No -> narrow to one concrete procedure family first, then validate
 ```
 
-### Technique-Based Detection
+## NEVER
 
-```python
-# technique_detection.py
-# Build detections aligned to ATT&CK techniques
+- **NEVER map from tool names alone because ATT&CK procedure examples make that shortcut feel legitimate.** "Mimikatz" is seductive shorthand, but its modules span T1003.001, T1003.002, T1003.006, T1558, and more. The consequence is false coverage and the wrong downstream analytic. **Instead do** argument- and API-level mapping from the behavior you actually observed.
+- **NEVER infer a technique from an outcome because tactics read like explanations.** "They gained persistence" sounds usable, but it hides whether the behavior was T1546.003, T1547.001, or something else. The consequence is that responders and detection engineers work the wrong branch. **Instead do** tactic-only mapping until the mechanism is known.
+- **NEVER roll up to a parent technique when the sub-technique is knowable because the parent looks cleaner on a heatmap.** Process Injection is the classic trap: one green `T1055` cell can hide a dozen unaddressed sub-techniques. The consequence is coverage theater. **Instead do** sub-technique mapping whenever the evidence distinguishes it, and say "parent-only" only when the evidence truly cannot go further.
+- **NEVER score ATT&CK coverage as a flat percent because the matrix punishes honesty.** Teams love a single number, but low-freedom and high-freedom techniques are not equally coverable, and visibility is not detection. The consequence is a dashboard that looks mature while attackers still have untouched procedure families. **Instead do** threat-scenario-based scoring with separate visibility and detection axes.
+- **NEVER trust "top techniques" rankings without checking sensor bias because improved telemetry reorders the leaderboard.** Identity and cloud techniques rose sharply in 2025 partly because defenders finally instrumented them better. The consequence is overreacting to a measurement artifact or underfunding a blind area. **Instead do** prioritize with three inputs: adversary prevalence, business relevance, and your current visibility maturity.
+- **NEVER build process-injection detection around raw `CreateRemoteThread`-style events because the API is common in benign software.** It is seductive because it looks technique-pure. The consequence is analyst fatigue and rule disablement. **Instead do** correlate cross-process access with unusual source processes, blank or implausible command lines, target-process baselines, and post-injection effects such as unexpected network or module activity.
+- **NEVER force cloud-native activity into a single ATT&CK matrix because control-plane and workload-plane behavior live in different places.** The seductive path is one clean Navigator layer. The consequence is hiding the pivot from IaaS to Kubernetes to container to host. **Instead do** model the behavior across the relevant matrices and keep the seams visible.
+- **NEVER ship a mapping that no second analyst has challenged because familiarity bias is strongest where confidence feels highest.** The consequence is missing concurrent techniques, overusing favorite IDs, and encoding your own blind spots into detections. **Instead do** require peer review for any mapping that leaves your team or drives coverage claims.
 
-from dataclasses import dataclass
-from typing import List, Dict
+## Detection-engineering rules that are easy to miss
 
-@dataclass
-class ATTACKDetection:
-    """Detection rule with full ATT&CK context"""
-    
-    # ATT&CK mapping
-    technique_id: str
-    technique_name: str
-    tactic: str
-    
-    # Detection details
-    name: str
-    description: str
-    query: str
-    platform: str
-    
-    # Quality metrics
-    severity: str
-    confidence: str
-    false_positive_guidance: str
-    
-    # Data requirements
-    data_sources: List[str]
-    
-    # Response
-    recommended_response: List[str]
-    
-    def to_sigma(self) -> str:
-        """Export as Sigma rule"""
-        return f"""
-title: {self.name}
-id: {self.technique_id.lower().replace('.', '-')}-detection
-status: experimental
-description: {self.description}
-references:
-    - https://attack.mitre.org/techniques/{self.technique_id}/
-author: Security Team
-date: 2024/01/01
-tags:
-    - attack.{self.tactic.lower().replace(' ', '_')}
-    - attack.{self.technique_id.lower()}
-logsource:
-    category: process_creation
-    product: windows
-detection:
-    selection:
-        # Detection logic here
-    condition: selection
-falsepositives:
-    - {self.false_positive_guidance}
-level: {self.severity.lower()}
-"""
+- In v18+, ATT&CK detection strategies expose **mutable elements**. Record them. A detection that says "T1110 covered" is weak; a detection that records `TimeWindow`, `FailureThreshold`, allowlists, credential type, and expected source population is reviewable.
+- Good mutable elements are specific enough to tune and defend in review: `TimeWindow=10m` for clustered container discovery, `TimeWindow=5m` for create -> start -> first activity correlation in container deployment, `SustainedCPU >15m` for resource-hijacking behaviors, or explicit `ScheduleWindow` values such as `@hourly` for suspicious CronJob cadence. If your rule cannot name its tuning knobs, it is not ATT&CK-grounded yet.
+- Prefer ATT&CK content that names **data components**, not vague "data source" claims. "We have network logs" is useless. `Network Connection Creation`, `Cloud Service Modification`, and `Process Access` are different detection surfaces with different blind spots.
+- Treat **blank command line** as signal only for processes where a command line is normally expected. It is powerful for injected or proxy-executed processes and useless as a universal heuristic.
+- For LSASS-oriented detections, baseline **who normally opens lsass.exe** in your environment before you write alerts. Protected processes, EDR agents, backup tools, and debuggers can all make naive rules collapse.
+- When ATT&CK offers a DET object, use it to break one technique into multiple analytics rather than writing one "mega detection." That is the only sane way to handle medium-freedom techniques.
 
+## Practical operating procedure
 
-# Example: T1003.001 - LSASS Memory
-lsass_detection = ATTACKDetection(
-    technique_id="T1003.001",
-    technique_name="LSASS Memory",
-    tactic="Credential Access",
-    name="LSASS Memory Access via Suspicious Process",
-    description="Detects processes accessing LSASS memory, "
-                "commonly used for credential dumping",
-    query="""
-        event.code:10 AND 
-        winlog.event_data.TargetImage:*lsass.exe AND
-        NOT winlog.event_data.SourceImage:(
-            *MsMpEng.exe OR *csrss.exe OR *wininit.exe
-        )
-    """,
-    platform="Elastic SIEM",
-    severity="High",
-    confidence="Medium",
-    false_positive_guidance="Security tools may legitimately access LSASS",
-    data_sources=["Process: Process Access (Sysmon EID 10)"],
-    recommended_response=[
-        "Isolate affected host",
-        "Capture memory dump for analysis",
-        "Reset potentially compromised credentials",
-        "Hunt for lateral movement"
-    ]
-)
-```
+1. Quote the behavior literally from the evidence. Screenshots, figure captions, command blocks, and footnotes often contain the real mapping clues; analysts routinely miss them on the first pass.
+2. Search ATT&CK with verbs, flags, paths, APIs, ports, and cloud actions, not just nouns. "schtasks /create", `MiniDumpWriteDump`, `Set-Mailbox`, `AuthorizeSecurityGroupIngress`, and `__EventFilter` beat "persistence" every time.
+3. Check whether multiple techniques are simultaneously true. If so, map all of them and explain the different defender implications.
+4. If the task is detection or coverage, identify the exact data components and write down the mutable tuning elements before you call anything "detected."
+5. Pin the ATT&CK version and attach permalinks. Include the parent technique on first mention of every sub-technique.
+6. Send any publishable or backlog-driving mapping for peer review.
 
-### Threat Group Tracking
+## Edge cases and fallback paths
 
-```python
-# threat_groups.py
-# Track adversary groups and their TTPs
+- If the evidence supports **only Reconnaissance or Resource Development** but your task is internal detection, stop trying to write SIEM coverage for it. That is an external visibility problem for CTI, ASM, takedown, or brand monitoring.
+- If the behavior appears to fit ATT&CK poorly, do **not** force the nearest popular ID. Record the literal behavior, cite the closest candidate only as a hypothesis, and note that ATT&CK may need a new or revised technique.
+- If the same behavior crosses **multiple matrices or planes** such as cloud control plane, Kubernetes, container, and host, preserve that split in the output. Collapsing it into one matrix is convenient but analytically false.
+- If the consumer needs machine-readable output, store **ATT&CK ID, ATT&CK version, evidence excerpt, and confidence note** together. ID without version and evidence is not durable enough for later automation.
 
-from dataclasses import dataclass
-from typing import List, Set, Dict
+## Mandatory loading triggers
 
-@dataclass
-class ThreatGroup:
-    """Known adversary group with TTPs"""
-    
-    id: str                          # e.g., "G0007"
-    name: str                        # e.g., "APT28"
-    aliases: List[str]               # e.g., ["Fancy Bear", "Sofacy"]
-    
-    # Attribution
-    suspected_origin: str
-    target_sectors: List[str]
-    target_regions: List[str]
-    
-    # TTPs
-    techniques: List[str]            # ATT&CK technique IDs
-    
-    # Intelligence
-    first_seen: str
-    last_seen: str
-    active: bool
-    
-    def technique_overlap(self, other: 'ThreatGroup') -> Set[str]:
-        """Find common techniques with another group"""
-        return set(self.techniques) & set(other.techniques)
-    
-    def unique_techniques(self, all_groups: List['ThreatGroup']) -> Set[str]:
-        """Find techniques unique to this group"""
-        other_techniques = set()
-        for group in all_groups:
-            if group.id != self.id:
-                other_techniques.update(group.techniques)
-        
-        return set(self.techniques) - other_techniques
+- **Before publishing or sharing a mapping outside the immediate task, READ `references/mapping-pitfalls.md`.** It contains the failure patterns that most often survive first-pass review.
+- **Before writing or revising hunt queries, Sigma, EDR analytics, or validation tests, READ `references/techniques.md`.** It is detection-facing and intentionally query-heavy.
+- **Do NOT load `references/techniques.md` for CTI-only mapping or coverage-scoring tasks.** It will bias you toward whichever behaviors already have ready-made hunts.
+- **Do NOT load `scripts/coverage_analyzer.py` unless the task is explicitly to calculate or visualize coverage.** It is useful for scoring workflows, not for determining the mapping itself.
 
+## Coverage model that survives scrutiny
 
-class ThreatIntelligence:
-    """Manage threat group intelligence"""
-    
-    def __init__(self):
-        self.groups: Dict[str, ThreatGroup] = {}
-    
-    def relevant_groups(self, sector: str, region: str) -> List[ThreatGroup]:
-        """Find groups targeting specific sector/region"""
-        return [
-            g for g in self.groups.values()
-            if (sector in g.target_sectors or "All" in g.target_sectors) and
-               (region in g.target_regions or "Global" in g.target_regions) and
-               g.active
-        ]
-    
-    def priority_techniques(self, sector: str, region: str) -> Dict[str, int]:
-        """Rank techniques by threat relevance"""
-        relevant = self.relevant_groups(sector, region)
-        
-        technique_counts = {}
-        for group in relevant:
-            for tech in group.techniques:
-                technique_counts[tech] = technique_counts.get(tech, 0) + 1
-        
-        # Sort by frequency across relevant groups
-        return dict(sorted(
-            technique_counts.items(),
-            key=lambda x: x[1],
-            reverse=True
-        ))
-    
-    def detection_priorities(self, 
-                            sector: str, 
-                            region: str,
-                            current_coverage: Set[str]) -> List[str]:
-        """Prioritize detections based on threat landscape"""
-        priority_techs = self.priority_techniques(sector, region)
-        
-        # Find high-priority techniques without coverage
-        gaps = [
-            tech for tech, count in priority_techs.items()
-            if tech not in current_coverage and count >= 2
-        ]
-        
-        return gaps[:10]  # Top 10 priorities
-```
+Maintain three distinct layers:
 
-### Hunt Hypothesis Generation
+1. **Threat scenario layer**: techniques and sub-techniques actually used by threat groups, intrusions, or abuse cases that matter to your environment.
+2. **Visibility layer**: required data components exist, are retained long enough, and are parsed well enough to hunt.
+3. **Detection layer**: tuned analytics exist and have been validated with atomic or purple-team testing.
 
-```python
-# hypothesis_generator.py
-# Generate hunt hypotheses from ATT&CK
+`Gap = Threat scenario - (Visibility intersection Detection)`
 
-from dataclasses import dataclass
-from typing import List
-
-@dataclass
-class HuntHypothesis:
-    """ATT&CK-based hunt hypothesis"""
-    
-    technique_id: str
-    technique_name: str
-    tactic: str
-    
-    hypothesis: str
-    rationale: str
-    
-    data_requirements: List[str]
-    hunt_query: str
-    
-    expected_findings: List[str]
-    success_criteria: str
-
-
-def generate_hypotheses(technique_id: str, 
-                       technique_data: dict) -> List[HuntHypothesis]:
-    """Generate hunt hypotheses for a technique"""
-    
-    hypotheses = []
-    
-    # Hypothesis 1: Direct technique detection
-    hypotheses.append(HuntHypothesis(
-        technique_id=technique_id,
-        technique_name=technique_data['name'],
-        tactic=technique_data['tactic'],
-        hypothesis=f"Adversaries are using {technique_data['name']} "
-                   f"in our environment",
-        rationale=f"This technique is commonly used by threat groups "
-                  f"targeting our sector",
-        data_requirements=technique_data['data_sources'],
-        hunt_query=technique_data.get('detection_query', ''),
-        expected_findings=[
-            "Legitimate use by IT/security tools",
-            "Developer/admin testing",
-            "Potential adversary activity"
-        ],
-        success_criteria="Identify all instances, triage findings, "
-                        "create detection for confirmed malicious patterns"
-    ))
-    
-    # Hypothesis 2: Technique chaining
-    if technique_data.get('related_techniques'):
-        hypotheses.append(HuntHypothesis(
-            technique_id=technique_id,
-            technique_name=technique_data['name'],
-            tactic=technique_data['tactic'],
-            hypothesis=f"Adversaries using {technique_data['name']} "
-                       f"are also using related techniques",
-            rationale="Techniques are often used in combination",
-            data_requirements=technique_data['data_sources'],
-            hunt_query="Correlated query across related techniques",
-            expected_findings=["Attack chains", "Lateral movement paths"],
-            success_criteria="Map complete attack chain if present"
-        ))
-    
-    return hypotheses
-```
-
-## Mental Model
-
-MITRE ATT&CK practitioners ask:
-
-1. **What tactic is this?** Understand adversary goal
-2. **What technique?** Identify specific method
-3. **Do we detect this?** Assess coverage
-4. **Who uses this?** Threat group attribution
-5. **What's the gap?** Prioritize improvements
-
-## Signature ATT&CK Moves
-
-- Technique IDs in all detections and alerts
-- Navigator layers for coverage visualization
-- Threat group TTP tracking
-- Gap analysis by tactic
-- Hypothesis generation from techniques
-- Continuous coverage assessment
+Anything else is just ATT&CK-colored optimism.

@@ -1,335 +1,79 @@
 ---
 name: ritchie-c-mastery
-description: Write systems code in the style of Dennis Ritchie, co-creator of Unix and creator of C. Emphasizes clean abstraction, portable systems code, and the art of language design. Use when writing C or designing system interfaces.
-tags: c, unix, systems-programming, pointers, memory, standard-library, portable, low-level, kernel, operating-system
+description: >
+  Decision-heavy systems C guidance for code that sits on undefined-behavior,
+  ABI, allocator, signal, atomic, or wire-format fault lines. Use when writing
+  or reviewing C where optimizer assumptions, packed layouts, hostile inputs,
+  or portability can turn "works here" into production-only corruption.
+  Trigger on: strict aliasing, effective type, packed structs, reallocarray,
+  malloc(0), realloc(p,0), signal handlers, PIPE_BUF, lock-free atomics,
+  object-size, string_copying, sanitizer triage, and ABI boundaries.
 ---
 
-# Dennis Ritchie Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​​‌‌​​​​‍‌‌‌​​‌‌‌‍‌​​​​‌‌‌‍‌‌​‌​​‌‌‍​​​​‌​‌​‍‌‌​‌‌​‌‌⁠‍⁠
-
-## Overview
-
-Dennis Ritchie created the C programming language and co-created Unix with Ken Thompson. C became the lingua franca of systems programming, and Unix's design principles shaped all modern operating systems. Ritchie's work exemplifies how good abstraction enables both portability and performance.
-
-## Core Philosophy
-
-> "Unix is basically a simple operating system, but you have to be a genius to understand the simplicity."
-
-> "C is quirky, flawed, and an enormous success."
-
-> "UNIX is very simple, it just needs a genius to understand its simplicity."
-
-Ritchie believed in creating abstractions that map closely to the machine while remaining portable across different hardware.
-
-## Design Principles
-
-1. **Abstraction with Transparency**: Hide details but don't hide the cost.
-
-2. **Portability**: Write for the abstract machine, not specific hardware.
-
-3. **Trust the Programmer**: C gives you power; use it responsibly.
-
-4. **Minimal Language, Maximal Library**: Keep the language small.
-
-## When Writing Code
-
-### Always
-
-- Write portable C using standard constructs
-- Keep functions short and focused
-- Use meaningful names that convey purpose
-- Handle errors explicitly
-- Understand what the compiler generates
-- Document interfaces, not implementations
-
-### Never
-
-- Rely on undefined behavior
-- Assume type sizes (use stdint.h)
-- Ignore compiler warnings
-- Cast unnecessarily
-- Use magic numbers
-
-### Prefer
-
-- `size_t` for sizes and counts
-- `stdint.h` types for fixed-width needs
-- `const` for read-only data
-- Stack allocation over heap when possible
-- Static functions for internal linkage
-
-## Code Patterns
-
-### The K&R Style
-
-```c
-// Classic Ritchie/Kernighan style
-
-#include <stdio.h>
-#include <string.h>
-
-// Functions are short and focused
-int strlen_safe(const char *s)
-{
-    int n;
-    
-    for (n = 0; *s != '\0'; s++)
-        n++;
-    return n;
-}
-
-// Compact but clear
-void reverse(char *s)
-{
-    int c, i, j;
-    
-    for (i = 0, j = strlen(s) - 1; i < j; i++, j--) {
-        c = s[i];
-        s[i] = s[j];
-        s[j] = c;
-    }
-}
-
-// Main is simple
-int main(void)
-{
-    char buf[100];
-    
-    while (fgets(buf, sizeof(buf), stdin) != NULL) {
-        buf[strcspn(buf, "\n")] = '\0';  // Remove newline
-        reverse(buf);
-        printf("%s\n", buf);
-    }
-    return 0;
-}
-```
-
-### Pointer Idioms
-
-```c
-// Pointers are addresses—embrace them
-
-// Copy string: pointer version (Ritchie preferred)
-void strcpy_ptr(char *dst, const char *src)
-{
-    while ((*dst++ = *src++) != '\0')
-        ;
-}
-
-// Traverse array with pointer
-void process_array(int *arr, size_t n)
-{
-    int *end = arr + n;
-    
-    for (int *p = arr; p < end; p++) {
-        process(*p);
-    }
-}
-
-// Pointer to pointer for modification
-int alloc_buffer(char **buf, size_t size)
-{
-    *buf = malloc(size);
-    return *buf != NULL ? 0 : -1;
-}
-```
-
-### Error Handling
-
-```c
-// C style: return values indicate errors
-// Ritchie Unix convention: 0 = success, -1 = error, errno set
-
-#include <errno.h>
-
-int read_file(const char *path, char *buf, size_t size)
-{
-    FILE *fp;
-    size_t n;
-    
-    fp = fopen(path, "r");
-    if (fp == NULL) {
-        return -1;  // errno is set by fopen
-    }
-    
-    n = fread(buf, 1, size - 1, fp);
-    if (ferror(fp)) {
-        fclose(fp);
-        return -1;
-    }
-    
-    buf[n] = '\0';
-    fclose(fp);
-    return 0;
-}
-
-// Usage:
-if (read_file("config.txt", buf, sizeof(buf)) < 0) {
-    perror("read_file");
-    exit(1);
-}
-```
-
-### Struct Design
-
-```c
-// Structs should be minimal and purposeful
-
-typedef struct node {
-    struct node *next;
-    char *data;
-} Node;
-
-typedef struct list {
-    Node *head;
-    Node *tail;
-    size_t count;
-} List;
-
-// Operations on structs
-void list_init(List *l)
-{
-    l->head = NULL;
-    l->tail = NULL;
-    l->count = 0;
-}
-
-int list_push(List *l, const char *data)
-{
-    Node *n = malloc(sizeof(*n));
-    if (n == NULL)
-        return -1;
-    
-    n->data = strdup(data);
-    n->next = l->head;
-    l->head = n;
-    if (l->tail == NULL)
-        l->tail = n;
-    l->count++;
-    return 0;
-}
-```
-
-### Header File Design
-
-```c
-// mylib.h - public interface only
-
-#ifndef MYLIB_H
-#define MYLIB_H
-
-#include <stddef.h>
-
-// Opaque type - implementation hidden
-typedef struct context Context;
-
-// Public API
-Context *context_create(void);
-void     context_destroy(Context *ctx);
-int      context_process(Context *ctx, const char *input);
-char    *context_result(Context *ctx);
-
-#endif
-
-
-// mylib.c - implementation
-
-#include "mylib.h"
-#include <stdlib.h>
-#include <string.h>
-
-struct context {
-    char *buffer;
-    size_t size;
-    // Internal details hidden from users
-};
-
-Context *context_create(void)
-{
-    Context *ctx = malloc(sizeof(*ctx));
-    if (ctx == NULL)
-        return NULL;
-    
-    ctx->buffer = NULL;
-    ctx->size = 0;
-    return ctx;
-}
-
-// ... implementation continues
-```
-
-### The Unix API Style
-
-```c
-// Unix system calls: elegant, minimal
-
-// Open returns fd or -1
-int fd = open("file.txt", O_RDONLY);
-if (fd < 0) {
-    perror("open");
-    exit(1);
-}
-
-// Read returns bytes read, 0 on EOF, -1 on error
-char buf[4096];
-ssize_t n;
-
-while ((n = read(fd, buf, sizeof(buf))) > 0) {
-    if (write(STDOUT_FILENO, buf, n) != n) {
-        perror("write");
-        exit(1);
-    }
-}
-
-if (n < 0) {
-    perror("read");
-    exit(1);
-}
-
-close(fd);
-```
-
-### Portability
-
-```c
-#include <stdint.h>  // Fixed-width types
-#include <limits.h>  // System limits
-
-// Use fixed-width when you need exact sizes
-uint32_t crc32(const uint8_t *data, size_t len);
-
-// Use size_t for sizes
-void process(const void *data, size_t size);
-
-// Check limits, don't assume
-#if CHAR_BIT != 8
-#error "This code requires 8-bit bytes"
-#endif
-
-// Endianness handling
-uint32_t read_be32(const uint8_t *p)
-{
-    return ((uint32_t)p[0] << 24) |
-           ((uint32_t)p[1] << 16) |
-           ((uint32_t)p[2] << 8)  |
-           ((uint32_t)p[3]);
-}
-```
-
-## Mental Model
-
-Ritchie approaches systems programming by asking:
-
-1. **What is the abstraction?** Define clean interfaces
-2. **What is the cost?** Abstractions should be transparent
-3. **Is this portable?** Avoid machine-specific assumptions
-4. **Is the interface minimal?** Small interfaces are easier to implement
-5. **What can go wrong?** Handle errors explicitly
-
-## Signature Ritchie Moves
-
-- Pointer arithmetic for efficiency
-- Return values for error indication
-- Opaque types for encapsulation
-- Minimal header interfaces
-- Standard library reliance
-- Portable type usage
+# Ritchie Systems C
+
+## Load only what applies
+- Before touching byte reinterprets, packed layouts, or `-O0`/`-O2` drift, READ `references/ub-and-aliasing.md`.
+- Before changing cleanup flow, syscall loops, fd lifetime, or public C APIs, READ `references/portable-idioms.md`.
+- Do NOT load `references/portable-idioms.md` for aliasing-only triage.
+- Do NOT load `references/ub-and-aliasing.md` for API-shape-only work.
+
+## Core stance
+- Ritchie-style C is not "close to assembly"; it is a contract with two judges: the abstract machine and the target ABI. If either can legally refute your assumption, the code is wrong even when the CPU currently "does what you meant".
+- The expensive bugs are proof bugs: the compiler can prove overflow cannot happen, the allocator can legally hand back a zero-sized sentinel, or the kernel can legally interleave a pipe write you thought was atomic.
+- Prefer representations that make illegal states hard to express at the edge: byte arrays on the wire, opaque structs at ABI boundaries, explicit `count,size` pairs, and one ownership sentence per resource.
+
+## Before doing X, ask yourself...
+- Before reading bytes as a wider type: **Am I relying on aliasing, alignment, and endianness staying friendly at the same time? If yes, I am already in debt.**
+- Before growing an allocation: **Is the risky operation the multiplication, the resize, or the caller's bookkeeping? Guard all three separately.**
+- Before marking anything `packed`: **Am I optimizing layout, or silently creating misaligned pointers the compiler will not reliably warn about?**
+- Before using a signal handler for control flow: **Can this be reduced to "store a flag / write one byte / return"? Anything more is usually a portability bug.**
+- Before picking warning levels: **Am I tuning CI noise, or am I trying to surface a specific UB class for one audit? The right knob depends on which goal I mean.**
+
+## Decision trees
+
+### 1) Bytes to typed values
+- Wire/file bytes plus unknown alignment: use byte assembly or fixed-size `memcpy`. Do not cast.
+- Native in-memory object plus need byte inspection: use `unsigned char *`; char-like access is the sanctioned escape hatch.
+- Need bit reinterpretation across types: default to `memcpy`, even if a union "works here". Union punning stops being trustworthy once addresses escape or LTO reasons across translation units.
+
+### 2) Size calculations and resize paths
+- Any `count * size`: prefer `reallocarray` or `calloc`; if unavailable, use overflow intrinsics before the allocator call.
+- Any request that can exceed `PTRDIFF_MAX`: reject it before allocation. Modern glibc rejects sizes above that threshold, and other allocators fail less uniformly.
+- Need zero-length semantics: choose one project rule and document it. Linux man-pages permit a unique freeable pointer for `malloc(0)`; OpenBSD returns an access-protected zero-sized object that faults on use.
+- Need `realloc(p, 0)`: do not use it as `free` shorthand. glibc documents it as non-conforming and dangerous; branch explicitly on zero and call `free`.
+
+### 3) Signals and wakeups
+- Need "tell the main loop something happened": self-pipe or `eventfd`, with handler writes no larger than `PIPE_BUF`.
+- Need shared state from a handler: use `volatile sig_atomic_t` or lock-free atomics only. POSIX.1-2024 allows `<stdatomic.h>` operations in handlers only when the atomic arguments are lock-free.
+- Need complex cleanup from a handler: do not. Save `errno`, record intent, restore `errno`, and let ordinary control flow do the unsafe work.
+
+### 4) Diagnostics when the bug appears only under optimization
+- Suspect aliasing but `-Wstrict-aliasing` is quiet: try `-Wstrict-aliasing=1` for a one-off audit; `=3` is the default and trades fewer false negatives for far fewer false positives.
+- Suspect overflow reasoning: `-Wstrict-overflow=1` catches the easy landmines; levels `4-5` are audit settings and produce large amounts of noise.
+- Suspect subobject overruns in structs: `-Wstringop-overflow=3` surfaces smaller-member overruns that default level 2 can miss, but expect benign warnings.
+- Suspect uninitialized-state bugs: compile an optimized warning build. GCC only emits `-Wmaybe-uninitialized` with optimization, and optimization can also erase some evidence by exploiting UB.
+- Suspect provenance, alignment, or lifetime bugs: run `-fsanitize=alignment,object-size,undefined,address`. `object-size` is valuable precisely because it uses optimizer knowledge that `-O0` never forms.
+- Need the source of an MSan hit, not just the sink: use `-fsanitize-memory-track-origins=2`. If the slowdown is too high, drop to `=1`; Clang documents roughly `1.5x-2x` extra slowdown for origin tracking on top of normal MSan cost.
+- Using explicit atomic orders: keep GCC's default `-Winvalid-memory-model` active so nonsense like store plus `memory_order_consume` is rejected early.
+
+## NEVER paths experts learn the hard way
+- NEVER take the address of a `packed` member and treat compiler silence as validation because GCC's `-Wno-address-of-packed-member` behavior is enabled by default. Instead copy through bytes or `memcpy`, and turn on `-fsanitize=alignment` when auditing.
+- NEVER keep `size += delta; p = realloc(p, size);` because it feels linear and tidy; on failure your bookkeeping lies while the old object still exists, which is how leaks and stale bounds checks ship. Instead compute `new_size` separately and commit it only after success.
+- NEVER use `strncpy` as a "safer strcpy" because it is for null-padded fixed-size records, not strings; it may omit the terminator and it zero-fills the tail. Instead use explicit-length byte copies for records, or a real string API when the destination must be a string.
+- NEVER default to `strlcpy` or `strlcat` on attacker-controlled input because they feel modern and safe; Linux `string_copying(7)` notes they must read the entire source string, which turns very long hostile inputs into needless latency and DoS surface. Instead bound the read you are willing to inspect, then copy exactly that amount.
+- NEVER write more than `PIPE_BUF` bytes to a self-pipe and assume atomic wakeups because POSIX only guarantees atomicity up to `PIPE_BUF` (minimum 512 bytes; 4096 on Linux). Instead keep handler writes tiny and fixed-size.
+- NEVER use `realloc(p, 0)` or `reallocarray(p, 0, 0)` as portability tricks because glibc documents both as unsafe/non-conforming and C changed the semantics multiple times. Instead branch on zero before the call and make ownership explicit.
+- NEVER `siglongjmp` out of a handler because it masquerades as structured error handling while dropping you into code that may immediately touch unsafe library state. Instead set state and unwind in ordinary execution.
+- NEVER assume a clean `-Wstrict-aliasing=3` build proves cast-based punning is safe because GCC explicitly says the warning does not catch all cases. Instead treat cast-plus-dereference on non-character buffers as guilty until rewritten.
+
+## Hardening defaults by consequence
+- High freedom: API shape, module boundaries, representation choices. Optimize for explicit ownership and ABI evolution.
+- Low freedom: casts, packed layouts, signal handlers, overflow checks, atomics, wire-format loads. Here the cost of creativity is UB, so use the documented idiom rather than taste.
+
+## Exit checklist
+- Every pointer reinterpretation survives aliasing, alignment, and endianness scrutiny independently.
+- Every growth path has a checked multiplication, a checked resize, and bookkeeping that updates only after success.
+- Every handler path fits in one breath: save `errno`, set flag or tiny write, restore `errno`, return.
+- Every fixed-size copy states whether the destination is a string, a character sequence, or raw bytes.
+- Every "compiler bug" suspicion has already survived the warning and sanitizer ladder above.

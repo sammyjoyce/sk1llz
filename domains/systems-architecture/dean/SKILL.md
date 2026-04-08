@@ -1,274 +1,110 @@
 ---
 name: dean-large-scale-systems
-description: Design large-scale systems using Jeff Dean's pragmatic approach. Emphasizes performance intuition, building reliable systems from unreliable components, and solving problems at Google scale. Use when building infrastructure that must handle millions of QPS, petabytes of data, or global distribution.
-tags: mapreduce, bigtable, spanner, distributed, scale, fault-tolerance, infrastructure, google, data-processing, parallel
+description: "Jeff Dean / Google-scale architecture heuristics for services whose real constraints are fanout, tail latency, hot partitions, shared-cluster scheduling, and multi-region mutation cost. Use when choosing sharding, replication, overload behavior, or control-plane/data-plane boundaries for systems that may span dozens of services or thousands of machines. Trigger words: tail latency, hedged requests, tied requests, stragglers, hot shard, micro-partitions, good-enough results, canary requests, commit wait, TrueTime, quota, shared cell, load shedding."
+tags: systems, scale, dean, reliability, distributed systems, google scale, fault tolerance, latency, spanner, bigtable, mapreduce, borg, infrastructure, architecture, capacity planning
 ---
 
-# Jeff Dean Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​‌‌‌‌‌​‍​‌‌‌‌​‌​‍​​​‌‌‌​‌‍‌‌‌‌‌​​​‍​​​​‌​‌​‍‌​‌‌​‌‌‌⁠‍⁠
+# Dean Large-Scale Systems
 
-## Overview
+Use this as a design-review mindset, not as a generic distributed-systems explainer.
 
-Jeff Dean is the architect behind much of Google's infrastructure: MapReduce, BigTable, Spanner, TensorFlow, and more. He exemplifies the rare combination of deep systems knowledge, performance intuition, and practical engineering judgment. His work defines how modern internet-scale systems are built.
+Loading rules:
+- MANDATORY: read `references.md` before writing a cited design memo, paper-backed recommendation, or study plan around MapReduce, Bigtable, Spanner, Borg, or tail-latency work.
+- Do NOT load `philosophy.md` for architecture tradeoffs, incident triage, or rollout decisions; it is inspiration, not decision support.
 
-## Core Philosophy
+## Start Here
 
-> "Design for 10x the current load, but plan to rewrite before 100x."
+Before you write code or a long design doc, jot down 3-5 rough paragraphs and ask:
+- What is the first acceptable failure mode: stale data, partial result, dropped optional feature, or explicit error?
+- What is the true fanout of one user action? If it can touch 50 services or 1000 leaves, this is already a tail-latency problem.
+- What numbers make or break the design? Same-DC RTT is about 0.5 ms, a disk seek is about 10 ms, reading 1 MB from disk is about 30 ms, and an intercontinental packet round-trip is about 150 ms. If the proposal ignores those orders of magnitude, it is fiction.
+- Are you designing for 10-20x growth or 100x growth? Dean's rule is to work well at 10-20x, but keep interfaces reimplementable because the solution for X is often wrong at 100x.
+- If this is "platform" work, are you the first demanding user? Dean's advice is to use your own infrastructure early; otherwise you optimize imagined needs.
 
-> "Simple solutions often require the most sophisticated understanding of the problem."
+## Failure Envelope First
 
-> "If a problem isn't interesting at scale, it probably isn't interesting at all."
+- Treat partial infrastructure loss as steady-state, not DR theater. Dean's "typical first year" cluster included roughly one PDU failure that dropped 500-1000 machines for about 6 hours, around 20 rack failures, around 1000 machine failures, and thousands of disk failures.
+- If the service contract cannot survive an entire rack disappearing, a few racks showing about 50% packet loss, or routing work that causes minutes of bad connectivity, the design is under-specified.
+- Prefer failure containment over component heroics. At this scale, you win by making failures local, observable, and cheap to route around.
 
-## Design Principles
+## Tail Rules That Actually Change Designs
 
-1. **Embrace Failure**: At scale, everything fails. Design systems that degrade gracefully, not catastrophically.
+- In high fanout trees, the last few leaves dominate the user experience. In "The Tail at Scale," a single leaf had 10 ms p99, but waiting for 100% of leaves pushed service latency to 140 ms p99; waiting for 95% cut that to 70 ms.
+- Hedge only after evidence, not immediately. Sending the second request only after the 95th percentile expected latency keeps extra load near 5%; in a Bigtable benchmark, hedging after 10 ms cut 99.9th percentile from 1800 ms to 74 ms with only 2% more requests.
+- Use tied requests when queueing dominates. A 1 ms delayed tied request with cross-server cancellation cut Bigtable read 99.9th latency by nearly 40% with less than 1% extra disk load.
+- Do not probe all backends and then "pick the least loaded." Dean explicitly calls out why this is weaker: queue observations go stale, service time is hard to predict, and clients herd onto the same server.
+- Hedging is not magic. It works when latency pathologies are mostly uncorrelated across replicas; if every replica shares the same saturated dependency, duplicate requests just multiply pain.
+- Keep low-level queues short. Put priority policy in your own queue, not deep inside the OS or storage subsystem, or interactive work will sit behind old batch work.
+- Counterintuitive but real: sometimes background work should be synchronized across machines. A short, aligned burst hurts a few requests; unsynchronized dribble keeps the entire tail bad all the time.
+- Another counterintuitive rule: under heavy load, removing a persistently slow backend can improve latency even though total serving capacity drops. Put bad backends on probation, keep shadow traffic for measurement, and re-admit only when their latency distribution recovers.
 
-2. **Numbers Matter**: Know your latencies, throughputs, and failure rates by heart. Performance intuition comes from data.
+## Partitioning, Skew, And Mix Shifts
 
-3. **Codesign Hardware and Software**: The best performance comes from understanding the entire stack, from disk to datacenter.
+- Static one-shard-per-machine layouts fail twice: hardware is not uniform, and popularity is not stationary.
+- Favor micro-partitions. Around 20 partitions per machine lets the system rebalance load in 5% steps and recover faster because many machines can each absorb one small unit of failed work. Bigtable commonly ran 20-1000 tablets per machine for this reason.
+- Selective replication beats blind repartitioning for hot items. Google search replicated important or popular documents and even changed language-biased replication across the day because workload mix shifted with geography.
+- Test abrupt mix changes, not just steady-state averages. An outage in one region can suddenly redirect language- or market-specific traffic into another region and invalidate your previous "balanced" partitioning.
+- For IR-like systems, define "good enough" semantics on purpose. Google often returns slightly incomplete results rather than waiting for the final leaf; if optional systems like ads or spelling correction are late, skip them.
+- Use canary requests when a single pathological request could fan out to thousands of workers. Send the query to 1-2 leaves first, then fan out only if the canary behaves.
 
-4. **Simplicity at Scale**: Complex systems break in complex ways. The simplest solution that scales is usually the best.
+## Consistency And Mutation Heuristics
 
-5. **Measure, Then Optimize**: Never optimize without profiling. Intuition fails; data doesn't.
+- Multi-datacenter systems should assume disconnection and partitioned operation are relatively common. Dean's bias for user-facing mutable products is often eventual consistency, because "we have your data but can't show it because one replica is unavailable" is a product failure.
+- If you need external consistency, budget for the real cost of time uncertainty and write fanout. Spanner shows two-phase commit stays reasonable to about 50 participants, but mean and 99th percentile rise noticeably at 100 participants.
+- More replicas are not a free safety knob. Spanner's read-only throughput improves from 3 to 5 replicas, but per-write work rises linearly and can outweigh the gain. Add replicas for a measured read-path need, not as ritual.
+- Keep global transactions narrow. If correctness requires every workflow step inside one distributed transaction, you probably modeled ownership too broadly. Re-partition first; weaken guarantees second.
+- Stateful mutations are often easier to move off the critical path than people assume. Respond once the durable minimum is safe, then finish secondary updates asynchronously with explicit repair or reconciliation semantics.
 
-## Numbers Every Engineer Should Know
+## Shared-Platform And Scheduler Heuristics
 
-```text
-L1 cache reference                           0.5 ns
-Branch mispredict                            5   ns
-L2 cache reference                           7   ns
-Mutex lock/unlock                           25   ns
-Main memory reference                      100   ns
-Compress 1K bytes with Zippy             3,000   ns
-Send 1K bytes over 1 Gbps network       10,000   ns
-Read 4K randomly from SSD              150,000   ns
-Read 1 MB sequentially from memory     250,000   ns
-Round trip within same datacenter      500,000   ns
-Read 1 MB sequentially from SSD      1,000,000   ns
-Disk seek                           10,000,000   ns
-Read 1 MB sequentially from disk    20,000,000   ns
-Send packet CA→Netherlands→CA      150,000,000   ns
-```
+- Fine-grained resource requests matter. Borg found that rounding CPU and memory requests into power-of-two buckets would cost roughly 30-50% more machines in the median case.
+- Dedicated clusters are not a free performance win. Borg measured shared-cell CPU performance only about 3% worse on average than dedicated cells, while smaller cells increased fragmentation and machine count materially.
+- Requested resources are political, not factual. Users overbuy quota and over-request RAM because under-requesting gets them killed or throttled.
+- Separate admission limit from runtime reservation. A practical pattern is: admit against the declared limit, then after startup transients decay reservation toward observed usage plus safety margin. Borg waited about 300 seconds before decaying reservations.
+- Never let latency-sensitive production work rely on reclaimed capacity. Reclaimed resources are for batch and best-effort work that can be throttled or killed first.
 
-These numbers should guide every design decision.
+## Anti-Patterns
 
-## When Designing Systems
+- NEVER make one "universal" infrastructure abstraction because satisfying the seventh and eighth client demand usually explodes complexity and compromises everybody else. Instead solve the common needs well and keep the interface reimplementable.
+- NEVER fix fanout latency by probing all backends and picking the "least loaded" one because that snapshot is already stale and clients stampede the same host. Instead use randomized placement plus hedged or tied requests with cancellation.
+- NEVER add a second request immediately because it feels like the fastest way to crush p99, but it doubles work exactly when queues are healthy. Instead hedge after the observed 95th percentile and mark backup work lower priority.
+- NEVER rely on a static shard map because it looks clean on diagrams and fails under thermal throttling, noisy neighbors, and hot keys. Instead use micro-partitions plus selective replication for predicted hotspots.
+- NEVER put every cross-entity mutation into one global transaction because "correct by default" hides the cost of commit-wait, lock hold time, and participant explosion. Instead tighten data ownership until most transactions are local and move cross-domain work into explicit async flows.
+- NEVER treat background jobs as harmless because a constant drizzle of compaction, GC, or scanning permanently fattens the tail. Instead throttle them, break them into smaller units, and sometimes synchronize them into brief windows.
+- NEVER assume a slow server should stay in rotation because removing capacity feels unsafe. Instead probation the bad backend, keep shadow requests for measurement, and reintroduce it only after the latency distribution normalizes.
+- NEVER split into dedicated clusters just because shared environments feel "messy," because the seductive isolation story hides fragmentation costs that can dwarf the few percent of interference you were trying to avoid. Instead keep a shared cell with explicit priority, quota, and reclamation rules until measurements prove isolation is cheaper.
 
-### Always
+## Decision Tree
 
-- Start with back-of-envelope calculations before designing
-- Design for partial failure—some machines will always be down
-- Use replication for availability, sharding for scale
-- Batch operations when possible—amortize fixed costs
-- Compress data on the wire and at rest (CPU is cheaper than I/O)
-- Add monitoring and observability from day one
-- Design for debugging—you'll need to diagnose production issues
+- If the request path is read-heavy, fanout-heavy, and tolerant of approximation:
+  - Use canary requests to 1-2 leaves first.
+  - Define a "good enough" cutoff before waiting for 100% of leaves.
+  - Hedge only the tail, and probation bad backends.
+- If the request path is read-heavy but exact:
+  - Keep fanout shallow, replicate read targets, and use tied requests only when failures are mostly uncorrelated.
+  - If correlated slowness dominates, fix the shared dependency instead of spraying replicas.
+- If the workload is skewed or flash-crowd prone:
+  - Prefer micro-partitions and selective replication.
+  - Test with abrupt language, region, or popularity shifts, not just even-key benchmarks.
+- If the workload is write-heavy and cross-region:
+  - Count participants and replicas first.
+  - Above roughly 50 participants, expect noticeable tail pain; at 100, redesign ownership before tuning.
+  - If the product can survive stale or partially applied secondary views, use async propagation and reconciliation.
+- If the platform is multi-tenant:
+  - Keep fine-grained quotas, reclaim from observed usage, and make batch the first victim.
+  - If production needs dedicated capacity to stay alive, the scheduler policy is wrong or the SLO class is underspecified.
 
-### Never
+## Incident Triage
 
-- Assume the network is reliable (it's not)
-- Assume latency is zero (it's not)
-- Assume bandwidth is infinite (it's not)
-- Optimize before measuring
-- Design for current load only—design for 10x
-- Ignore tail latency (p99 matters more than average)
-- Build systems you can't reason about under failure
+Before changing the architecture, ask:
+- Is this a bad-tail problem, a hot-partition problem, or a hard dependency problem?
+- Did one pathological request hit thousands of workers? If yes, use canary fanout and request fingerprinting.
+- Did a handful of machines poison the percentile? If yes, probation them before adding capacity.
+- Did the queue get deep enough that old work is now worthless? If yes, shorten low-level queues and let optional work die sooner.
+- Can users accept degraded truth? If yes, drop optional branches before you drop the core result.
 
-### Prefer
+## Observability Minimum
 
-- Idempotent operations over exactly-once semantics
-- Eventual consistency over strong consistency (when possible)
-- Denormalization over joins at scale
-- Structured data over unstructured (schemas help)
-- Batch processing over real-time when latency allows
-- Simple retry logic over complex distributed transactions
-
-## Architectural Patterns
-
-### MapReduce Mental Model
-
-```text
-Problem: Process petabytes of data
-Solution: 
-  1. Map: Transform input into (key, value) pairs in parallel
-  2. Shuffle: Group all values by key
-  3. Reduce: Aggregate values for each key
-
-Why it works:
-  - Embarrassingly parallel map phase
-  - Fault tolerance via re-execution
-  - Simple programming model hides distribution
-```
-
-### BigTable Design
-
-```text
-Problem: Structured storage at massive scale
-Solution:
-  - Sparse, distributed, multi-dimensional sorted map
-  - (row, column, timestamp) → value
-  - Rows sorted lexicographically (enables range scans)
-  - Column families for locality
-  - Tablets (row ranges) as unit of distribution
-
-Key insight: One data model, flexible enough for many use cases.
-```
-
-### Spanner's TrueTime
-
-```text
-Problem: Global consistency requires synchronized clocks
-Solution:
-  - GPS + atomic clocks in every datacenter
-  - API returns interval [earliest, latest] not a point
-  - Wait out uncertainty before committing
-  
-TrueTime.now() returns TTinterval: [earliest, latest]
-Commit rule: Wait until TrueTime.now().earliest > commit_timestamp
-```
-
-## Code Patterns
-
-### Back-of-Envelope Capacity Planning
-
-```python
-def estimate_storage_needs(
-    daily_active_users: int,
-    actions_per_user_per_day: int,
-    bytes_per_action: int,
-    retention_days: int,
-    replication_factor: int = 3
-) -> dict:
-    """Jeff Dean-style capacity estimation."""
-    
-    daily_bytes = daily_active_users * actions_per_user_per_day * bytes_per_action
-    total_bytes = daily_bytes * retention_days * replication_factor
-    
-    return {
-        "daily_raw_gb": daily_bytes / (1024**3),
-        "total_storage_tb": total_bytes / (1024**4),
-        "monthly_bandwidth_tb": (daily_bytes * 30) / (1024**4),
-        "estimated_machines_1tb_each": total_bytes / (1024**4),
-    }
-
-# Example: 100M DAU, 10 actions/day, 1KB each, 90 day retention
-# = 270 TB storage, ~300 machines (with replication)
-```
-
-### Sharding Strategy
-
-```python
-class ConsistentHashRing:
-    """Distribute data across nodes with minimal reshuffling."""
-    
-    def __init__(self, nodes: list[str], virtual_nodes: int = 150):
-        self.ring: dict[int, str] = {}
-        self.sorted_keys: list[int] = []
-        
-        for node in nodes:
-            for i in range(virtual_nodes):
-                key = self._hash(f"{node}:{i}")
-                self.ring[key] = node
-        
-        self.sorted_keys = sorted(self.ring.keys())
-    
-    def get_node(self, key: str) -> str:
-        """Find the node responsible for this key."""
-        if not self.ring:
-            raise ValueError("Empty ring")
-        
-        h = self._hash(key)
-        for ring_key in self.sorted_keys:
-            if h <= ring_key:
-                return self.ring[ring_key]
-        return self.ring[self.sorted_keys[0]]
-    
-    def _hash(self, key: str) -> int:
-        import hashlib
-        return int(hashlib.md5(key.encode()).hexdigest(), 16)
-```
-
-### Retry with Exponential Backoff
-
-```python
-import random
-import time
-from typing import TypeVar, Callable
-
-T = TypeVar('T')
-
-def retry_with_backoff(
-    fn: Callable[[], T],
-    max_retries: int = 5,
-    base_delay_ms: int = 100,
-    max_delay_ms: int = 10000,
-) -> T:
-    """
-    Retry with exponential backoff and jitter.
-    
-    At Google scale, thundering herds kill systems.
-    Jitter prevents synchronized retries.
-    """
-    for attempt in range(max_retries):
-        try:
-            return fn()
-        except Exception as e:
-            if attempt == max_retries - 1:
-                raise
-            
-            delay = min(base_delay_ms * (2 ** attempt), max_delay_ms)
-            jitter = random.uniform(0, delay * 0.1)
-            time.sleep((delay + jitter) / 1000)
-    
-    raise RuntimeError("Unreachable")
-```
-
-## Mental Model
-
-Jeff Dean approaches problems with:
-
-1. **Quantify first**: How much data? How many QPS? What latency budget?
-2. **Identify bottlenecks**: Where will the system break first?
-3. **Design for failure**: What happens when (not if) components fail?
-4. **Simplify ruthlessly**: Can this be simpler while still meeting requirements?
-5. **Plan for evolution**: Today's solution should be replaceable in 3 years
-
-### The Google Design Doc
-
-```text
-1. Context & Scope
-   - What problem are we solving? Why now?
-   
-2. Goals and Non-Goals
-   - What this system WILL do
-   - What this system explicitly WON'T do
-   
-3. Design
-   - System architecture
-   - Data model
-   - API
-   
-4. Alternatives Considered
-   - What else could we do? Why not?
-   
-5. Cross-cutting Concerns
-   - Security, privacy, monitoring, rollout
-   
-6. Open Questions
-   - What don't we know yet?
-```
-
-## Warning Signs
-
-You're violating Dean's principles if:
-
-- You don't know your system's p50, p99, and p999 latencies
-- You haven't done back-of-envelope capacity planning
-- Your system has no strategy for partial failure
-- You're optimizing without profiling data
-- You designed for current load, not 10x growth
-- You can't explain where every millisecond goes
-
-## Additional Resources
-
-- For detailed philosophy, see [philosophy.md](philosophy.md)
-- For references (papers, talks), see [references.md](references.md)
+- Export health plus enough live metrics to answer "why is it slow?" without redeploying.
+- Capture all error RPCs and sample slow requests at concrete thresholds such as 50 ms, 100 ms, 500 ms, and 1 s, not just averages.
+- If you cannot tell whether the pain is CPU, lock contention, packet loss, hot key, or queueing, the design is not production-ready.

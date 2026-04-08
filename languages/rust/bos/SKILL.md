@@ -1,308 +1,94 @@
 ---
 name: bos-concurrency-rust
-description: Write Rust code in the style of Mara Bos, Rust library team lead and author of "Rust Atomics and Locks." Emphasizes low-level concurrency, atomics, and understanding the memory model. Use when writing concurrent or lock-free code.
-tags: concurrency, atomics, locks, threads, parallel, memory-model, mutex, sync, async, low-level, systems, performance
+description: "Design and review Rust concurrency in the style of Mara Bos: atomics, memory ordering, lock internals, wait/notify, false-sharing avoidance, and contention tuning. Use when implementing or auditing custom `Mutex`/`RwLock`/spinlock/condvar code, choosing `Ordering`, reasoning about `Arc`/`Weak` or `OnceLock`, debugging lock-free races, or testing concurrency with Loom. Triggers: `Atomic*`, `Ordering`, `compare_exchange`, lock-free, spinlock, false sharing, `Arc`, `Weak`, `OnceLock`, `wait`, `notify`, Loom, contention, cache line."
+tags: rust, concurrency, atomics, memory-ordering, locks, spinlocks, condvar, arc, weak, once-lock, loom, false-sharing, performance
 ---
 
-# Mara Bos Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌‌‌​​‌​‌‍​‌‌‌‌​‌‌‍​‌​‌‌‌‌​‍​‌​‌‌​‌‌‍​​​​‌​‌​‍‌​​​​​‌‌⁠‍⁠
+# Mara Bos: Prove the Handoff, Not the Intuition
 
-## Overview
+Concurrent Rust is about proving who may touch which memory after which event. The bug is usually not "the value arrived late"; it is "a thread derived permission from an atomic that never established happens-before."
 
-Mara Bos is the Rust library team lead and author of "Rust Atomics and Locks." She maintains core synchronization primitives in the standard library. Her expertise: making concurrent code correct, efficient, and understandable.
+## Use This Skill
 
-## Core Philosophy
+Use this for low-level shared-memory concurrency, not generic async workflow code. If the problem disappears when reduced to ownership transfer, channels, or `OnceLock`, take that simpler path.
 
-> "Concurrency bugs are hard to find. Make them impossible instead."
+This skill is intentionally self-contained. Do not pull in large lock-free examples or generic async docs until you have identified which case you are in: one-time init, lock-protected invariants, or a truly custom atomic primitive.
 
-> "Understand the memory model before using atomics."
+## Before You Touch `Ordering`, Ask Yourself
 
-Bos believes that **concurrent code must be provably correct**. Understanding happens-before relationships and memory ordering is essential, not optional.
+- Is this atomic only tracking a number, or does reading it grant access to other memory?
+- Am I publishing data, transferring exclusivity, or just collecting statistics?
+- Does this state machine live in one atomic word, or am I smuggling invariants across multiple atomics?
+- Is contention brief enough to spin, or can the holder sleep, allocate, block on I/O, or cross FFI?
+- Am I reasoning on x86-64 only? What breaks or slows down on ARM64?
 
-## Design Principles
+## Choose the Primitive
 
-1. **Correctness First**: A fast but incorrect concurrent algorithm is worthless.
+- If ownership transfer or message passing removes sharing, do that. Bos-style atomics are for cases where shared-memory coordination is unavoidable.
+- If initialization happens once, prefer `OnceLock` or `LazyLock`. Use `OnceLock` when initialization needs runtime inputs or retryable control flow.
+- If the invariant spans multiple fields, use a `Mutex` or `RwLock`. One atomic per field is usually a disguised lock with worse failure modes.
+- If waiters must sleep, use a blocking primitive. Spinning is only an optimistic front-end for microcontention.
+- If you are building a custom primitive, compress the state into one machine word first. Multi-atomic protocols multiply proof obligations.
 
-2. **Understand Ordering**: Every atomic operation needs the right memory ordering.
+## Ordering Heuristics That Matter
 
-3. **Minimize Shared State**: Less sharing means fewer bugs.
+- `Relaxed` is for independent facts, not permissions. A relaxed counter is fine; a relaxed "ready" bit that causes another thread to read non-atomic data is not.
+- `Acquire`/`Release` is the default handoff pair: release when publishing work or unlocking; acquire when consuming that publication or locking.
+- `compare_exchange` has two orderings because failure is still a load. If the failure path reads the published object, the failure ordering often must be `Acquire`, not `Relaxed`.
+- Failure ordering never includes a store, so it cannot be `Release` or `AcqRel`. If you find yourself wanting that, your proof is probably mixing the success and failure paths.
+- On x86-64, `Acquire` and `Release` often compile to the same instructions as `Relaxed`; on ARM64 they do not. Do not conclude an ordering is "free" from laptop benchmarks.
+- On x86-64, a `SeqCst` store is heavier than a plain release store because it becomes an `xchg`; on ARM64 Bos notes `SeqCst` RMWs are essentially as expensive as acquire/release RMWs. Pick orderings from the proof, then benchmark.
+- If multiple atomics define one logical state machine, start with `SeqCst` until the proof is stable. Relax individual edges only when you can name the exact release/acquire pair that replaces the global order.
 
-4. **Prefer High-Level Abstractions**: Use channels and mutexes before atomics.
+## Contention and Cache Behavior
 
-## When Writing Code
+- Failed CAS is not "just a read." On most CPUs it still claims exclusive access to the cache line. In spin loops, poll with `load` first and attempt CAS only when the lock looks open.
+- A hot atomic can damage unrelated neighbors through false sharing. `#[repr(align(64))]` is a reasonable starting guess, but `crossbeam::CachePadded` pessimistically uses 128-byte padding on x86-64, aarch64, and powerpc64 because adjacent-line prefetch can still hurt you.
+- `std::hint::spin_loop()` is only a CPU hint; it does not yield to the OS. Bound the spin and fall back to parking or a blocking lock or you invite priority inversion.
+- Bos uses 100 spins as a plausible starting point for optimistic mutex spinning and notes Rust's Linux mutex used 100 in Rust 1.66. Treat that as a benchmark seed, not a truth.
+- If you can encode "waiters exist" in the state word, do it. A 3-state mutex (`0` unlocked, `1` locked/no waiters, `2` locked/waiters) avoids unconditional wake syscalls in the uncontended path. Bos measured major Linux wins; macOS and Windows often show much smaller gains because their wake primitives already do bookkeeping.
+- Waking everybody for a single-resource handoff is usually a thundering herd bug, not generosity. Wake one waiter or requeue onto the mutex.
 
-### Always
+## Locks, Parking, and Fairness
 
-- Use the highest-level abstraction that works (channels > mutexes > atomics)
-- Document the synchronization strategy for concurrent code
-- Test concurrent code with tools like Miri and loom
-- Understand why each memory ordering is chosen
-- Consider what happens if operations interleave
+- `parking_lot` is not just "faster std." It gives adaptive spinning for microcontention, no spurious `Condvar` wakeups, waiter requeueing on `notify_all`, and task-fair `RwLock` behavior.
+- Eventual fairness matters when one thread repeatedly reacquires before others run. `parking_lot` forces a fair unlock on average every 0.5 ms, and critical sections longer than 1 ms always unlock fairly. Use `FairMutex` only when starvation guarantees matter more than raw throughput.
+- For portable futex-style wait/wake code, prefer a 32-bit state word. Bos's wait/wake examples use `AtomicU32` because 32-bit atomics are the portable denominator.
+- Separate correctness from parking. Wait/wake prevents CPU burn; it does not create the happens-before edge that makes shared access safe.
 
-### Never
+## `Arc`, `Weak`, and One-Time Init
 
-- Use `Ordering::Relaxed` without understanding the implications
-- Assume operations happen in source code order
-- Write lock-free code without formal reasoning
-- Ignore potential data races in unsafe code
+- Custom reference counting is harder than it looks. Separate `Arc` and `Weak` counts can miss a concurrent downgrade/upgrade window unless you deliberately lock the check.
+- In Bos's `Arc` reasoning, relaxed increments are sometimes fine, but the transitions that prove uniqueness or final destruction must synchronize with the matching decrements. If you cannot narrate those edges, do not ship the custom refcount.
+- Prefer `OnceLock` over racy CAS-based lazy init when the constructor is expensive; duplicate initialization work under contention is often worse than briefly blocking.
+- Prefer `OnceLock` over `LazyLock` when you need runtime parameters. `LazyLock` poisoning after a panic is unrecoverable for all future accesses.
 
-### Prefer
+## Bos-Style Procedure For A New Primitive
 
-- `Mutex<T>` over manual locking
-- `crossbeam` channels over `std::sync::mpsc`
-- `parking_lot` for high-performance locking
-- `Ordering::SeqCst` when unsure (then optimize if needed)
+1. Write the state machine as integers and legal transitions before code.
+2. Mark which transition publishes data and which transition consumes it.
+3. Separate correctness from parking: wait/wake reduces CPU burn, but it does not make unsound sharing safe.
+4. Minimize the shared footprint: one state word, padded hot fields, short critical sections.
+5. Model the smallest version with Loom before optimizing.
+6. Benchmark three regimes separately: uncontended, microcontention, and long-hold contention.
 
-## Code Patterns
+## Testing Without Fooling Yourself
 
-### The Ordering Hierarchy
+- Loom is mandatory for nontrivial custom primitives, but it is not omniscient. Loom explicitly cannot model all reorderings allowed by `Relaxed` and some cross-atomic weak-order behaviors.
+- Use `LOOM_MAX_PREEMPTIONS=2` or `3` as a practical starting bound; Loom's own docs say that catches most bugs without exploding the state space.
+- After Loom passes, run stress tests on real weakly ordered hardware if the code matters. ARM64 is much more informative than another x86 laptop.
+- Test for wake behavior, not just final values. A lock or condvar that is "correct" only because it accidentally busy-loops is still broken.
 
-```rust
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+## NEVER
 
-// RELAXED: No synchronization, only atomicity
-// Use for: Counters where exact order doesn't matter
-static COUNTER: AtomicUsize = AtomicUsize::new(0);
+- NEVER use `Relaxed` on a flag, pointer, or refcount transition that grants access to other memory because the seductive part is that tests still pass on x86-64. Instead pair the publishing edge with `Release` and the consuming or failure-read edge with `Acquire`.
+- NEVER spin on `compare_exchange` alone because it feels like the shortest lock loop. Failed CAS still grabs the cache line exclusively and amplifies false sharing. Instead spin on `load`, then attempt CAS, then park.
+- NEVER split one invariant across several atomics because each field looks locally simple. The consequence is a proof obligation across interleavings that is harder than a mutex and easier to get wrong. Instead keep the invariant under one lock or one state word.
+- NEVER benchmark synchronization on one architecture and generalize. x86-64 hides ordering costs that ARM64 exposes, while OS wake implementations differ enough to invert "obvious" optimizations. Instead benchmark on the target mix and reason from the memory model first.
+- NEVER assume a green Loom run proves relaxed-order code is correct because Loom cannot emulate every relaxed reordering. Instead combine Loom with architecture-aware reasoning and hardware stress.
+- NEVER reach for always-lock-free designs because uncontended microbenchmarks look beautiful. The seductive part is avoiding syscalls; the consequence is complex recovery, starvation, and cache-line warfare under real contention. Instead prefer `Mutex`, `RwLock`, or `OnceLock` until measurement proves the simpler design is the bottleneck.
 
-fn increment() {
-    COUNTER.fetch_add(1, Ordering::Relaxed);
-}
+## Freedom Calibration
 
-// ACQUIRE/RELEASE: Synchronize between threads
-// Use for: Protecting non-atomic data, implementing locks
-static READY: AtomicBool = AtomicBool::new(false);
-static mut DATA: u64 = 0;
-
-fn producer() {
-    unsafe { DATA = 42; }
-    READY.store(true, Ordering::Release);  // Release DATA
-}
-
-fn consumer() {
-    while !READY.load(Ordering::Acquire) {}  // Acquire DATA
-    unsafe { println!("{}", DATA); }  // Safe: synchronized
-}
-
-// SEQ_CST: Total ordering across all threads
-// Use for: When you need a global order of operations
-static FLAG_A: AtomicBool = AtomicBool::new(false);
-static FLAG_B: AtomicBool = AtomicBool::new(false);
-
-// With SeqCst, all threads agree on the order of operations
-```
-
-### Implementing a Spinlock
-
-```rust
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::cell::UnsafeCell;
-use std::ops::{Deref, DerefMut};
-
-pub struct SpinLock<T> {
-    locked: AtomicBool,
-    data: UnsafeCell<T>,
-}
-
-// SAFETY: SpinLock provides synchronization
-unsafe impl<T: Send> Send for SpinLock<T> {}
-unsafe impl<T: Send> Sync for SpinLock<T> {}
-
-impl<T> SpinLock<T> {
-    pub const fn new(data: T) -> Self {
-        SpinLock {
-            locked: AtomicBool::new(false),
-            data: UnsafeCell::new(data),
-        }
-    }
-
-    pub fn lock(&self) -> SpinLockGuard<'_, T> {
-        // Spin until we acquire the lock
-        while self.locked
-            .compare_exchange_weak(
-                false,              // Expected: unlocked
-                true,               // Desired: locked
-                Ordering::Acquire,  // Success: acquire the data
-                Ordering::Relaxed,  // Failure: just retry
-            )
-            .is_err()
-        {
-            // Hint to the CPU that we're spinning
-            std::hint::spin_loop();
-        }
-        
-        SpinLockGuard { lock: self }
-    }
-}
-
-pub struct SpinLockGuard<'a, T> {
-    lock: &'a SpinLock<T>,
-}
-
-impl<T> Deref for SpinLockGuard<'_, T> {
-    type Target = T;
-    
-    fn deref(&self) -> &T {
-        // SAFETY: We hold the lock
-        unsafe { &*self.lock.data.get() }
-    }
-}
-
-impl<T> DerefMut for SpinLockGuard<'_, T> {
-    fn deref_mut(&mut self) -> &mut T {
-        // SAFETY: We hold the lock exclusively
-        unsafe { &mut *self.lock.data.get() }
-    }
-}
-
-impl<T> Drop for SpinLockGuard<'_, T> {
-    fn drop(&mut self) {
-        self.lock.locked.store(false, Ordering::Release);
-    }
-}
-```
-
-### Arc and Weak for Shared Ownership
-
-```rust
-use std::sync::{Arc, Weak};
-
-struct Node {
-    value: i32,
-    // Strong reference to children (owns them)
-    children: Vec<Arc<Node>>,
-    // Weak reference to parent (doesn't own)
-    parent: Weak<Node>,
-}
-
-fn create_tree() -> Arc<Node> {
-    let root = Arc::new(Node {
-        value: 1,
-        children: Vec::new(),
-        parent: Weak::new(),
-    });
-    
-    let child = Arc::new(Node {
-        value: 2,
-        children: Vec::new(),
-        parent: Arc::downgrade(&root),  // Weak reference
-    });
-    
-    // To add child to root, we'd need interior mutability
-    // (this example is simplified)
-    
-    root
-}
-
-fn traverse_up(node: &Node) {
-    if let Some(parent) = node.parent.upgrade() {
-        println!("Parent value: {}", parent.value);
-        traverse_up(&parent);
-    }
-}
-```
-
-### Channel Patterns
-
-```rust
-use std::sync::mpsc;
-use std::thread;
-
-// Basic channel usage
-fn producer_consumer() {
-    let (tx, rx) = mpsc::channel();
-    
-    // Producer thread
-    thread::spawn(move || {
-        for i in 0..10 {
-            tx.send(i).unwrap();
-        }
-    });
-    
-    // Consumer in main thread
-    for received in rx {
-        println!("Got: {}", received);
-    }
-}
-
-// Multiple producers
-fn multi_producer() {
-    let (tx, rx) = mpsc::channel();
-    
-    for i in 0..4 {
-        let tx_clone = tx.clone();
-        thread::spawn(move || {
-            tx_clone.send(format!("from thread {}", i)).unwrap();
-        });
-    }
-    
-    drop(tx);  // Drop original so rx knows when to stop
-    
-    for msg in rx {
-        println!("{}", msg);
-    }
-}
-
-// Bounded channel (backpressure)
-fn bounded_channel() {
-    let (tx, rx) = mpsc::sync_channel(10);  // Buffer of 10
-    
-    thread::spawn(move || {
-        for i in 0..100 {
-            tx.send(i).unwrap();  // Blocks if buffer full
-        }
-    });
-}
-```
-
-### Testing Concurrent Code
-
-```rust
-// Use loom for exhaustive concurrency testing
-#[cfg(test)]
-mod tests {
-    use loom::sync::atomic::{AtomicUsize, Ordering};
-    use loom::thread;
-
-    #[test]
-    fn test_concurrent_increment() {
-        loom::model(|| {
-            let counter = AtomicUsize::new(0);
-            
-            let counter1 = &counter;
-            let counter2 = &counter;
-            
-            let t1 = thread::spawn(move || {
-                counter1.fetch_add(1, Ordering::SeqCst);
-            });
-            
-            let t2 = thread::spawn(move || {
-                counter2.fetch_add(1, Ordering::SeqCst);
-            });
-            
-            t1.join().unwrap();
-            t2.join().unwrap();
-            
-            assert_eq!(counter.load(Ordering::SeqCst), 2);
-        });
-    }
-}
-```
-
-## Mental Model
-
-Bos thinks about concurrency as:
-
-1. **What is shared?** Identify all shared state.
-2. **What orderings can occur?** Consider all interleavings.
-3. **What synchronization is needed?** Ensure happens-before.
-4. **Can I prove correctness?** If not, simplify.
-
-## Memory Ordering Cheat Sheet
-
-| Ordering | Use Case |
-|----------|----------|
-| `Relaxed` | Counters, statistics (no sync needed) |
-| `Acquire` | Load that precedes accessing protected data |
-| `Release` | Store that follows modifying protected data |
-| `AcqRel` | Read-modify-write that does both |
-| `SeqCst` | When you need global ordering (default choice) |
-
+- High freedom: API shape, data layout, sharding, and whether to use `Mutex` versus `RwLock` versus `OnceLock`.
+- Low freedom: memory-order proofs, CAS failure ordering, wake policy, and cache-line layout on hot atomics. Treat those as engineering constraints, not stylistic choices.

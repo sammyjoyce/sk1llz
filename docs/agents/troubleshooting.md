@@ -1,0 +1,7 @@
+# Troubleshooting
+
+- If `web_search_exa` returns `401` or empty token-based failures, proceed with a plain web search tool and open only primary references tied to the current domain, then resume the workflow from the same rubric checkpoints to avoid losing review continuity.
+- If no knowledge delta appears after rewriting (e.g., many introductory sentences remain), add expert-level decision heuristics before polishing prose; the common failure is satisfying format but missing practitioner-specific consequences.
+- If a systems-architecture skill still reads like broad design advice after a rewrite, replace slogans with source-backed placement decisions, explicit failure thresholds, and anti-pattern consequences; these files fail when they explain architecture rather than teaching the call an experienced systems designer would make.
+- If evaluation steps are blocked by missing local instructions (like absent `docs/agents`), create the directory structure first, then write only the highest-signal notes so the repository gains memory without introducing process churn.
+- If `cargo run` or `cargo check` under `cli/` fails in `openssl-sys` while resolving `reqwest`, treat it as an environment or dependency-shape blocker first: either provide the system OpenSSL development package and `pkg-config` metadata, or remove the OpenSSL dependency path in favor of a more portable TLS stack before spending time on command-surface debugging.

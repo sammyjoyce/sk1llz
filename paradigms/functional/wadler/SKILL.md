@@ -1,257 +1,129 @@
 ---
 name: wadler-monadic-elegance
-description: Write functional code in the style of Philip Wadler, type theorist and monad evangelist. Emphasizes monadic composition, type-driven design, and the deep connection between logic and computation. Use when designing composable abstractions or understanding categorical patterns.
-tags: monads, type-theory, propositions-as-types, lambda-calculus, category-theory, functional, haskell, formal
+description: "Decide how far to escalate from parametric polymorphism to Applicative, Selective, Monad, transformers, or effect handlers in Haskell and similar typed FP systems, with emphasis on rollback, concurrency, and performance traps. Use when designing or refactoring effectful code, choosing between ReaderT/StateT/WriterT/ExceptT, diagnosing transformer-order bugs, recovering lost Applicative structure, or evaluating free/freer/effect-system trade-offs. Trigger keywords: monad, applicative, selective, applicativedo, ReaderT, StateT, WriterT, ExceptT, MonadFail, free monad, Codensity, effect handler, polysemy, fused-effects, effectful."
 ---
 
-# Philip Wadler Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌‌‌‌​​​‍‌​​​‌​‌‌‍‌​​​​‌‌‌‍​​​​‌‌‌‌‍​​​​‌​‌​‍​​​​​​‌‌⁠‍⁠
+# Wadler: Spend Algebraic Power Carefully
 
-## Overview
+The central habit is not "use monads elegantly." It is "spend as little semantic power as possible."
 
-Philip Wadler is a principal designer of Haskell, contributor to Java generics, and the person who brought monads from category theory into practical programming. His famous paper "Propositions as Types" illuminates the deep connection between logic and computation.
+Every extra constraint destroys something:
+- `Functor` to `Applicative`: you lose nothing about branch independence.
+- `Applicative` to `Selective`: you admit value-dependent choice, but the branch set stays statically visible.
+- `Selective` to `Monad`: you give up static shape, many free theorems, and optimizer freedom.
+- Direct style to reified effects: you buy inspection and rewriting, but you now pay an interpreter cost model.
 
-## Core Philosophy
+If a signature can honestly stay weaker, keep it weaker. That preserves laws, testing surface, refactoring freedom, and often performance.
 
-> "The essence of functional programming is that programs are built by composing functions."
+## Before adding power, ask yourself
 
-> "Monads are just monoids in the category of endofunctors."
+Before changing a type from `Applicative` to `Monad`, ask:
+- Is there a real value dependency, or did syntax create a fake one?
+- Are all possible branches known up front? If yes, try `Selective` before `Monad`.
+- Did a failable or strict pattern in `do` force `>>=` even though the computation is structurally applicative?
+- Am I spending proof power for convenience alone?
 
-> "A monad is a way to structure computations."
+Before choosing a transformer stack, ask:
+- On failure, should state disappear, survive for auditing, or survive only at selected boundaries?
+- Under async exceptions or `concurrently`, does the state need to remain visible?
+- Do I need to inspect or rewrite the program before running it, or only execute it?
+- Is the hot path dispatch-heavy, or will I/O dominate enough that interpreter overhead is irrelevant?
 
-Wadler sees programming as applied mathematics—types are propositions, programs are proofs, and monads are the universal pattern for composition.
+Before introducing a new effect abstraction, ask:
+- Is this exposing semantics, or just hiding plumbing?
+- Will the next person be able to state the failure contract without mentally expanding the whole stack?
+- Can I write the fully unwrapped type? If not, I do not understand the design yet.
 
-## Design Principles
+## Mandatory decision procedure
 
-1. **Types Are Propositions**: A type signature is a theorem; the implementation is its proof.
+Before touching any `StateT`/`ExceptT`/`WriterT` combination, write the unwrapped type on paper or in comments:
+- `StateT s (ExceptT e m) a` means `s -> m (Either e (a, s))`
+- `ExceptT e (StateT s m) a` means `s -> m (Either e a, s)`
 
-2. **Monads Everywhere**: IO, Maybe, List, State—all are instances of one pattern.
+Choose the one whose failure contract matches reality. Do not choose by aesthetics or library habit.
 
-3. **Parametric Polymorphism**: Generic code that works for any type.
+Before "upgrading" to `Monad`, test whether `ApplicativeDo` is being blocked by syntax:
+- A strict or failable pattern in `do` forces `>>=` to preserve strictness.
+- GHC only recognizes the final line as applicative if it is literally `return E`, `return $ E`, `pure E`, or `pure $ E`.
+- `-foptimal-applicative-do` finds better splits, but the algorithm is `O(n^3)` and is a bad default for generated `do` blocks once you get into roughly 100+ statements.
 
-4. **Theorems for Free**: From the type, derive properties the code must have.
+If those are the blockers, rewrite the syntax, not the abstraction.
 
-## When Writing Code
+## Decision tree
 
-### Always
+- Need only independent effectful arguments and static structure matters:
+  Use `Applicative`. This keeps parallelization, static analysis, and stronger free theorems available.
 
-- Let types guide your implementation
-- Use monadic composition for effects
-- Exploit parametricity for correctness
-- Derive functions from types systematically
-- Prefer point-free style when it aids clarity
-- Think in terms of algebraic laws
+- Need runtime choice, but the set of branches is known ahead of time:
+  Use `Selective`. This is the sweet spot people skip because `Monad` is familiar.
 
-### Never
+- Need to synthesize the next effect from a runtime value:
+  Use `Monad`, but only for that boundary. Keep outer APIs weaker when you can.
 
-- Fight the type system
-- Use partial functions without wrapping in Maybe
-- Ignore the monad laws
-- Mix effects without explicit structure
-- Sacrifice correctness for convenience
+- Need application wiring, resource acquisition, logging sinks, shared mutable cells, async exceptions, or concurrency:
+  Default to `ReaderT Env IO` or a Reader-like effect system whose operational story is just as explicit.
 
-### Prefer
+- Need rollback semantics inside pure or bounded logic:
+  Use local `StateT`/`ExceptT`/`WriterT`, but make the failure contract explicit by expansion first.
 
-- `Maybe` over null
-- `Either` over exceptions
-- Monadic composition over nested callbacks
-- Type classes over ad-hoc polymorphism
-- Algebraic reasoning over testing alone
+- Need to inspect, optimize, reorder, or reinterpret programs:
+  Reify with free/freer/algebraic effects only at that seam. Do not drag a reified IR through the whole hot path.
 
-## Code Patterns
+## NEVER do these
 
-### The Monad Pattern
+- NEVER add a `Monad` constraint because `do` notation reads better. That is seductive because the code stops fighting you immediately. The hidden cost is lost static structure, weaker theorems, and fewer optimization opportunities. Instead first check for `ApplicativeDo` blockers such as strict patterns or a final line GHC cannot recognize, then ask whether `Selective` is enough.
 
-```haskell
--- A monad has three components:
--- 1. A type constructor: m a
--- 2. return: a -> m a (inject a value)
--- 3. bind: m a -> (a -> m b) -> m b (sequence computations)
+- NEVER recommend `-Wmissing-monadfail-instances` as protection against bad `do` patterns. Old posts mention it, so it feels like institutional wisdom. Since GHC 8.8 it has no effect, which means you think you installed a guardrail when you did not. Instead ban failable patterns in polymorphic `do`, use explicit `case`, and rely on normal exhaustiveness warnings.
 
--- Maybe monad: computations that might fail
-safeDivide :: Double -> Double -> Maybe Double
-safeDivide _ 0 = Nothing
-safeDivide x y = Just (x / y)
+- NEVER put `ExceptT e` on top of `IO` for application-core error semantics because `IO` can still throw anything at any time. It is seductive because the type looks "documented." The consequence is a false failure model and undefined team expectations around cancellation and `concurrently`. Instead keep `Either` in pure/domain layers and convert to exceptions or boundary errors at the application shell.
 
--- Composition with bind (>>=)
-compute :: Double -> Double -> Double -> Maybe Double
-compute x y z = safeDivide x y >>= \r -> safeDivide r z
+- NEVER use `StateT` for shared application state because it looks pure and linear in single-threaded examples. Under exceptions you lose the threaded state, and under concurrency the semantics are cloning-plus-arbitrary-survivor, not shared mutation. With `put 4 >> concurrently (modify (+1)) (modify (+2)) >> get`, plausible outcomes are `4`, `5`, or `6`, not `7`. Instead move shared state into `IORef`/`TVar` fields inside `Env` and make the mutation story explicit.
 
--- Do notation (syntactic sugar for bind)
-compute' :: Double -> Double -> Double -> Maybe Double
-compute' x y z = do
-    r <- safeDivide x y
-    safeDivide r z
+- NEVER default to `WriterT` for production logging because "strict" sounds like it fixed the classic issue. The seductive part is the pleasant API. The consequence is retained thunks, memory growth, and poor failure visibility exactly where logs are supposed to help you. Instead use explicit logger handles or mutable accumulators in `ReaderT`; reserve `WriterT` for small, bounded, morally pure builders that you have benchmarked.
 
+- NEVER choose transformer order by habit. `StateT s (ExceptT e m)` and `ExceptT e (StateT s m)` expose different business truths about rollback and auditability even when their surface code looks similar. Instead expand both to the unwrapped type and choose the one that matches retry, compensation, and debugging requirements.
 
--- List monad: computations with multiple results
-pairs :: [a] -> [b] -> [(a, b)]
-pairs xs ys = do
-    x <- xs
-    y <- ys
-    return (x, y)
+- NEVER assume `MonadUnliftIO`, `MonadBaseControl`, lifted `bracket`, or lifted concurrency are semantics-preserving on stateful stacks. This is seductive because the code compiles and simple tests pass. The consequence is cleanup running with stale state or state updates disappearing across exception boundaries. Instead unlift only through Reader/Identity-style stacks with no monadic state, or move mutable state into explicit refs that survive exceptions.
 
--- Equivalent to:
-pairs' xs ys = xs >>= \x -> ys >>= \y -> return (x, y)
+- NEVER reach for free or freer effects because handler syntax looks elegant. The hidden trap is cost: left-associated binds over free structures are the classic quadratic failure mode, and "the interpreter is pure" does not change that. Instead keep direct monads in hot paths, and if reification is truly required, use Codensity/fusion techniques or lower to a concrete carrier early.
 
--- Or with list comprehension:
-pairs'' xs ys = [(x, y) | x <- xs, y <- ys]
+## Cost-model heuristics experts use
 
+- Treat every extra transformer in a polymorphic `mtl`-style stack as part of the bind cost model. In dispatch-heavy code, deep stacks can become materially slower because each bind walks layer by layer.
+- A published `effectful` benchmark on GHC 9.2.4 / Ryzen 9 5950X found the deep `mtl` countdown case about 50x slower than the `ST` baseline, precisely because bind dispatch became the hot loop. The same benchmark showed that once real I/O entered the picture, the gap narrowed sharply.
+- The heuristic is therefore: benchmark dispatch when dispatch is the work; benchmark end-to-end when I/O dominates. Do not generalize from one regime to the other.
+- `WriterT` is not forbidden everywhere. It can be the right answer in a bounded builder with no concurrency, no need to survive exceptions, and measured evidence that alternatives are worse.
+- Free/freer interpreters are not forbidden everywhere. They are justified when the program shape itself is an asset: optimization passes, alternate backends, effect elimination, or static inspection.
 
--- IO monad: computations with side effects
-greet :: IO ()
-greet = do
-    putStrLn "What is your name?"
-    name <- getLine
-    putStrLn ("Hello, " ++ name ++ "!")
-```
+## Practical review patterns
 
-### The Monad Laws
+When reviewing an API, ask:
+- Could this signature be weakened from `Monad` to `Applicative` or `Selective` without lying?
+- Did someone add `MonadIO` merely to reach logging, randomness, or time? If so, a narrower capability or environment handle is probably the better boundary.
+- Did a refactor make a function "more convenient" by adding constraints? If yes, ask what free theorem just got spent.
 
-```haskell
--- Every monad must satisfy three laws:
+When debugging a stack bug, do this in order:
+1. Expand the stack to unwrapped types.
+2. Mark every place where failure, cancellation, or `catch` can happen.
+3. Decide whether state/logs/resources should be visible after each failure site.
+4. Only then change transformer order or carrier choice.
 
--- 1. Left identity: return a >>= f  ≡  f a
--- 2. Right identity: m >>= return  ≡  m
--- 3. Associativity: (m >>= f) >>= g  ≡  m >>= (\x -> f x >>= g)
+When a free/freer system feels slow, do this in order:
+1. Check whether the hot path is interpreter dispatch or real I/O.
+2. Look for left-associated bind growth and repeated reinterpretation.
+3. If the program shape is no longer being exploited, collapse back to direct style.
 
--- These laws ensure composition behaves predictably
--- Violating them leads to subtle bugs
+## Edge-case reminders
 
--- Example: verifying Maybe satisfies the laws
--- Left identity:
---   return a >>= f
---   = Just a >>= f
---   = f a ✓
+- If you care about preserving applicative structure, avoid failable patterns in `do`; pattern-match after the fact.
+- If you need shared state across threads, `StateT` is the wrong story even when the type is shorter.
+- If your logs matter during failure investigation, do not hide them in a transformer that disappears on exceptions.
+- If you cannot explain the cancellation behavior of your error model, the model is not ready for concurrent code.
 
--- Right identity:
---   Just x >>= return
---   = return x
---   = Just x ✓
+## Do not use this skill for
 
--- Associativity holds by case analysis on m
-```
+- Beginner explanations of what monads, functors, or monad laws are.
+- Local syntax fixes where no abstraction or failure-semantics decision is being made.
+- Category-theory exposition detached from code-shape, runtime behavior, or API design.
 
-### Functor and Applicative
-
-```haskell
--- Functor: things you can map over
--- fmap :: (a -> b) -> f a -> f b
--- Law: fmap id = id
--- Law: fmap (f . g) = fmap f . fmap g
-
-incrementAll :: [Int] -> [Int]
-incrementAll = fmap (+1)
-
--- Applicative: functors you can combine
--- pure :: a -> f a
--- (<*>) :: f (a -> b) -> f a -> f b
-
--- Combine Maybe values
-addMaybe :: Maybe Int -> Maybe Int -> Maybe Int
-addMaybe mx my = pure (+) <*> mx <*> my
--- addMaybe (Just 3) (Just 4) = Just 7
--- addMaybe Nothing (Just 4) = Nothing
-
-
--- The hierarchy: Functor → Applicative → Monad
--- Every Monad is an Applicative
--- Every Applicative is a Functor
-```
-
-### Parametric Polymorphism and Theorems for Free
-
-```haskell
--- From the type alone, we can derive properties
-
--- What can this function possibly do?
-mystery :: a -> a
--- It can ONLY be the identity function!
--- It cannot inspect 'a', so it can only return what it received.
-
--- What about this?
-mystery2 :: [a] -> [a]
--- It can reorder, duplicate, or drop elements
--- But it cannot fabricate new 'a' values
--- Therefore: map f . mystery2 = mystery2 . map f
-
--- This is a "free theorem" - derived purely from the type
-
--- Practical example:
-reverse :: [a] -> [a]
--- Free theorem: map f . reverse = reverse . map f
--- We get this property for free from the type!
-```
-
-### Monad Transformers
-
-```haskell
-import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Class (lift)
-
--- Combine effects with monad transformers
-type App a = MaybeT (StateT Int IO) a
-
--- MaybeT adds failure
--- StateT adds mutable state
--- IO adds side effects
-
-runApp :: App a -> Int -> IO (Maybe a, Int)
-runApp app initialState = runStateT (runMaybeT app) initialState
-
-example :: App String
-example = do
-    lift $ lift $ putStrLn "Starting..."  -- IO
-    lift $ modify (+1)                     -- State
-    n <- lift get
-    if n > 10
-        then return "Big number"
-        else MaybeT $ return Nothing       -- Maybe (failure)
-```
-
-### Type-Driven Development
-
-```haskell
--- Start with the type, derive the implementation
-
--- Problem: safely index into a list
--- Type tells us what we need:
-safeIndex :: [a] -> Int -> Maybe a
-
--- Implementation follows from the type:
-safeIndex [] _ = Nothing
-safeIndex (x:_) 0 = Just x
-safeIndex (_:xs) n
-    | n < 0     = Nothing
-    | otherwise = safeIndex xs (n - 1)
-
-
--- Problem: traverse a structure with effects
--- The type guides us completely:
-traverse :: (Applicative f) => (a -> f b) -> [a] -> f [b]
-traverse _ [] = pure []
-traverse f (x:xs) = (:) <$> f x <*> traverse f xs
-
--- Usage:
--- traverse readFile ["a.txt", "b.txt"] :: IO [String]
--- traverse Just [1, 2, 3] :: Maybe [Int]
-```
-
-## Mental Model
-
-Wadler approaches programming by asking:
-
-1. **What is the type?** The type is the specification
-2. **What are the laws?** Algebraic properties guide implementation
-3. **Is this a known pattern?** Functor, Applicative, Monad, etc.
-4. **What theorems are free?** Derive properties from types
-5. **Does this compose?** Good abstractions compose cleanly
-
-## Signature Wadler Moves
-
-- Monadic do-notation for sequencing effects
-- Free theorems from parametric types
-- Monad transformers for combined effects
-- Type classes for ad-hoc polymorphism
-- Algebraic laws as correctness criteria
-- Category theory as design guide
+Use this skill when the question is not "how do I write the code?" but "what semantic power am I willing to spend, and what will that cost me later?"

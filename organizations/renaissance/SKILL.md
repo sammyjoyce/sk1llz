@@ -1,356 +1,100 @@
 ---
 name: renaissance-statistical-arbitrage
-description: Build trading systems in the style of Renaissance Technologies, the most successful quantitative hedge fund in history. Emphasizes statistical arbitrage, signal processing, and rigorous scientific methodology. Use when developing alpha research, signal extraction, or systematic trading strategies.
-tags: statistical-arbitrage, quantitative, machine-learning, finance, signals, backtesting, hedge-fund, data
+description: Use when designing, reviewing, or debugging equity statistical arbitrage, market-neutral factor books, residual mean reversion, or alpha research pipelines exposed to crowding, borrow, and data-mining risk. Teaches practitioner heuristics for alpha half-life, funding stress, short-book asymmetry, point-in-time data, DSR/PBO-style validation, and capacity limits. Trigger on stat arb, market neutral, residuals, mean reversion, factor book, borrow, crowding, alpha decay, backtest overfitting, DSR, or PBO.
 ---
 
-# Renaissance Technologies Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍‌​‌‌‌​​‌‍​‌​‌​​​‌‍‌​‌‌​‌​​‍‌​​‌‌​‌‌‍​​​​‌​‌​‍‌‌​​​​‌‌⁠‍⁠
+# Renaissance Statistical Arbitrage
 
-## Overview
+This skill is self-contained. Do not load generic trading primers for this task unless the user explicitly wants pedagogy; they dilute the edge cases that matter.
 
-Renaissance Technologies, founded by mathematician Jim Simons, operates the Medallion Fund—the most successful hedge fund in history with ~66% annual returns before fees over 30+ years. The firm hires mathematicians, physicists, and computer scientists (not finance people) and applies rigorous scientific methods to market data.
+Renaissance-style work is not "predict the market." It is "find tiny conditional edges, prove they survive adversarial validation, then assume they will die from crowding, cost, or borrow before they die from theory."
 
-## Core Philosophy
+## Before You Build Anything
 
-> "We don't hire people from business schools. We hire people from the hard sciences."
+Before testing a signal, ask yourself:
 
-> "Patterns in data are ephemeral. If something works, it's probably going to stop working."
+- Is this edge actually mispricing, or am I being paid to warehouse liquidity for forced sellers?
+- Would the signal still exist if I removed vendor backfills, restatements, stale fundamentals, and today's constituent list?
+- Is the short-side alpha coming from normal names, or only from hard-to-borrow specials?
+- Which desks would independently discover the same edge from the same feature set, and what happens when they all delever at once?
+- What event breaks the residual first: earnings, borrow recall, rebalance, index membership change, M&A, or a funding squeeze?
 
-> "We're not in the business of predicting. We're in the business of finding patterns that repeat slightly more often than they should."
+If you cannot answer those questions, you do not have a deployable stat-arb idea yet.
 
-Renaissance believes markets are not perfectly efficient but nearly so. Profits come from finding tiny, statistically significant edges and exploiting them at massive scale with rigorous risk management.
+## Core Operating Beliefs
 
-## Design Principles
+- Treat every alpha as a decaying inventory-management problem, not a timeless law.
+- Most short-horizon alpha is an execution business in disguise. Research without live cost modeling is fiction.
+- "Market neutral" is not enough. The real blow-up channel is crowding in the same liquidation path.
+- The short book is not symmetric to the long book. Borrow supply, recalls, and fees arrive exactly when the short looks best.
+- A beautiful backtest usually means you optimized the history, not the future.
 
-1. **Scientific Method**: Form hypotheses, test rigorously, reject most ideas.
+## Decision Tree
 
-2. **Signal, Not Prediction**: Find patterns that repeat more often than chance; don't predict the future.
+### 1. Classify the edge by holding period
 
-3. **Decay Awareness**: Every signal degrades over time. Continuous research is survival.
+- If the edge monetizes over 1-5 trading days, treat it as microstructure alpha. You need live slippage, queue/adverse-selection assumptions, venue behavior, and borrow state before you trust a Sharpe.
+- If the edge monetizes over 1-6 weeks, treat it as residual mean reversion. You need event guards, crowding stress, and point-in-time universe construction.
+- If the edge needs months to work, it is probably a factor or balance-sheet trade, not classic stat arb. Evaluate funding, factor crowding, and macro regime dependence first.
 
-4. **Statistical Significance**: If it's not statistically significant, it doesn't exist.
+### 2. Classify the short book
 
-5. **Ensemble Everything**: Combine thousands of weak signals into robust strategies.
+- If most short-side P&L comes from specials or low-float names, you are partly trading securities-lending state. Model live borrow fees, recalls, and forced buy-ins.
+- If the short book works only on paper because the vendor assumes frictionless borrow, cut the book or restate the idea as long-only / generalized-collateral only.
 
-## When Building Trading Systems
+### 3. Classify the failure mode
 
-### Always
+- If performance collapses after cost, the signal was never alpha; it was spread capture you do not own.
+- If performance collapses only during deleveraging windows, the signal is crowded liquidity provision.
+- If performance collapses after removing restatements or current constituents, the "alpha" was data leakage.
+- If performance survives all of that but dies after multiple-testing adjustment, you found the winner's curse.
 
-- Demand statistical significance (p < 0.01 minimum, ideally much lower)
-- Account for multiple hypothesis testing (Bonferroni, FDR correction)
-- Test on out-of-sample data with proper temporal separation
-- Model transaction costs, slippage, and market impact
-- Assume every signal will decay—build infrastructure for continuous research
-- Combine signals orthogonally (uncorrelated sources of alpha)
+## Numbers That Matter
 
-### Never
+- In the Avellaneda-Lee style residual framework, only trade residuals whose mean-reversion speed implies roughly less than 30 trading days of half-life, expressed there as kappa greater than about 8.4 annualized.
+- The same framework used s-score entry thresholds around plus/minus 1.25, with exits much closer to zero at about +0.75 for shorts and -0.50 for longs. The point is not the exact constants; it is that exits should be easier than entries because the residual's edge decays fastest after snapback begins.
+- AQR's cost study found short-term reversal far more capacity-constrained than value, size, or momentum, with break-even global capacities roughly $17B for short-term reversal versus about $122B for momentum, $811B for value, and $1,807B for size at 1% tracking error. If your alpha lives at the fastest horizon, assume scalability breaks first there.
+- Bailey and Lopez de Prado's deflated Sharpe work assumes quant teams routinely run millions or billions of trials. In that setting, a raw Sharpe from the best branch means almost nothing unless you record how many materially different attempts you made.
 
-- Trust a backtest without out-of-sample validation
-- Ignore survivorship bias, lookahead bias, or selection bias
-- Assume past correlations will persist
-- Over-optimize on historical data (curve fitting)
-- Trade on intuition or narrative
-- Assume a signal will last forever
+## Validation Procedure
 
-### Prefer
+1. Define the edge in one sentence with its economic path to monetization.
+2. Rebuild the dataset as the desk would have seen it then, not as the vendor repaired it later.
+3. Count the real trial tree: features, labels, universe filters, lag choices, cleaning rules, stop logic, and ranking rules.
+4. Reject the signal on deflated metrics first; only then look at pretty charts.
+5. Run crowding stress separately from market stress. A stat-arb book often fails when peers unwind, not when the index moves.
+6. Stress the short book with borrow-fee spikes, recalls, and untradeable names.
+7. Stress liquidation horizon. If expected profit improves when you lengthen the holding period during stress, you are probably harvesting a liquidity premium and carrying funding risk.
 
-- Hidden Markov models for regime detection
-- Spectral analysis for cyclical patterns
-- Non-linear methods for complex relationships
-- Ensemble methods over single models
-- Short holding periods (faster signal decay detection)
-- Statistical tests over visual inspection
+## Anti-Patterns
 
-## Code Patterns
+- NEVER ship a signal because the best slice has p < 0.01; that is seductive because it feels scientific, but after enough feature, universe, and cleaning choices the winner's curse dominates and live Sharpe regresses toward zero. Instead log the full trial tree and gate the idea on deflated-Sharpe and probability-of-backtest-overfitting checks.
+- NEVER call a book safe because beta is near zero; that is seductive because market neutrality looks like hedging, but 2007-style unwinds hit books that shared the same long-value, short-momentum, and liquidity exposures. Instead monitor overlap in factor tilts, funding sensitivity, and liquidation-path correlation with peer books.
+- NEVER treat the short book as symmetric to the long book; that is seductive because the historical short leg often carries the prettiest alpha, but hard-to-borrow fees, recalls, and supply withdrawal appear exactly when the mispricing looks widest. Instead split results into generalized-collateral versus special names and assume the short book is the first place paper alpha disappears.
+- NEVER trust stationarity or cointegration tests by themselves; that is seductive because the statistics look formal, but residual relationships fail around earnings, ETF and index rebalances, M&A, balance-sheet restatements, and borrow shocks. Instead require event-robustness and explicit kill rules for structural breaks.
+- NEVER extrapolate fast mean reversion to large capacity; that is seductive because gross Sharpe is often highest at the shortest horizon, but the fastest horizons are usually where cost, queue position, and adverse selection erase the edge. Instead size from realized cost curves and assume short-term reversal is an execution business.
+- NEVER average "uncorrelated" signals without checking whether they fail through the same dealer balance sheets; that is seductive because low historical correlation looks diversified, but crowding shows up as synchronized exits, not as pretty covariance matrices. Instead cluster signals by liquidity source and liquidation dependency, then diversify across those clusters.
 
-### Rigorous Backtesting Framework
+## What Experienced Practitioners Watch Live
 
-```python
-class RenaissanceBacktester:
-    """
-    Renaissance-style backtesting: paranoid about biases.
-    """
-    
-    def __init__(self, strategy, universe):
-        self.strategy = strategy
-        self.universe = universe
-        self.results = []
-    
-    def run(self, start_date, end_date, 
-            train_window_days=252, 
-            test_window_days=63,
-            embargo_days=5):
-        """
-        Walk-forward validation with embargo period.
-        Never let training data leak into test period.
-        """
-        current = start_date
-        
-        while current + timedelta(days=train_window_days + test_window_days) <= end_date:
-            train_end = current + timedelta(days=train_window_days)
-            
-            # EMBARGO: gap between train and test to prevent leakage
-            test_start = train_end + timedelta(days=embargo_days)
-            test_end = test_start + timedelta(days=test_window_days)
-            
-            # Train on historical data
-            train_data = self.get_point_in_time_data(current, train_end)
-            self.strategy.fit(train_data)
-            
-            # Test on future data (strategy cannot see this during training)
-            test_data = self.get_point_in_time_data(test_start, test_end)
-            returns = self.strategy.execute(test_data)
-            
-            self.results.append({
-                'train_period': (current, train_end),
-                'test_period': (test_start, test_end),
-                'returns': returns,
-                'sharpe': self.calculate_sharpe(returns)
-            })
-            
-            current = test_end
-        
-        return self.analyze_results()
-    
-    def get_point_in_time_data(self, start, end):
-        """
-        CRITICAL: Return data as it existed at each point in time.
-        No future information, no restated financials, no survivorship bias.
-        """
-        return self.universe.get_pit_snapshot(start, end)
-    
-    def analyze_results(self):
-        """Statistical analysis of walk-forward results."""
-        returns = [r['returns'] for r in self.results]
-        
-        # t-test: is mean return significantly different from zero?
-        t_stat, p_value = stats.ttest_1samp(returns, 0)
-        
-        return {
-            'mean_return': np.mean(returns),
-            'sharpe_ratio': np.mean(returns) / np.std(returns) * np.sqrt(252),
-            't_statistic': t_stat,
-            'p_value': p_value,
-            'significant': p_value < 0.01,
-            'n_periods': len(self.results)
-        }
-```
+- Alpha half-life, not just hit rate. A signal that still predicts but monetizes too slowly is dead capital.
+- Profit after borrow and impact by bucket, especially on the short tail.
+- Whether the edge migrates into fewer names over time. Concentration is often the first sign of crowding.
+- Whether stress periods reward slower liquidation. That is a warning that you are financing dislocation, not harvesting pure prediction.
+- Whether factor-neutral books are quietly reloading the same hidden exposures after every rebalance.
 
-### Signal Combination with Decay Tracking
+## Fallback Rules
 
-```python
-class SignalEnsemble:
-    """
-    Renaissance insight: combine many weak signals.
-    Track decay and retire dying signals.
-    """
-    
-    def __init__(self, decay_halflife_days=30):
-        self.signals = {}  # signal_id -> SignalModel
-        self.performance = {}  # signal_id -> rolling performance
-        self.decay_halflife = decay_halflife_days
-    
-    def add_signal(self, signal_id, model, weight=1.0):
-        self.signals[signal_id] = {
-            'model': model,
-            'weight': weight,
-            'created_at': datetime.now(),
-            'alive': True
-        }
-        self.performance[signal_id] = RollingStats(window=252)
-    
-    def generate_combined_signal(self, features):
-        """
-        Weighted combination of orthogonal signals.
-        Signals with decayed performance get lower weights.
-        """
-        predictions = {}
-        weights = {}
-        
-        for signal_id, signal in self.signals.items():
-            if not signal['alive']:
-                continue
-            
-            pred = signal['model'].predict(features)
-            
-            # Weight by original weight × recent performance
-            perf = self.performance[signal_id]
-            decay_weight = self.calculate_decay_weight(perf)
-            
-            predictions[signal_id] = pred
-            weights[signal_id] = signal['weight'] * decay_weight
-        
-        # Normalize weights
-        total_weight = sum(weights.values())
-        if total_weight == 0:
-            return 0.0
-        
-        combined = sum(
-            predictions[sid] * weights[sid] / total_weight
-            for sid in predictions
-        )
-        
-        return combined
-    
-    def update_performance(self, signal_id, realized_return, predicted_direction):
-        """Track whether signal correctly predicted direction."""
-        correct = (realized_return > 0) == (predicted_direction > 0)
-        self.performance[signal_id].add(1.0 if correct else 0.0)
-        
-        # Kill signals that have decayed below threshold
-        if self.performance[signal_id].mean() < 0.51:  # Barely better than random
-            self.signals[signal_id]['alive'] = False
-    
-    def calculate_decay_weight(self, perf):
-        """Exponential decay based on recent hit rate."""
-        hit_rate = perf.mean()
-        # Scale: 50% hit rate = 0 weight, 55% = 0.5, 60% = 1.0
-        return max(0, (hit_rate - 0.50) * 10)
-```
+- If you do not have live or defensible borrow assumptions, do not claim short-side anomaly alpha. Restrict the idea to long-only or GC-only variants.
+- If you do not have point-in-time constituents or restatement-aware fundamentals, drop fundamental alpha claims and work only with explicitly lagged price/volume data.
+- If you cannot model realized costs well enough for the target horizon, move the horizon out or keep the result in research-only status.
+- If you cannot measure crowding directly, assume lower gross leverage, wider liquidation slippage, and a shorter useful life than the backtest suggests.
 
-### Hidden Markov Model for Regime Detection
+## What Good Output Looks Like
 
-```python
-class MarketRegimeHMM:
-    """
-    Renaissance-style regime detection using Hidden Markov Models.
-    Markets exhibit different statistical properties in different regimes.
-    """
-    
-    def __init__(self, n_regimes=3):
-        self.n_regimes = n_regimes
-        self.model = None
-        self.regime_stats = {}
-    
-    def fit(self, returns, volume, volatility):
-        """
-        Fit HMM to market observables.
-        Discover latent regimes from price/volume/volatility patterns.
-        """
-        # Stack observables into feature matrix
-        observations = np.column_stack([
-            returns,
-            np.log(volume + 1),
-            volatility
-        ])
-        
-        self.model = hmm.GaussianHMM(
-            n_components=self.n_regimes,
-            covariance_type='full',
-            n_iter=1000
-        )
-        self.model.fit(observations)
-        
-        # Decode to get most likely regime sequence
-        regimes = self.model.predict(observations)
-        
-        # Characterize each regime
-        for regime in range(self.n_regimes):
-            mask = regimes == regime
-            self.regime_stats[regime] = {
-                'mean_return': returns[mask].mean(),
-                'volatility': returns[mask].std(),
-                'frequency': mask.mean(),
-                'mean_duration': self.calculate_duration(regimes, regime)
-            }
-        
-        return self
-    
-    def current_regime(self, recent_observations):
-        """Infer current regime from recent data."""
-        probs = self.model.predict_proba(recent_observations)
-        return np.argmax(probs[-1])
-    
-    def regime_adjusted_signal(self, base_signal, current_regime):
-        """Adjust signal strength based on regime."""
-        regime = self.regime_stats[current_regime]
-        
-        # Scale signal inversely with volatility
-        # (same signal in high-vol regime should have smaller position)
-        vol_adjustment = 0.15 / regime['volatility']  # Target 15% vol
-        
-        return base_signal * vol_adjustment
-```
+When using this skill, produce:
 
-### Multiple Hypothesis Testing Correction
-
-```python
-class AlphaResearch:
-    """
-    Renaissance approach: test thousands of hypotheses,
-    but correct for multiple testing to avoid false discoveries.
-    """
-    
-    def __init__(self, significance_level=0.01):
-        self.alpha = significance_level
-        self.tested_hypotheses = []
-    
-    def test_signal(self, signal_name, returns, predictions):
-        """Test if a signal has predictive power."""
-        # Information Coefficient: correlation of prediction with outcome
-        ic = stats.spearmanr(predictions, returns)
-        
-        # t-test for significance
-        n = len(returns)
-        t_stat = ic.correlation * np.sqrt(n - 2) / np.sqrt(1 - ic.correlation**2)
-        p_value = 2 * (1 - stats.t.cdf(abs(t_stat), n - 2))
-        
-        self.tested_hypotheses.append({
-            'signal': signal_name,
-            'ic': ic.correlation,
-            't_stat': t_stat,
-            'p_value': p_value
-        })
-        
-        return p_value
-    
-    def get_significant_signals(self, method='fdr'):
-        """
-        After testing many signals, apply multiple testing correction.
-        """
-        p_values = [h['p_value'] for h in self.tested_hypotheses]
-        
-        if method == 'bonferroni':
-            # Most conservative: divide alpha by number of tests
-            adjusted_alpha = self.alpha / len(p_values)
-            significant = [
-                h for h in self.tested_hypotheses 
-                if h['p_value'] < adjusted_alpha
-            ]
-        
-        elif method == 'fdr':
-            # Benjamini-Hochberg: control false discovery rate
-            sorted_hypotheses = sorted(self.tested_hypotheses, key=lambda x: x['p_value'])
-            significant = []
-            
-            for i, h in enumerate(sorted_hypotheses):
-                # BH threshold: (rank / n_tests) * alpha
-                threshold = ((i + 1) / len(p_values)) * self.alpha
-                if h['p_value'] <= threshold:
-                    significant.append(h)
-                else:
-                    break  # All remaining will also fail
-        
-        return significant
-```
-
-## Mental Model
-
-Renaissance approaches trading by asking:
-
-1. **Is there a pattern?** Statistical test, not eyeballing
-2. **Is it significant?** After multiple testing correction?
-3. **Is it robust?** Out-of-sample, different time periods, different instruments?
-4. **Will it persist?** What's the economic rationale for why this shouldn't be arbitraged away?
-5. **How will it decay?** What's the monitoring plan?
-
-## Signature Renaissance Moves
-
-- Hire scientists, not traders
-- Thousands of small signals, not a few big ones
-- Paranoid about data snooping and overfitting
-- Hidden Markov models for regime detection
-- Signal decay tracking and retirement
-- Rigorous walk-forward validation
-- Multiple hypothesis testing correction
-- Point-in-time data to prevent lookahead bias
+- The edge hypothesis in one sentence.
+- The exact decay path: cost, crowding, borrow, or data leakage.
+- The validation stack used to reject overfitting.
+- The live kill-switches that retire the signal before the market does it for you.

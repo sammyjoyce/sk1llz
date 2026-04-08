@@ -1,372 +1,118 @@
 ---
 name: lattner-compiler-infrastructure
-description: Write compiler and toolchain code in the style of Chris Lattner, creator of LLVM, Clang, Swift, and MLIR. Emphasizes modular compiler design, reusable infrastructure, progressive lowering, and pragmatic language evolution. Use when building compilers, language tools, or performance-critical infrastructure.
-tags: llvm, clang, swift, mlir, compiler, ir, optimization, toolchain, language-design, code-generation
+description: "Expert guidance for LLVM, Clang, Swift, and MLIR compiler infrastructure in Chris Lattner's style: choosing IR boundaries, pass placement, legality strategy, diagnostics, and semantic traps. Use when building or reviewing frontends, dialects, passes, lowerings, canonicalization, dialect conversion, optimizer pipelines, or debug-info-sensitive transforms. Triggers: llvm, mlir, clang, pass manager, canonicalize, fold, dialect conversion, opaque pointers, gep, freeze, debugify."
 ---
 
-# Chris Lattner Style Guide⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌​‌​‌‌‌​‍​​‌​‌​​​‍‌‌‌​‌​‌‌‍​‌​‌‌​​‌‍‌​​‌​​​​‍‌​‌​‌​‌​‍‌‌​​​​​‌‍​​​​‌​‌​‍‌​‌‌‌‌‌​⁠‍⁠
+# Lattner Compiler Infrastructure
 
-## Overview
+## Load Only What You Need
 
-Chris Lattner created LLVM (the compiler infrastructure that powers most modern compilers), Clang (the C/C++/Objective-C frontend), Swift (Apple's systems language), and MLIR (multi-level intermediate representation). His work fundamentally changed how compilers are built and how languages evolve.
+Before changing an LLVM pass pipeline, read `Using the New Pass Manager`.
 
-## Core Philosophy
+Before touching LLVM IR semantics, read `UndefinedBehavior`, `GetElementPtr`, and `OpaquePointers`.
 
-> "The key insight of LLVM is that compiler infrastructure should be reusable."
+Before writing MLIR canonicalizations or rewrite patterns, read `Operation Canonicalization` and `Pattern Rewriting`.
 
-> "Good IR design is about finding the right level of abstraction."
+Before writing legalization or type-lowering code, read `Dialect Conversion`.
 
-> "Languages should evolve based on real-world usage, not theoretical purity."
+Before verifier or assembly-format work, read `DefiningDialects/Operations` and `Diagnostics`.
 
-Lattner believes in building robust, reusable infrastructure that enables an ecosystem of tools—not one-off solutions.
+Before deleting, RAUWing, or merging IR instructions, read `How to Update Debug Info`.
 
-## Design Principles
-
-1. **Modular Infrastructure**: Build reusable components, not monolithic systems.
+Do NOT load MLIR dialect-conversion material for a pure LLVM alias-analysis or opaque-pointer bug.
 
-2. **Progressive Lowering**: Transform through well-defined IR levels.
-
-3. **Library-First Design**: Compilers are libraries, not just executables.
-
-4. **Pragmatic Evolution**: Languages improve through real usage feedback.
-
-## When Writing Compiler Code
-
-### Always
-
-- Design IRs with clear semantics and invariants
-- Make passes composable and reusable
-- Provide excellent diagnostics and error messages
-- Build infrastructure others can extend
-- Think about the entire compilation pipeline
-- Document design decisions and tradeoffs
-
-### Never
-
-- Build closed, monolithic compiler architectures
-- Sacrifice usability for implementation convenience
-- Ignore error recovery and diagnostics
-- Let optimization passes have hidden dependencies
-- Couple frontend concerns with backend concerns
-- Design IRs without considering transformations
-
-### Prefer
-
-- SSA form for optimization IRs
-- Explicit type systems over implicit
-- Library APIs over command-line tools
-- Incremental compilation where possible
-- Clear phase ordering over ad-hoc passes
-- Compositional design over special cases
-
-## Code Patterns
-
-### LLVM IR Philosophy
-
-```llvm
-; LLVM IR: explicit, typed, SSA form
-; Every value has exactly one definition
-; Control flow is explicit
-
-define i32 @factorial(i32 %n) {
-entry:
-  %cmp = icmp sle i32 %n, 1
-  br i1 %cmp, label %base, label %recurse
-
-base:
-  ret i32 1
-
-recurse:
-  %n_minus_1 = sub i32 %n, 1
-  %fact_sub = call i32 @factorial(i32 %n_minus_1)
-  %result = mul i32 %n, %fact_sub
-  ret i32 %result
-}
-
-; Key properties:
-; - SSA: each %variable defined exactly once
-; - Typed: every operation has explicit types
-; - Explicit control flow: br, ret, etc.
-; - No hidden state or side effects in IR
-```
-
-### Pass Infrastructure Design
-
-```cpp
-// LLVM-style pass infrastructure
-// Passes are modular, composable, declarative
-
-class MyOptimizationPass : public PassInfoMixin<MyOptimizationPass> {
-public:
-    PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
-        // Get required analyses
-        auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
-        auto &LI = AM.getResult<LoopAnalysis>(F);
-        
-        bool Changed = false;
-        
-        for (auto &BB : F) {
-            Changed |= optimizeBlock(BB, DT, LI);
-        }
-        
-        if (!Changed)
-            return PreservedAnalyses::all();
-        
-        // Declare what we preserved
-        PreservedAnalyses PA;
-        PA.preserve<DominatorTreeAnalysis>();
-        return PA;
-    }
-    
-private:
-    bool optimizeBlock(BasicBlock &BB, DominatorTree &DT, LoopInfo &LI);
-};
-
-// Register the pass
-extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
-llvmGetPassPluginInfo() {
-    return {
-        LLVM_PLUGIN_API_VERSION, "MyPass", "v0.1",
-        [](PassBuilder &PB) {
-            PB.registerPipelineParsingCallback(
-                [](StringRef Name, FunctionPassManager &FPM,
-                   ArrayRef<PassBuilder::PipelineElement>) {
-                    if (Name == "my-opt") {
-                        FPM.addPass(MyOptimizationPass());
-                        return true;
-                    }
-                    return false;
-                });
-        }
-    };
-}
-```
-
-### Diagnostic Excellence
-
-```cpp
-// Swift/Clang-style diagnostics
-// Errors should be helpful, not cryptic
-
-class DiagnosticEngine {
-public:
-    // Structured diagnostics with fix-its
-    void diagnose(SourceLoc Loc, Diagnostic Diag) {
-        emitDiagnostic(Loc, Diag.getKind(), Diag.getMessage());
-        
-        // Show the source location
-        emitSourceSnippet(Loc);
-        
-        // Provide fix-its when possible
-        for (auto &FixIt : Diag.getFixIts()) {
-            emitFixIt(FixIt);
-        }
-        
-        // Add educational notes
-        for (auto &Note : Diag.getNotes()) {
-            emitNote(Note);
-        }
-    }
-};
-
-// Example diagnostic output:
-// error: cannot convert value of type 'String' to expected type 'Int'
-//     let x: Int = "hello"
-//                  ^~~~~~~
-// fix-it: did you mean to use Int(_:)?
-//     let x: Int = Int("hello") ?? 0
-```
-
-### Progressive Lowering (MLIR Style)
-
-```cpp
-// MLIR: Multi-Level IR for progressive lowering
-// High-level ops → Mid-level ops → Low-level ops → LLVM IR
-
-// High-level: domain-specific operations
-%result = linalg.matmul ins(%A, %B : tensor<4x8xf32>, tensor<8x16xf32>)
-                        outs(%C : tensor<4x16xf32>) -> tensor<4x16xf32>
-
-// After tiling transformation:
-%tiled = scf.for %i = %c0 to %c4 step %c2 {
-    %slice_a = tensor.extract_slice %A[%i, 0][2, 8][1, 1]
-    %slice_c = tensor.extract_slice %C[%i, 0][2, 16][1, 1]
-    %computed = linalg.matmul ins(%slice_a, %B) outs(%slice_c)
-    scf.yield %computed
-}
-
-// After vectorization:
-%vec = vector.contract {indexing_maps = [...], kind = #vector.kind<add>}
-    %vec_a, %vec_b, %vec_c : vector<2x8xf32>, vector<8x16xf32> into vector<2x16xf32>
-
-// Finally: LLVM IR
-// Each level has clear semantics and transformations
-```
-
-### Type System Design
-
-```swift
-// Swift-style type system: expressive, safe, pragmatic
-
-// Protocol-oriented design
-protocol Numeric {
-    static func +(lhs: Self, rhs: Self) -> Self
-    static func *(lhs: Self, rhs: Self) -> Self
-}
-
-// Associated types for flexibility
-protocol Collection {
-    associatedtype Element
-    associatedtype Index: Comparable
-    
-    var startIndex: Index { get }
-    var endIndex: Index { get }
-    subscript(position: Index) -> Element { get }
-}
-
-// Generics with constraints
-func sum<T: Numeric>(_ values: [T]) -> T {
-    values.reduce(.zero, +)
-}
-
-// Optionals as explicit nullability
-func find<T: Equatable>(_ value: T, in array: [T]) -> Int? {
-    for (index, element) in array.enumerated() {
-        if element == value {
-            return index
-        }
-    }
-    return nil  // Explicit absence
-}
-
-// Result types for error handling
-enum Result<Success, Failure: Error> {
-    case success(Success)
-    case failure(Failure)
-}
-```
-
-### Compiler as Library
-
-```cpp
-// Clang as a library, not just a tool
-// Enable building custom tools on compiler infrastructure
-
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/FrontendActions.h"
-#include "clang/Tooling/Tooling.h"
-
-// Custom AST visitor
-class FunctionFinder : public RecursiveASTVisitor<FunctionFinder> {
-public:
-    bool VisitFunctionDecl(FunctionDecl *FD) {
-        if (FD->hasBody()) {
-            llvm::outs() << "Found function: " << FD->getName() << "\n";
-            analyzeComplexity(FD);
-        }
-        return true;
-    }
-    
-private:
-    void analyzeComplexity(FunctionDecl *FD);
-};
-
-// Build custom tools using Clang's libraries
-int main(int argc, const char **argv) {
-    auto ExpectedParser = CommonOptionsParser::create(argc, argv, MyCategory);
-    if (!ExpectedParser) {
-        llvm::errs() << ExpectedParser.takeError();
-        return 1;
-    }
-    
-    ClangTool Tool(ExpectedParser->getCompilations(),
-                   ExpectedParser->getSourcePathList());
-    
-    return Tool.run(newFrontendActionFactory<MyFrontendAction>().get());
-}
-```
-
-### Memory Ownership in Swift
-
-```swift
-// Swift's ownership model: safe by default, explicit when needed
-
-// Default: automatic reference counting
-class Node {
-    var value: Int
-    var children: [Node]
-    
-    init(value: Int) {
-        self.value = value
-        self.children = []
-    }
-}
-
-// Explicit ownership for performance-critical code
-func processBuffer(_ buffer: borrowing [UInt8]) -> Int {
-    // borrowing: read-only access, no copy
-    buffer.reduce(0, +)
-}
-
-func consumeBuffer(_ buffer: consuming [UInt8]) -> [UInt8] {
-    // consuming: takes ownership, no copy
-    var result = buffer
-    result.append(0)
-    return result
-}
-
-// Copy-on-write for value semantics with efficiency
-struct LargeData {
-    private var storage: Storage
-    
-    mutating func modify() {
-        // Copy only if shared
-        if !isKnownUniquelyReferenced(&storage) {
-            storage = storage.copy()
-        }
-        storage.data[0] = 42
-    }
-}
-```
-
-## IR Design Principles
-
-```
-Intermediate Representation Design
-══════════════════════════════════════════════════════════════
-
-Level           Abstraction         Purpose
-────────────────────────────────────────────────────────────
-Source          Syntax trees        Parsing, early semantic
-AST/HIR         Typed trees         Type checking, inference
-MIR/SIL         Typed CFG           Optimization, ownership
-LLVM IR         Typed SSA           Machine-independent opt
-Machine IR      Target ops          Instruction selection
-Assembly        Text                Final output
-
-Key principles:
-• Each level has ONE clear purpose
-• Lowering is progressive and well-defined
-• Analyses valid at one level may not be at another
-• Transformations declare their requirements
-```
-
-## Mental Model
-
-Lattner approaches compiler design by asking:
-
-1. **What's the right abstraction level?** Different problems need different IRs
-2. **Is this reusable?** Build infrastructure, not one-off tools
-3. **What's the user experience?** Diagnostics, error recovery, tooling
-4. **How will this evolve?** Design for change and extension
-5. **Can others build on this?** Library-first, composable design
-
-## Signature Lattner Moves
-
-- **LLVM's pass manager**: Modular, composable optimization passes
-- **Clang's diagnostics**: The gold standard for helpful error messages
-- **Swift's optionals**: Explicit nullability without verbosity
-- **MLIR's dialect system**: Multi-level IR with extensible operations
-- **Library-first design**: Compilers as reusable infrastructure
-- **Progressive lowering**: Clear transformation stages
-- **SwiftUI's result builders**: Compiler magic that feels natural
+Do NOT load LLVM IR UB docs first for a verifier-formatting bug; use MLIR verifier-ordering docs instead.
+
+## Core Stance
+
+- Separate "what is legal" from "what is profitable". Pipelines rot when canonicalization, legalization, and optimization leak into each other.
+- Add a new IR level only when invariants change. If two adjacent IRs allow the same illegal constructs and run the same analyses, one of them is cargo cult architecture.
+- Prefer reusable infrastructure over one successful compile. A pass that only works inside one fixed pipeline is a future bug, not an abstraction.
+- Make semantics explicit early and target details late. The later you encode target quirks, the less IR you poison with backend accidents.
+- Treat diagnostics and debug info as semantic contracts, not polish. Broken locations degrade SamplePGO and make later debugging misleading.
+
+## Before You Change The Architecture, Ask
+
+- What invariant becomes true after this phase that was false before it?
+- Could this be a local `fold` instead of a canonicalization pattern, or a canonicalization instead of a conversion?
+- Am I encoding profitability into legality? If yes, split them.
+- Does this transform need fixpoint revisits, or should it run once with explicit ordering?
+- If this pass deletes IR, which cached analyses or debug facts become stale immediately?
+- If this introduces a new IR or dialect, what transformation becomes simpler enough to justify its maintenance cost?
+
+## Decision Tree
+
+If the rewrite is single-op, local, and can only reuse existing values or attributes, implement `fold`.
+
+If the rewrite may create ops, erase ops, or depends on non-local shape, use a rewrite pattern.
+
+If the goal is "make later analyses easier", canonicalize.
+
+If the goal is "make previously illegal IR legal", use dialect conversion or explicit lowering.
+
+If the goal is "improve generated code", use an optimization pass after legality is established.
+
+If a backend needs special lowering for an address computation, do not special-case GEP semantics; lower the resulting ADD and MUL tree in the backend.
+
+## LLVM Heuristics That Save Months
+
+- Use immediate UB only when hardware usually traps. Otherwise prefer poison-style semantics so speculation and hoisting remain legal.
+- `undef` is effectively deprecated; reserve it for uninitialized loads. If you need a stable arbitrary value, use `freeze`, not `undef`.
+- Branching on deferred UB is itself immediate UB. Any transform that hoists a condition, unswitches a loop, or duplicates control flow must ask whether the condition needs `freeze` first.
+- `select` is a poison barrier in ways `and` and `or` are not. Replacing `select` with boolean ops is only safe when poison behavior is preserved, not when the truth table merely looks equivalent.
+- Under opaque pointers, identical pointer operands no longer imply identical access types. Store-to-load forwarding, AA shortcuts, and memory combining must compare the load and store types explicitly.
+- `inbounds` GEP overflow produces poison, not wrapped arithmetic. Add `inbounds` only when you want that semantic commitment.
+- GEP is not generic pointer arithmetic across objects. If you cross from one allocated object into another with GEP, alias reasoning becomes unsound. If you truly need cross-object arithmetic, use `ptrtoint` and `inttoptr` and accept weaker optimization.
+- Do not infer aliasing from LLVM's type system. Use TBAA metadata or real provenance facts; LLVM IR types alone do not enforce source-language aliasing rules.
+- Group function, loop, and CGSCC passes inside the same pass manager. Repeated adaptors look harmless, but they worsen cache locality and can change optimization quality.
+- If a module pass deletes functions and you queried inner analyses, clear or invalidate them immediately. Stale cached analyses keyed by dead IR addresses create heisenbugs that only appear in long pipelines.
+- Preserve analyses selectively only after you can prove the updater is correct and the compile-time win is measurable. Over-preservation is more dangerous than recomputation.
+- When you create, RAUW, or delete instructions, plan the debug-info update at the same time. Use RAUW where possible, `salvageDebugInfo` when not, and run `debugify` or `verify-debuginfo-preserve` before declaring the transform done.
+
+## MLIR Heuristics That Save Months
+
+- Default region scoping is more permissive than many dialect authors expect. If a region must not capture outer values, mark it `IsolatedFromAbove` or verify it explicitly.
+- Canonicalization is not a performance pass. Put only cheap, semantics-preserving, convergence-friendly rewrites there; O(n) matchers inside a greedy fixed-point pass turn into compile-time cliffs.
+- Implement a canonicalization as `fold` whenever possible. `fold` is reusable through `createOrFold` and dialect conversion; a pattern is only justified when locality is insufficient.
+- Pattern benefit must be effectively static. If you want dynamic cost, instantiate multiple patterns with predicates rather than sneaking dynamic profitability into the driver.
+- Give rewrite patterns explicit root op names whenever possible. Match-any patterns feel flexible, but they cripple cost-model reasoning and make debugging filters less useful.
+- Recursive rewrites must call `setHasBoundedRewriteRecursion`. Otherwise the driver is correct to treat self-application as a likely bug.
+- Use the Walk driver when you want one cheap traversal and do not need revisits. Use Greedy when you need transitive cleanup to a fixed point. Do not pay Greedy overhead for one-shot simplifications.
+- Greedy canonicalization defaults are already opinionated: `top-down=true`, `max-iterations=10`, `region-simplify=normal`, `max-num-rewrites=-1`. If you hit non-convergence, use `test-convergence` to surface cyclic patterns instead of hiding them with looser limits.
+- Dialect conversion operands lie in a useful way: the matched op still has original types, while the adaptor values may already have legalized types. Mixing them casually creates "why did verification suddenly fail" bugs.
+- In rollback mode, replacement and erasure can be delayed. That makes legalization safer but IR dumps harder to trust because old and new IR coexist. Switch to no-rollback when debugging conversion mechanics, then switch back if you need search or backtracking.
+- `unrealized_conversion_cast` is a debugging clue, not a target state. If it remains after a conversion, your type and materialization story is incomplete.
+- Region argument type changes are never automatic enough. If you changed region signatures, call the explicit region conversion hook and audit every surviving user.
+- Verifier ordering matters. Put checks that only depend on op-local invariants in `hasVerifier`; put nested-op checks in `hasRegionVerifier`. Otherwise you will inspect malformed children and debug ghosts.
+- Never rely on custom printers inside verifier errors. Verifiers run before the printer can assume the op is well-formed; use generic printing and `-mlir-print-op-generic`.
+
+## NEVER Do These
+
+- NEVER add a new IR or dialect because the current one feels "messy". That path is seductive because it postpones hard invariant design. Instead define the invariant you need and prove it cannot live in the current IR.
+- NEVER put profitability-heavy rewrites into canonicalization because canonicalization runs everywhere. It is seductive because it avoids choosing a pipeline slot. Instead keep canonicalization cheap and move profitable transforms into explicit passes.
+- NEVER replace `select` with boolean algebra just because the truth table matches. The seductive part is local simplification; the consequence is poison miscompiles. Instead re-check poison propagation or insert `freeze` when required.
+- NEVER assume pointer equality implies memory-type equality under opaque pointers because that used to be mostly true with typed-pointer-era bitcasts. The consequence is invalid forwarding and AA conclusions. Instead compare access types explicitly.
+- NEVER use GEP to model cross-object pointer arithmetic because the integer result looks correct in dumps. The consequence is broken alias and provenance assumptions. Instead use integer arithmetic plus `inttoptr` only when you intentionally want to leave LLVM's object-based alias model.
+- NEVER mutate MLIR IR directly inside a pattern because it seems faster than plumbing the rewriter. The consequence is invalid driver state, missed revisits, and non-reproducible bugs. Instead route every mutation through `PatternRewriter`.
+- NEVER preserve analysis proxies after deleting IR unless you manually cleared every dead key and measured the compile-time gain. The seductive part is avoiding recomputation; the consequence is stale analysis state that surfaces far from the bug. Instead invalidate conservatively first.
+- NEVER drop or fake debug locations as cleanup because "it only hurts debugging". The non-obvious consequence is worse SamplePGO mapping and misleading stepping. Instead preserve, merge, remap, or mark locations as compiler-generated, dropped, or unknown according to the transform.
+
+## Fallback Playbooks
+
+If an LLVM transform starts miscompiling after an "obvious" simplification, re-check UB, poison, `freeze`, opaque-pointer typed-access assumptions, and GEP provenance before debugging the algorithm.
+
+If an MLIR canonicalization oscillates, enable `test-convergence`, add debug labels, and inspect whether the rewrite should have been a `fold`.
+
+If dialect-conversion dumps look nonsensical, switch to no-rollback, inspect adaptor versus original operand types, and trace where `unrealized_conversion_cast` enters the graph.
+
+If verifier errors are unreadable, rerun with `-mlir-print-op-generic`, `-mlir-print-ir-after-failure`, and `-mlir-print-stacktrace-on-diagnostic`.
+
+If debug-info regressions appear after an IR transform, start with `opt -debugify -pass-to-test -check-debugify sample.ll`; on large pipelines cap original-DI verification with `-debugify-func-limit=100` before widening the run.
+
+## What Good Output Looks Like
+
+- Every phase has one dominant invariant and one clear exit contract.
+- Canonicalization reduces variation, conversion changes legality, and optimization changes cost.
+- Passes declare invalidation honestly.
+- IR printing and diagnostics help you localize failure without depending on already-valid IR.
+- Removing debug info is rarer than fixing it.
