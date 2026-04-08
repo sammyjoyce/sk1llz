@@ -9,10 +9,13 @@ on:
 
 jobs:
   review:
-    # Skip drafts and avoid loops on Claude's own PRs.
+    # Skip drafts, avoid loops on Claude's own PRs, and skip forks.
+    # Forked PRs don't receive repository secrets (CLAUDE_CODE_OAUTH_TOKEN),
+    # so running the action against them would fail on every update.
     if: |
       github.event.pull_request.draft == false &&
-      github.event.pull_request.user.login != 'claude[bot]'
+      github.event.pull_request.user.login != 'claude[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -42,6 +42,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      # For issue_comment events on a PR, the default checkout above lands on
+      # the default branch (GITHUB_REF=refs/heads/master), not the PR head.
+      # Switch to the PR head so Claude sees the right code. Other PR-scoped
+      # events (pull_request_review*, pull_request) already check out the PR.
+      - name: Checkout PR head for issue_comment on a PR
+        if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr checkout ${{ github.event.issue.number }} --repo ${{ github.repository }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
