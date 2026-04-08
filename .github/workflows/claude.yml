@@ -17,12 +17,24 @@ on:
 
 jobs:
   claude:
-    # Never trigger on bot-authored events. Third-party AI reviewer bots
-    # (gemini-code-assist, devin, copilot, etc.) routinely mention "@claude"
-    # in their review text and would otherwise kick off this workflow, which
-    # GitHub then gates with `action_required` for first-time bot runs.
+    # Two-layer gate before running this job:
+    #  1. Not a bot. Third-party AI reviewer bots (gemini-code-assist, devin,
+    #     copilot, etc.) routinely mention "@claude" in their review text and
+    #     would otherwise kick off this workflow, which GitHub then gates
+    #     with `action_required` for first-time bot runs.
+    #  2. Author must be a trusted repo member. On a public repo, anyone can
+    #     comment `@claude`; without this check an external user could burn
+    #     the OAuth budget or drive the contents:write context. The action
+    #     itself enforces write-access on top of this, but gating at the job
+    #     level saves workflow minutes. The `||` chain picks whichever
+    #     association field exists for the current event.
     if: |
-      github.event.sender.type != 'Bot' && (
+      github.event.sender.type != 'Bot' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+        github.event.comment.author_association ||
+        github.event.review.author_association ||
+        github.event.issue.author_association
+      ) && (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
