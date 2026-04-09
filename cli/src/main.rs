@@ -1754,6 +1754,7 @@ fn ingest_file_signal(
             | "package.json"
             | "go.mod"
             | "flake.nix"
+            | "shell.nix"
             | "dockerfile"
             | "compose.yaml"
             | "compose.yml"
@@ -1866,14 +1867,14 @@ fn tokenize(text: &str) -> Vec<String> {
         if character.is_ascii_alphanumeric() || character == '-' || character == '+' {
             current.push(character.to_ascii_lowercase());
         } else if !current.is_empty() {
-            if !stop_words.contains(current.as_str()) && current.len() > 1 {
+            if !stop_words.contains(current.as_str()) && should_keep_query_token(&current) {
                 tokens.insert(current.clone());
             }
             current.clear();
         }
     }
 
-    if !current.is_empty() && !stop_words.contains(current.as_str()) && current.len() > 1 {
+    if !current.is_empty() && !stop_words.contains(current.as_str()) && should_keep_query_token(&current) {
         tokens.insert(current);
     }
 
@@ -3537,6 +3538,18 @@ mod tests {
     }
 
     #[test]
+    fn tokenize_keeps_controlled_single_character_tokens() {
+        let tokens = tokenize("c programming");
+        assert!(tokens.contains(&"c".to_string()));
+    }
+
+    #[test]
+    fn collect_match_terms_keeps_standalone_c_tag() {
+        let terms = collect_match_terms("c");
+        assert!(terms.contains("c"));
+    }
+
+    #[test]
     fn field_masks_filter_objects() {
         let value = json!({
             "id": "hashimoto-cli-ux",
@@ -3656,6 +3669,18 @@ mod tests {
         assert!(!analysis.tokens.contains(&"py".to_string()));
         assert!(analysis.tokens.contains(&"rust".to_string()));
         assert!(analysis.tokens.contains(&"cargo".to_string()));
+    }
+
+    #[test]
+    fn project_analysis_emits_nix_signal_for_shell_nix() {
+        let root = unique_test_dir("scan-shell-nix");
+        fs::write(root.join("shell.nix"), "{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell {}\n").unwrap();
+
+        let analysis = analyze_project(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(analysis.config_files.contains(&"shell.nix".to_string()));
+        assert!(analysis.tokens.contains(&"nix".to_string()));
     }
 
     #[test]
