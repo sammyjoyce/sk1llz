@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated_at": "2026-04-08T10:46:30.855101+00:00",
+  "generated_at": "2026-04-09T03:08:44.215274+00:00",
   "repository": "https://github.com/copyleftdev/sk1llz",
   "raw_base_url": "https://raw.githubusercontent.com/copyleftdev/sk1llz/master",
   "skill_count": 102,
@@ -1646,7 +1646,7 @@
       ]
     },
     {
-      "id": "dean-large-scale-systems",
+      "id": "dean-warehouse-scale-distributed",
       "name": "dean",
       "description": "Jeff Dean style for interactive, warehouse-scale distributed systems where fanout, skew, and shared-cluster interference dominate. Use when designing or debugging multi-tenant services, large fanout RPC graphs, data platforms, storage schemas, sharding strategies, tail-latency mitigation, straggler handling, or load-balancing at Google-like scale. Triggers: p99, hedge requests, tail latency, stragglers, Bigtable, MapReduce, hot shards, selective replication, noisy neighbors.",
       "category": "paradigms",

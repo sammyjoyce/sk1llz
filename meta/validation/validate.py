@@ -8,7 +8,7 @@ from pathlib import Path
 # Configuration
 ROOT_DIR = Path(__file__).parent.parent.parent
 SKILLS_JSON_PATH = ROOT_DIR / "skills.json"
-SKILL_ROOTS = ["languages", "domains", "paradigms", "organizations"]
+SKILL_ROOTS = ["languages", "domains", "paradigms", "organizations", "specialists"]
 REQUIRED_FIELDS = ["name", "description"]
 
 def parse_frontmatter(content):
@@ -71,6 +71,7 @@ def main():
 
     errors = 0
     skills_found = 0
+    skill_name_to_paths = {}
 
     # 2. Walk directories
     for root_name in SKILL_ROOTS:
@@ -93,14 +94,38 @@ def main():
                     errors += 1
                     continue
 
-                # Check 2: Manifest consistency
                 # Normalize path string for comparison (remove trailing slashes, handle windows seps if needed)
                 # The manifest paths use forward slashes and no leading slash
                 str_path = str(rel_path).replace("\\", "/")
-                
+
+                # Check 1b: Skill ID (frontmatter name) uniqueness
+                try:
+                    with open(skill_path / "SKILL.md", "r") as f:
+                        frontmatter = parse_frontmatter(f.read())
+                    skill_name = frontmatter.get("name")
+                    if isinstance(skill_name, str) and skill_name:
+                        skill_name_to_paths.setdefault(skill_name, []).append(str_path)
+                except Exception as e:
+                    print(f"\n[FAIL] {rel_path}")
+                    print(f"  - Unable to parse frontmatter name: {e}")
+                    errors += 1
+                    continue
+
+                # Check 2: Manifest consistency
                 if str_path not in manifest_paths:
                      print(f"\n[WARN] {rel_path} found on disk but missing from skills.json")
                      # errors += 1 # Treating this as a warning for now
+
+    # 3. Duplicate skill ID check across all discovered SKILL.md files
+    duplicate_names = {
+        name: paths for name, paths in skill_name_to_paths.items() if len(paths) > 1
+    }
+    if duplicate_names:
+        for name, paths in sorted(duplicate_names.items()):
+            print(f"\n[FAIL] Duplicate skill name/id '{name}' found in:")
+            for path in sorted(paths):
+                print(f"  - {path}")
+            errors += 1
     
     print(f"\nScanned {skills_found} skills.")
     

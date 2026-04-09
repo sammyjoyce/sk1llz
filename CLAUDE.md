@@ -19,8 +19,8 @@ tools/sk1llz-dna/     Independent Rust binary for steganographic .md fingerprint
 scripts/              Python + shell automation (manifest, tags, elevation, install).
 meta/                 skill-template/, validation/validate.py.
 docs/agents/          Durable process knowledge for agents — see "Agent notes" below.
-languages/ paradigms/ domains/ organizations/
-                      The four skill roots. Each leaf is `<engineer>/SKILL.md`.
+languages/ paradigms/ domains/ organizations/ specialists/
+                      The five skill roots. Each leaf is `<engineer>/SKILL.md`.
 skills.json           Generated manifest — source of truth for the CLI. Never hand-edit.
 flake.nix             Nix dev shell (rust, cargo, clippy, rustfmt, python+pyyaml, openssl).
 ```
@@ -65,7 +65,7 @@ nix develop                       # provides rust toolchain, python+pyyaml, open
 - **`skills.json` is generated.** Never edit by hand. Run `python3 scripts/generate_manifest.py` after adding/renaming/removing any `SKILL.md`. CI (`.github/workflows/update-manifest.yml`) will auto-regenerate and push otherwise, and the `validate-manifest` CI job fails if the committed file drifts from what the generator produces (ignoring the `generated_at` timestamp).
 - **Zero-width characters in markdown are intentional.** Every committed `.md` is stamped by `tools/sk1llz-dna` via the `dna-stamp.yml` workflow. Do not strip the garbled-looking characters near headings — they encode an origin/timestamp/path fingerprint. If a diff shows them appearing/disappearing, that's the auto-stamp workflow; leave it alone.
 - **`cli/` and `tools/sk1llz-dna/` are independent Cargo projects,** not a workspace. Each has its own `Cargo.lock` and `target/`. Run cargo commands inside the relevant directory.
-- **Skill discovery is path-driven.** `scripts/generate_manifest.py` walks from the repo root looking for `SKILL.md`, and derives `category` from the first path component and `subcategory` from the second. New skills must live under one of the four skill roots (`languages/`, `paradigms/`, `domains/`, `organizations/`) or they will not appear in the manifest. `meta/skill-template/` is skipped on purpose.
+- **Skill discovery is path-driven.** `scripts/generate_manifest.py` walks from the repo root looking for `SKILL.md`, and derives `category` from the first path component and `subcategory` from the second. New skills must live under one of the five skill roots (`languages/`, `paradigms/`, `domains/`, `organizations/`, `specialists/`) or they will not appear in the manifest. `meta/skill-template/` is skipped on purpose.
 - **Frontmatter contract.** Every `SKILL.md` needs YAML frontmatter (`---` fenced) with at minimum `name` and `description`. `meta/validation/validate.py` enforces this and is gated in CI. `name` should be lowercase with hyphens and ≤64 chars; the generator also extracts `tags` (string or list) and normalizes hyphens to underscores.
 - **OpenSSL dependency.** `cli/Cargo.toml` uses `reqwest` with `rustls-tls` (no system OpenSSL needed for TLS), but `openssl`, `pkg-config`, and `openssl-sys` are still provided by `flake.nix` for transitive builds. If `cargo check` fails on `openssl-sys` outside the Nix shell, enter `nix develop` or install the system `libssl-dev` + `pkg-config` — don't work around it by patching dependency features.
 - **Skill content format is strict.** See `CONTRIBUTING.md` for the required `SKILL.md` structure (Overview, Core Philosophy, Design Principles, Always/Never/Prefer, Code Patterns, Mental Model). The `scripts/elevate-skills.sh` prompt encodes the stricter 8-dimension `skill-judge` rubric that content is expected to score on.
