@@ -38,14 +38,27 @@ detect_target() {
   esac
 
   if [ "$os" = "Linux" ]; then
-    # Prefer musl on x86_64 for maximum portability; fall back to gnu.
-    # Guard the `ldd` probe: on some distros (and some musl systems) `ldd`
-    # is missing or exits non-zero, which would otherwise abort under
+    # Detect musl libc independently of architecture. Guard the `ldd`
+    # probe: on some distros (and some musl systems) `ldd` is missing or
+    # exits non-zero, which would otherwise abort under
     # `set -euo pipefail` before the default can be used.
-    if [ "$arch_part" = "x86_64" ] \
-      && command -v ldd >/dev/null 2>&1 \
+    local is_musl=false
+    if command -v ldd >/dev/null 2>&1 \
       && ldd --version 2>&1 | grep -qi musl; then
-      target="${arch_part}-unknown-linux-musl"
+      is_musl=true
+    fi
+
+    if $is_musl; then
+      if [ "$arch_part" = "x86_64" ]; then
+        # The release workflow publishes x86_64-unknown-linux-musl.
+        target="${arch_part}-unknown-linux-musl"
+      else
+        # No musl artifact is published for aarch64 (see
+        # .github/workflows/release.yml). Fail fast instead of silently
+        # fetching the glibc-linked aarch64-unknown-linux-gnu binary,
+        # which will not run on Alpine or other musl-only ARM64 hosts.
+        die "No prebuilt musl binary for ${arch_part}. Build from source: see the 'From source' section in README.md."
+      fi
     else
       target="${arch_part}-unknown-linux-gnu"
     fi
