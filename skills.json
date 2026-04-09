@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated_at": "2026-04-09T02:18:51.929176+00:00",
+  "generated_at": "2026-04-09T03:08:44.215274+00:00",
   "repository": "https://github.com/copyleftdev/sk1llz",
   "raw_base_url": "https://raw.githubusercontent.com/copyleftdev/sk1llz/master",
   "skill_count": 102,
@@ -1988,7 +1988,7 @@
     {
       "id": "forensics-team",
       "name": "forensics-team",
-      "description": "Operator-grade network forensics for packet captures, SPAN/TAP evidence, and trace-file triage. Use when analyzing pcap/pcapng, tcpdump, tshark, Wireshark, or Zeek; when hunting beaconing/C2; when explaining retransmissions, loss, or disputed network behavior; or when deciding what a capture can and cannot prove. Triggers: pcap, pcapng, packet capture, tcpdump, tshark, Wireshark, Zeek, SPAN, TAP, snaplen, packet loss, beaconing, JA3, JA4, loopback, cooked capture, TLS fingerprinting.",
+      "description": "Operator-grade network forensics for packet captures, SPAN/TAP evidence, and trace-file triage. Use when analyzing `pcap`/`pcapng`, `tcpdump`, `tshark`, `Wireshark`, or `Zeek`; when hunting beaconing/C2; when explaining retransmissions, loss, or disputed network behavior; or when deciding what a capture can and cannot prove. Triggers: pcap, pcapng, packet capture, tcpdump, tshark, Wireshark, Zeek, SPAN, TAP, snaplen, packet loss, beaconing, JA3, JA4, loopback, cooked capture, TLS fingerprinting.",
       "category": "specialists",
       "subcategory": "security",
       "path": "specialists/security/forensics-team",
