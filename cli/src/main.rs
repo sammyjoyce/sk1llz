@@ -1889,7 +1889,10 @@ fn tokenize(text: &str) -> Vec<String> {
         }
     }
 
-    if !current.is_empty() && !stop_words.contains(current.as_str()) && should_keep_query_token(&current) {
+    if !current.is_empty()
+        && !stop_words.contains(current.as_str())
+        && should_keep_query_token(&current)
+    {
         tokens.insert(current);
     }
 
@@ -3737,7 +3740,11 @@ mod tests {
     #[test]
     fn project_analysis_emits_nix_signal_for_shell_nix() {
         let root = unique_test_dir("scan-shell-nix");
-        fs::write(root.join("shell.nix"), "{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell {}\n").unwrap();
+        fs::write(
+            root.join("shell.nix"),
+            "{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell {}\n",
+        )
+        .unwrap();
 
         let analysis = analyze_project(&root).unwrap();
         let _ = fs::remove_dir_all(&root);
