@@ -100,15 +100,16 @@ install() {
   tar xzf "${tmpdir}/${archive_name}" -C "$tmpdir" \
     || die "Failed to extract archive"
 
-  # Install the binary
+  # Install the binary, matching chmod privilege level to the mv so the
+  # privileged path (root-owned destination) doesn't fail under `set -e`.
   if [ -w "$INSTALL_DIR" ]; then
     mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    chmod +x "${INSTALL_DIR}/${BINARY}"
   else
     info "Elevated permissions required to install to ${INSTALL_DIR}"
     sudo mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    sudo chmod +x "${INSTALL_DIR}/${BINARY}"
   fi
-
-  chmod +x "${INSTALL_DIR}/${BINARY}"
 
   info "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
   "${INSTALL_DIR}/${BINARY}" --version 2>/dev/null || true
