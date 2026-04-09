@@ -38,13 +38,28 @@ detect_target() {
   esac
 
   if [ "$os" = "Linux" ]; then
-    # Detect musl libc independently of architecture. Guard the `ldd`
-    # probe: on some distros (and some musl systems) `ldd` is missing or
-    # exits non-zero, which would otherwise abort under
-    # `set -euo pipefail` before the default can be used.
-    local is_musl=false
-    if command -v ldd >/dev/null 2>&1 \
-      && ldd --version 2>&1 | grep -qi musl; then
+    # Detect musl libc independently of architecture.
+    #
+    # Subtlety: on musl, `ldd --version` itself exits non-zero (musl's
+    # ldd is a symlink to the dynamic linker and returns 1 for the
+    # --version usage banner). Under `set -o pipefail`, the pipeline
+    # `ldd --version 2>&1 | grep -qi musl` therefore returns ldd's
+    # non-zero exit *even when grep successfully matches "musl"* —
+    # which would make musl systems appear to be glibc and silently
+    # download a glibc-linked binary.
+    #
+    # Capture the output separately (tolerating a non-zero ldd exit
+    # with `|| true`) and then grep the captured string, so the match
+    # decision is independent of ldd's exit code.
+    local is_musl=false ldd_output=""
+    if command -v ldd >/dev/null 2>&1; then
+      ldd_output="$(ldd --version 2>&1 || true)"
+      if printf '%s' "$ldd_output" | grep -qi musl; then
+        is_musl=true
+      fi
+    fi
+    # Secondary signal: musl systems ship /lib/ld-musl-*.so.1.
+    if ! $is_musl && ls /lib/ld-musl-* >/dev/null 2>&1; then
       is_musl=true
     fi
 
