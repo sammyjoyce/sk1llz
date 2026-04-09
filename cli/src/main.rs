@@ -2105,6 +2105,8 @@ fn build_project_signals(
             "javascript" => {
                 extension_counts.get("js").copied().unwrap_or(0)
                     + extension_counts.get("jsx").copied().unwrap_or(0)
+                    + extension_counts.get("ts").copied().unwrap_or(0)
+                    + extension_counts.get("tsx").copied().unwrap_or(0)
             }
             "typescript" => {
                 extension_counts.get("ts").copied().unwrap_or(0)
@@ -3925,8 +3927,28 @@ mod tests {
         );
         let recommendations = recommend_skills(&manifest, &signals, 1);
 
-        assert_eq!(signals.iter().filter(|signal| signal.value == "go").count(), 1);
+        assert_eq!(
+            signals.iter().filter(|signal| signal.value == "go").count(),
+            1
+        );
         assert_eq!(recommendations[0].score, 32);
+    }
+
+    #[test]
+    fn typescript_files_also_emit_javascript_signal() {
+        let signals = build_project_signals(
+            &vec!["javascript".to_string(), "typescript".to_string()],
+            &Vec::new(),
+            &HashMap::new(),
+            &HashMap::from([(String::from("ts"), 2)]),
+        );
+
+        assert!(signals.iter().any(|signal| {
+            signal.kind == "language" && signal.value == "javascript" && signal.weight == 16
+        }));
+        assert!(signals.iter().any(|signal| {
+            signal.kind == "language" && signal.value == "typescript" && signal.weight == 16
+        }));
     }
 
     #[test]
