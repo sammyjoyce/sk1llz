@@ -1687,7 +1687,7 @@ impl ProjectScanAccumulator {
                         .iter()
                         .any(|candidate| candidate == &file_name.as_ref());
                 if !suppress_entry_keywords {
-                    self.ingest_directory_signal(file_name.as_ref(), depth);
+                    self.ingest_directory_signal(file_name.as_ref(), depth + 1);
                 }
                 self.scan_directory(&entry_path, depth + 1, suppress_entry_keywords)?;
                 continue;
@@ -2340,9 +2340,10 @@ fn recommend_skills(
 
         let score = components.iter().map(|component| component.weight).sum();
         let mut reasons = Vec::new();
+        let mut seen_reasons = HashSet::new();
         for component in &components {
             let reason = reason_from_component(component);
-            if !reasons.contains(&reason) {
+            if seen_reasons.insert(reason.clone()) {
                 reasons.push(reason);
             }
         }
@@ -3579,6 +3580,39 @@ mod tests {
         LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    struct ScopedTestEnv {
+        original_dir: PathBuf,
+        old_cache: Option<std::ffi::OsString>,
+        old_home: Option<std::ffi::OsString>,
+        cleanup_dir: PathBuf,
+    }
+
+    impl ScopedTestEnv {
+        fn new(cleanup_dir: PathBuf) -> Self {
+            Self {
+                original_dir: std::env::current_dir().unwrap(),
+                old_cache: std::env::var_os("XDG_CACHE_HOME"),
+                old_home: std::env::var_os("HOME"),
+                cleanup_dir,
+            }
+        }
+    }
+
+    impl Drop for ScopedTestEnv {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original_dir);
+            match self.old_cache.as_ref() {
+                Some(value) => std::env::set_var("XDG_CACHE_HOME", value),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match self.old_home.as_ref() {
+                Some(value) => std::env::set_var("HOME", value),
+                None => std::env::remove_var("HOME"),
+            }
+            let _ = fs::remove_dir_all(&self.cleanup_dir);
+        }
+    }
+
     fn sample_skill(
         id: &str,
         description: &str,
@@ -4090,9 +4124,29 @@ mod tests {
     }
 
     #[test]
+    fn project_analysis_limits_directory_tokens_to_shallow_children() {
+        let root = unique_test_dir("scan-dir-depth");
+        fs::create_dir_all(root.join("surface").join("deepnoise")).unwrap();
+        fs::write(root.join("surface").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::write(
+            root.join("surface").join("deepnoise").join("helper.rs"),
+            "fn helper() {}\n",
+        )
+        .unwrap();
+
+        let mut scan = ProjectScanAccumulator::default();
+        scan.scan_directory(&root, 0, false).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(scan.keyword_counts.contains_key("surface"));
+        assert!(!scan.keyword_counts.contains_key("deepnoise"));
+    }
+
+    #[test]
     fn recommend_from_path_json_smoke_covers_field_mask_and_score_breakdown() {
         let _guard = test_env_lock().lock().unwrap();
         let repo_root = unique_test_dir("recommend-json");
+        let scoped_env = ScopedTestEnv::new(repo_root.clone());
         fs::write(
             repo_root.join("Cargo.toml"),
             "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
@@ -4129,9 +4183,6 @@ mod tests {
             ),
         ]);
 
-        let original_dir = std::env::current_dir().unwrap();
-        let old_cache = std::env::var_os("XDG_CACHE_HOME");
-        let old_home = std::env::var_os("HOME");
         let cache_root = repo_root.join("cache");
         fs::create_dir_all(cache_root.join("sk1llz")).unwrap();
         fs::write(
@@ -4163,17 +4214,7 @@ mod tests {
         )
         .unwrap();
 
-        std::env::set_current_dir(original_dir).unwrap();
-        match old_cache {
-            Some(value) => std::env::set_var("XDG_CACHE_HOME", value),
-            None => std::env::remove_var("XDG_CACHE_HOME"),
-        }
-        match old_home {
-            Some(value) => std::env::set_var("HOME", value),
-            None => std::env::remove_var("HOME"),
-        }
-
-        let _ = fs::remove_dir_all(&repo_root);
+        drop(scoped_env);
 
         let encoded = serde_json::to_string_pretty(&outcome.response.value).unwrap();
         let parsed: Value = serde_json::from_str(&encoded).unwrap();
