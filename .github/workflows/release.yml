@@ -1,5 +1,7 @@
 name: Release
 
+# Triggered on annotated or lightweight tags matching v*. Builds release
+# binaries for all supported targets and publishes a GitHub Release.
 on:
   push:
     tags:
