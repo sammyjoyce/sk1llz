@@ -21,15 +21,14 @@ need() {
 # ---------------------------------------------------------------------------
 
 detect_target() {
-  local os arch target
+  local os arch arch_part target
 
   os="$(uname -s)"
   arch="$(uname -m)"
 
   case "$os" in
-    Linux)  os_part="unknown-linux" ;;
-    Darwin) os_part="apple-darwin"  ;;
-    *)      die "Unsupported OS: $os" ;;
+    Linux|Darwin) ;;
+    *) die "Unsupported OS: $os" ;;
   esac
 
   case "$arch" in
@@ -39,13 +38,14 @@ detect_target() {
   esac
 
   if [ "$os" = "Linux" ]; then
-    # Prefer musl on x86_64 for maximum portability; fall back to gnu
-    if [ "$arch_part" = "x86_64" ]; then
-      if ldd --version 2>&1 | grep -qi musl; then
-        target="${arch_part}-unknown-linux-musl"
-      else
-        target="${arch_part}-unknown-linux-gnu"
-      fi
+    # Prefer musl on x86_64 for maximum portability; fall back to gnu.
+    # Guard the `ldd` probe: on some distros (and some musl systems) `ldd`
+    # is missing or exits non-zero, which would otherwise abort under
+    # `set -euo pipefail` before the default can be used.
+    if [ "$arch_part" = "x86_64" ] \
+      && command -v ldd >/dev/null 2>&1 \
+      && ldd --version 2>&1 | grep -qi musl; then
+      target="${arch_part}-unknown-linux-musl"
     else
       target="${arch_part}-unknown-linux-gnu"
     fi
@@ -62,12 +62,19 @@ detect_target() {
 
 resolve_version() {
   local version="${1:-latest}"
+  local api_response
 
   if [ "$version" = "latest" ]; then
     need curl
-    version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-      | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-    [ -n "$version" ] || die "Could not determine latest release"
+    # Capture the API response first so a 403/rate-limit HTML body or a
+    # missing tag_name doesn't silently kill the script via `pipefail`
+    # (grep exits 1 on no-match → pipeline fails → set -e → silent exit
+    # before the `die` guard can run).
+    api_response="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")" \
+      || die "Could not query GitHub API for latest release (rate limited or no releases yet?)"
+    version="$(printf '%s' "$api_response" \
+      | awk -F'"' '/"tag_name":/ { print $4; exit }')"
+    [ -n "$version" ] || die "Could not determine latest release (unexpected API response)"
   fi
 
   printf '%s' "$version"
@@ -100,6 +107,15 @@ install() {
   tar xzf "${tmpdir}/${archive_name}" -C "$tmpdir" \
     || die "Failed to extract archive"
 
+  [ -f "${tmpdir}/${BINARY}" ] \
+    || die "Binary '${BINARY}' not found in archive — unexpected archive layout"
+
+  # Ensure INSTALL_DIR exists before the writability check so a not-yet-
+  # created directory (e.g. fresh ~/.local/bin) doesn't misroute us into
+  # the sudo branch. If we can create it as the current user, we keep the
+  # unprivileged path; otherwise we fall through to sudo.
+  mkdir -p "$INSTALL_DIR" 2>/dev/null || true
+
   # Install the binary, matching chmod privilege level to the mv so the
   # privileged path (root-owned destination) doesn't fail under `set -e`.
   if [ -w "$INSTALL_DIR" ]; then
@@ -107,6 +123,8 @@ install() {
     chmod +x "${INSTALL_DIR}/${BINARY}"
   else
     info "Elevated permissions required to install to ${INSTALL_DIR}"
+    need sudo
+    sudo mkdir -p "$INSTALL_DIR"
     sudo mv "${tmpdir}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
     sudo chmod +x "${INSTALL_DIR}/${BINARY}"
   fi

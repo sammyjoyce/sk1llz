@@ -100,15 +100,25 @@ engineer-name/
 curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh | bash
 ```
 
+> **Prefer to inspect before running?** Piping `curl` directly to `bash` executes whatever the URL returns. If you'd rather audit the script first:
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh -o install.sh
+> less install.sh   # review
+> bash install.sh
+> ```
+
 Customize the install:
 
 ```bash
-# Specific version
+# Pin to a specific release (recommended for CI and reproducible setups)
 VERSION=v0.1.0 bash <(curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh)
 
 # Custom directory
 INSTALL_DIR=~/.local/bin bash <(curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh)
 ```
+
+Without `VERSION`, the installer resolves to the latest published GitHub release. Pin a tag in CI or production so an unreleased change on `master` can't silently alter your install.
 
 Supports macOS and Linux on x86_64 and aarch64.
 
