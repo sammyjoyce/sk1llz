@@ -2128,6 +2128,9 @@ fn build_project_signals(
         if extension_hits > 0 {
             let weight = 8 + (extension_hits.min(3) as i64) * 4;
             insert_signal(&mut signal_map, "language", framework.clone(), weight);
+            if framework == "cpp" {
+                insert_signal(&mut signal_map, "language", "c++", weight);
+            }
         }
     }
 
@@ -3982,6 +3985,23 @@ mod tests {
         }));
         assert!(signals.iter().any(|signal| {
             signal.kind == "language" && signal.value == "typescript" && signal.weight == 16
+        }));
+    }
+
+    #[test]
+    fn cpp_files_also_emit_cxx_plus_plus_signal() {
+        let signals = build_project_signals(
+            &vec!["cpp".to_string()],
+            &Vec::new(),
+            &HashMap::new(),
+            &HashMap::from([(String::from("cpp"), 2)]),
+        );
+
+        assert!(signals.iter().any(|signal| {
+            signal.kind == "language" && signal.value == "cpp" && signal.weight == 16
+        }));
+        assert!(signals.iter().any(|signal| {
+            signal.kind == "language" && signal.value == "c++" && signal.weight == 16
         }));
     }
 
