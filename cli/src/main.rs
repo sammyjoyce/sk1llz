@@ -34,7 +34,16 @@ const STOP_WORDS: &[&str] = &[
     "their", "them", "your", "into", "over", "under", "through",
 ];
 
+const SHORT_TOKENS: &[&str] = &["ai", "api", "c", "c++", "ci", "db", "go", "io", "js", "llm", "ml", "qa", "ts", "ui", "ux"];
+const PATH_TOKEN_STOP_WORDS: &[&str] = &[
+    "docs", "doc", "file", "files", "guide", "guides", "index", "main", "manifest", "meta", "note",
+    "notes", "pattern", "patterns", "readme", "reference", "references", "src", "template", "templates",
+    "test", "tests", "tmp", "toml", "json", "yaml", "yml", "lock", "troubleshooting", "workflow", "workflows",
+];
+
 const PROJECT_SCAN_MAX_DEPTH: usize = 4;
+const PROJECT_TOKEN_MAX_DEPTH: usize = 1;
+const PROJECT_DOC_SIGNAL_MAX_CHARS: usize = 8_192;
 const PROJECT_SCAN_IGNORED_DIRS: &[&str] = &[
     "node_modules",
     "target",
@@ -43,6 +52,15 @@ const PROJECT_SCAN_IGNORED_DIRS: &[&str] = &[
     "vendor",
     "__pycache__",
 ];
+const PROJECT_SIGNAL_IGNORED_DIRS: &[&str] = &[
+    "domains",
+    "languages",
+    "organizations",
+    "paradigms",
+    "specialists",
+    "meta",
+];
+const PROJECT_DOC_SIGNAL_DIRS: &[&str] = &["cli", "cmd", "tool", "tools", "app", "apps"];
 
 #[derive(Parser, Debug)]
 #[command(
@@ -624,6 +642,7 @@ struct ProjectAnalysis {
     config_files: Vec<String>,
     extension_counts: Vec<(String, usize)>,
     tokens: Vec<String>,
+    signals: Vec<RecommendSignal>,
 }
 
 #[derive(Debug, Clone)]
@@ -631,6 +650,38 @@ struct Recommendation {
     skill: Skill,
     score: i64,
     reasons: Vec<String>,
+    score_breakdown: ScoreBreakdown,
+    matched_signals: usize,
+    strong_matches: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RecommendSignal {
+    kind: &'static str,
+    value: String,
+    weight: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ScoreComponent {
+    feature: String,
+    signal: String,
+    weight: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ScoreBreakdown {
+    total: i64,
+    components: Vec<ScoreComponent>,
+}
+
+#[derive(Debug, Clone)]
+struct SkillProfile {
+    tag_terms: HashSet<String>,
+    scope_terms: HashSet<String>,
+    name_terms: HashSet<String>,
+    id_terms: HashSet<String>,
+    description_terms: HashSet<String>,
 }
 
 fn manifest_url() -> String {
@@ -1527,20 +1578,19 @@ fn analyze_project(path: &Path) -> AppResult<ProjectAnalysis> {
     let mut extension_counts: HashMap<String, usize> = HashMap::new();
     let mut frameworks = HashSet::new();
     let mut config_files = HashSet::new();
-    let mut tokens = HashSet::new();
+    let mut keyword_counts: HashMap<String, usize> = HashMap::new();
 
     scan_directory(
         path,
         0,
+        false,
         &mut total_files,
         &mut extension_counts,
         &mut frameworks,
         &mut config_files,
-        &mut tokens,
+        &mut keyword_counts,
     )?;
-
-    let mut extension_counts: Vec<(String, usize)> = extension_counts.into_iter().collect();
-    extension_counts.sort_by(|left, right| right.1.cmp(&left.1));
+    ingest_project_doc_signals(path, &mut keyword_counts);
 
     let mut frameworks: Vec<String> = frameworks.into_iter().collect();
     frameworks.sort();
@@ -1548,8 +1598,14 @@ fn analyze_project(path: &Path) -> AppResult<ProjectAnalysis> {
     let mut config_files: Vec<String> = config_files.into_iter().collect();
     config_files.sort();
 
-    let mut tokens: Vec<String> = tokens.into_iter().collect();
+    let signals = build_project_signals(&frameworks, &config_files, &keyword_counts, &extension_counts);
+
+    let mut extension_counts: Vec<(String, usize)> = extension_counts.into_iter().collect();
+    extension_counts.sort_by(|left, right| right.1.cmp(&left.1));
+
+    let mut tokens: Vec<String> = signals.iter().map(|signal| signal.value.clone()).collect();
     tokens.sort();
+    tokens.dedup();
 
     Ok(ProjectAnalysis {
         total_files,
@@ -1557,17 +1613,19 @@ fn analyze_project(path: &Path) -> AppResult<ProjectAnalysis> {
         config_files,
         extension_counts,
         tokens,
+        signals,
     })
 }
 
 fn scan_directory(
     path: &Path,
     depth: usize,
+    suppress_keywords: bool,
     total_files: &mut usize,
     extension_counts: &mut HashMap<String, usize>,
     frameworks: &mut HashSet<String>,
     config_files: &mut HashSet<String>,
-    tokens: &mut HashSet<String>,
+    keyword_counts: &mut HashMap<String, usize>,
 ) -> AppResult<()> {
     if depth > PROJECT_SCAN_MAX_DEPTH {
         return Ok(());
@@ -1596,14 +1654,23 @@ fn scan_directory(
             {
                 continue;
             }
+
+            let suppress_entry_keywords = suppress_keywords
+                || PROJECT_SIGNAL_IGNORED_DIRS
+                    .iter()
+                    .any(|candidate| candidate == &file_name.as_ref());
+            if !suppress_entry_keywords {
+                ingest_directory_signal(file_name.as_ref(), depth, keyword_counts);
+            }
             scan_directory(
                 &entry_path,
                 depth + 1,
+                suppress_entry_keywords,
                 total_files,
                 extension_counts,
                 frameworks,
                 config_files,
-                tokens,
+                keyword_counts,
             )?;
             continue;
         }
@@ -1612,63 +1679,69 @@ fn scan_directory(
         ingest_file_signal(
             &entry_path,
             &file_name,
+            depth,
+            suppress_keywords,
             extension_counts,
             frameworks,
             config_files,
-            tokens,
+            keyword_counts,
         );
     }
 
     Ok(())
 }
 
+fn ingest_directory_signal(name: &str, depth: usize, keyword_counts: &mut HashMap<String, usize>) {
+    if depth > PROJECT_TOKEN_MAX_DEPTH {
+        return;
+    }
+
+    for token in tokenize(name) {
+        if should_keep_path_token(&token) {
+            *keyword_counts.entry(token).or_insert(0) += 1;
+        }
+    }
+}
+
 fn ingest_file_signal(
     path: &Path,
     file_name: &str,
+    depth: usize,
+    suppress_keywords: bool,
     extension_counts: &mut HashMap<String, usize>,
     frameworks: &mut HashSet<String>,
     config_files: &mut HashSet<String>,
-    tokens: &mut HashSet<String>,
+    keyword_counts: &mut HashMap<String, usize>,
 ) {
     if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
         let extension = extension.to_ascii_lowercase();
         *extension_counts.entry(extension.clone()).or_insert(0) += 1;
-        tokens.insert(extension.clone());
 
         match extension.as_str() {
             "rs" => {
                 frameworks.insert("rust".to_string());
-                tokens.insert("rust".to_string());
             }
             "py" => {
                 frameworks.insert("python".to_string());
-                tokens.insert("python".to_string());
             }
             "go" => {
                 frameworks.insert("go".to_string());
-                tokens.insert("go".to_string());
             }
             "zig" => {
                 frameworks.insert("zig".to_string());
-                tokens.insert("zig".to_string());
             }
             "ts" | "tsx" => {
                 frameworks.insert("typescript".to_string());
-                tokens.insert("typescript".to_string());
-                tokens.insert("javascript".to_string());
+                frameworks.insert("javascript".to_string());
             }
             "js" | "jsx" => {
                 frameworks.insert("javascript".to_string());
-                tokens.insert("javascript".to_string());
             }
             "c" | "h" => {
                 frameworks.insert("c".to_string());
-                tokens.insert("c".to_string());
             }
             "cc" | "cpp" | "cxx" | "hpp" => {
                 frameworks.insert("cpp".to_string());
-                tokens.insert("cpp".to_string());
-                tokens.insert("c++".to_string());
             }
             _ => {}
         }
@@ -1691,30 +1764,97 @@ fn ingest_file_signal(
     match lower.as_str() {
         "cargo.toml" => {
             frameworks.insert("rust".to_string());
-            tokens.insert("rust".to_string());
         }
         "package.json" => {
             frameworks.insert("javascript".to_string());
-            tokens.insert("javascript".to_string());
-            tokens.insert("typescript".to_string());
+            frameworks.insert("typescript".to_string());
         }
         "go.mod" => {
             frameworks.insert("go".to_string());
-            tokens.insert("go".to_string());
-        }
-        "flake.nix" | "shell.nix" => {
-            tokens.insert("nix".to_string());
-        }
-        "dockerfile" | "compose.yaml" | "compose.yml" => {
-            tokens.insert("deployment".to_string());
-            tokens.insert("devops".to_string());
         }
         _ => {}
     }
 
-    for token in tokenize(file_name) {
-        tokens.insert(token);
+    if !suppress_keywords && depth <= PROJECT_TOKEN_MAX_DEPTH {
+        for token in tokenize(file_name) {
+            if should_keep_path_token(&token) {
+                *keyword_counts.entry(token).or_insert(0) += 1;
+            }
+        }
     }
+}
+
+fn ingest_project_doc_signals(root: &Path, keyword_counts: &mut HashMap<String, usize>) {
+    let mut candidates = vec![root.join("README.md"), root.join("README")];
+    for dir in PROJECT_DOC_SIGNAL_DIRS {
+        candidates.push(root.join(dir).join("README.md"));
+    }
+
+    for candidate in candidates {
+        let Ok(metadata) = fs::metadata(&candidate) else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+
+        let Ok(content) = fs::read_to_string(&candidate) else {
+            continue;
+        };
+        let sample: String = content.chars().take(PROJECT_DOC_SIGNAL_MAX_CHARS).collect();
+        ingest_doc_signal_content(&sample, keyword_counts);
+    }
+}
+
+fn boost_signal_from_markers(
+    keyword_counts: &mut HashMap<String, usize>,
+    signal: &str,
+    haystack: &str,
+    markers: &[&str],
+    max_hits: usize,
+) {
+    let hits = markers
+        .iter()
+        .map(|marker| haystack.matches(marker).count())
+        .sum::<usize>()
+        .min(max_hits);
+
+    if hits > 0 {
+        *keyword_counts.entry(signal.to_string()).or_insert(0) += hits;
+    }
+}
+
+fn ingest_doc_signal_content(content: &str, keyword_counts: &mut HashMap<String, usize>) {
+    let lower = content.to_ascii_lowercase();
+
+    boost_signal_from_markers(
+        keyword_counts,
+        "cli",
+        &lower,
+        &["cli", "command-line", "subcommand", "command tree", "output contract"],
+        4,
+    );
+    boost_signal_from_markers(
+        keyword_counts,
+        "automation",
+        &lower,
+        &["--json", "machine-readable", "stdout", "stderr", "dry-run"],
+        3,
+    );
+    boost_signal_from_markers(
+        keyword_counts,
+        "terminal",
+        &lower,
+        &["terminal", "tty", "shell", "completion"],
+        2,
+    );
+    boost_signal_from_markers(
+        keyword_counts,
+        "agents",
+        &lower,
+        &["agent-first", "agent surface", "agent surfaces", "ai coding skills", "ai agents"],
+        2,
+    );
 }
 
 fn tokenize(text: &str) -> Vec<String> {
@@ -1740,77 +1880,388 @@ fn tokenize(text: &str) -> Vec<String> {
     tokens.into_iter().collect()
 }
 
-fn recommend_skills(manifest: &Manifest, tokens: &[String], limit: usize) -> Vec<Recommendation> {
-    let token_set: HashSet<String> = tokens.iter().cloned().collect();
+fn collect_match_terms(text: &str) -> HashSet<String> {
+    let mut terms = HashSet::new();
+
+    for token in tokenize(text) {
+        if should_keep_query_token(&token) {
+            terms.insert(token.clone());
+        }
+
+        if token.contains('-') {
+            for part in token.split('-') {
+                if should_keep_query_token(part) {
+                    terms.insert(part.to_string());
+                }
+            }
+        }
+    }
+
+    terms
+}
+
+fn is_controlled_short_token(token: &str) -> bool {
+    SHORT_TOKENS.iter().any(|candidate| candidate == &token)
+}
+
+fn should_keep_query_token(token: &str) -> bool {
+    token.len() >= 3 || is_controlled_short_token(token)
+}
+
+fn should_keep_path_token(token: &str) -> bool {
+    (token.len() >= 4 || matches!(token, "api" | "cli" | "ops" | "qa" | "ui" | "ux"))
+        && !PATH_TOKEN_STOP_WORDS.iter().any(|candidate| candidate == &token)
+}
+
+fn classify_signal_kind(token: &str) -> &'static str {
+    if matches!(
+        token,
+        "c" | "c++" | "cpp" | "go" | "javascript" | "js" | "python" | "rust" | "typescript" | "zig"
+    ) {
+        "language"
+    } else if matches!(
+        token,
+        "bazel" | "cargo" | "clap" | "cmake" | "docker" | "flake" | "gradle" | "jest" | "kubernetes"
+            | "nix" | "npm" | "pip" | "pnpm" | "pytest" | "terraform" | "yarn"
+    ) {
+        "tool"
+    } else if matches!(
+        token,
+        "agent" | "agents" | "api" | "architecture" | "automation" | "backend" | "cli" | "concurrency"
+            | "database" | "databases" | "deployment" | "design" | "distributed" | "docs" | "documentation"
+            | "frontend" | "networking" | "performance" | "reliability" | "search" | "security" | "systems"
+            | "terminal" | "testing" | "ui" | "ux"
+    ) {
+        "topic"
+    } else {
+        "keyword"
+    }
+}
+
+fn insert_signal(
+    signal_map: &mut HashMap<(String, String), i64>,
+    kind: &'static str,
+    value: impl Into<String>,
+    weight: i64,
+) {
+    let value = value.into();
+    let entry = signal_map
+        .entry((kind.to_string(), value.clone()))
+        .or_insert(weight);
+    *entry = (*entry).max(weight);
+}
+
+fn build_text_signals(text: &str) -> Vec<RecommendSignal> {
+    let mut signal_map: HashMap<(String, String), i64> = HashMap::new();
+
+    for token in tokenize(text) {
+        if !should_keep_query_token(&token) {
+            continue;
+        }
+
+        let kind = classify_signal_kind(&token);
+        let weight = match kind {
+            "language" => 20,
+            "tool" => 18,
+            "topic" => 16,
+            _ => 12,
+        };
+        insert_signal(&mut signal_map, kind, token, weight);
+    }
+
+    let mut signals: Vec<RecommendSignal> = signal_map
+        .into_iter()
+        .map(|((kind, value), weight)| RecommendSignal {
+            kind: match kind.as_str() {
+                "language" => "language",
+                "tool" => "tool",
+                "topic" => "topic",
+                _ => "keyword",
+            },
+            value,
+            weight,
+        })
+        .collect();
+    signals.sort_by(|left, right| {
+        right
+            .weight
+            .cmp(&left.weight)
+            .then_with(|| left.value.cmp(&right.value))
+    });
+    signals
+}
+
+fn build_project_signals(
+    frameworks: &[String],
+    config_files: &[String],
+    keyword_counts: &HashMap<String, usize>,
+    extension_counts: &HashMap<String, usize>,
+) -> Vec<RecommendSignal> {
+    let mut signal_map: HashMap<(String, String), i64> = HashMap::new();
+
+    for framework in frameworks {
+        let extension_hits = match framework.as_str() {
+            "rust" => extension_counts.get("rs").copied().unwrap_or(0),
+            "python" => extension_counts.get("py").copied().unwrap_or(0),
+            "go" => extension_counts.get("go").copied().unwrap_or(0),
+            "zig" => extension_counts.get("zig").copied().unwrap_or(0),
+            "javascript" => {
+                extension_counts.get("js").copied().unwrap_or(0)
+                    + extension_counts.get("jsx").copied().unwrap_or(0)
+            }
+            "typescript" => {
+                extension_counts.get("ts").copied().unwrap_or(0)
+                    + extension_counts.get("tsx").copied().unwrap_or(0)
+            }
+            "c" => {
+                extension_counts.get("c").copied().unwrap_or(0)
+                    + extension_counts.get("h").copied().unwrap_or(0)
+            }
+            "cpp" => {
+                extension_counts.get("cc").copied().unwrap_or(0)
+                    + extension_counts.get("cpp").copied().unwrap_or(0)
+                    + extension_counts.get("cxx").copied().unwrap_or(0)
+                    + extension_counts.get("hpp").copied().unwrap_or(0)
+            }
+            _ => 0,
+        };
+
+        if extension_hits > 0 {
+            let weight = 8 + (extension_hits.min(3) as i64) * 4;
+            insert_signal(&mut signal_map, "language", framework.clone(), weight);
+        }
+    }
+
+    for config in config_files {
+        match config.to_ascii_lowercase().as_str() {
+            "cargo.toml" => {
+                insert_signal(&mut signal_map, "language", "rust", 22);
+                insert_signal(&mut signal_map, "tool", "cargo", 18);
+            }
+            "package.json" => {
+                insert_signal(&mut signal_map, "language", "javascript", 16);
+                insert_signal(&mut signal_map, "language", "typescript", 16);
+                insert_signal(&mut signal_map, "tool", "npm", 18);
+            }
+            "go.mod" => {
+                insert_signal(&mut signal_map, "language", "go", 22);
+                insert_signal(&mut signal_map, "tool", "go", 18);
+            }
+            "flake.nix" | "shell.nix" => insert_signal(&mut signal_map, "tool", "nix", 18),
+            "dockerfile" | "compose.yaml" | "compose.yml" => {
+                insert_signal(&mut signal_map, "tool", "docker", 18);
+                insert_signal(&mut signal_map, "topic", "deployment", 16);
+            }
+            _ => {}
+        }
+    }
+
+    for (token, count) in keyword_counts {
+        let kind = classify_signal_kind(token);
+        let base = match kind {
+            "tool" => 14,
+            "topic" => 14,
+            _ => continue,
+        };
+        let weight = base + (count.saturating_sub(1).min(2) as i64) * 2;
+        insert_signal(&mut signal_map, kind, token.clone(), weight);
+    }
+
+    let mut signals: Vec<RecommendSignal> = signal_map
+        .into_iter()
+        .map(|((kind, value), weight)| RecommendSignal {
+            kind: match kind.as_str() {
+                "language" => "language",
+                "tool" => "tool",
+                "topic" => "topic",
+                _ => "keyword",
+            },
+            value,
+            weight,
+        })
+        .collect();
+    signals.sort_by(|left, right| {
+        right
+            .weight
+            .cmp(&left.weight)
+            .then_with(|| left.value.cmp(&right.value))
+    });
+    signals
+}
+
+impl SkillProfile {
+    fn from_skill(skill: &Skill) -> Self {
+        let mut tag_terms = HashSet::new();
+        for tag in &skill.tags {
+            tag_terms.extend(collect_match_terms(tag));
+        }
+
+        let mut scope_terms = collect_match_terms(&skill.category);
+        if let Some(subcategory) = &skill.subcategory {
+            scope_terms.extend(collect_match_terms(subcategory));
+        }
+
+        let name_terms = collect_match_terms(&skill.name);
+        let id_terms = collect_match_terms(&skill.id);
+        let description_terms = collect_match_terms(&skill.description);
+
+        Self {
+            tag_terms,
+            scope_terms,
+            name_terms,
+            id_terms,
+            description_terms,
+        }
+    }
+}
+
+fn match_skill_signal(profile: &SkillProfile, signal: &RecommendSignal) -> Option<ScoreComponent> {
+    let value = signal.value.clone();
+
+    if profile.tag_terms.contains(&value) {
+        return Some(ScoreComponent {
+            feature: "tag".to_string(),
+            signal: value,
+            weight: signal.weight + 10,
+        });
+    }
+
+    if profile.scope_terms.contains(&value) {
+        return Some(ScoreComponent {
+            feature: "scope".to_string(),
+            signal: value,
+            weight: signal.weight + 8,
+        });
+    }
+
+    if profile.name_terms.contains(&value) {
+        return Some(ScoreComponent {
+            feature: "name".to_string(),
+            signal: value,
+            weight: signal.weight + 6,
+        });
+    }
+
+    if profile.id_terms.contains(&value) {
+        return Some(ScoreComponent {
+            feature: "id".to_string(),
+            signal: value,
+            weight: signal.weight + 5,
+        });
+    }
+
+    if profile.description_terms.contains(&value) {
+        return Some(ScoreComponent {
+            feature: "description".to_string(),
+            signal: value,
+            weight: signal.weight + 3,
+        });
+    }
+
+    None
+}
+
+fn coverage_bonus(
+    matched_values: &HashSet<String>,
+    matched_kinds: &HashSet<String>,
+) -> Vec<ScoreComponent> {
+    let mut bonuses = Vec::new();
+
+    if matched_values.len() > 1 {
+        bonuses.push(ScoreComponent {
+            feature: "coverage".to_string(),
+            signal: format!("{} matched signals", matched_values.len()),
+            weight: ((matched_values.len() - 1) as i64 * 6).min(18),
+        });
+    }
+
+    if matched_kinds.contains("language")
+        && (matched_kinds.contains("topic") || matched_kinds.contains("tool") || matched_kinds.contains("keyword"))
+    {
+        bonuses.push(ScoreComponent {
+            feature: "coverage".to_string(),
+            signal: "mixed intent".to_string(),
+            weight: 6,
+        });
+    }
+
+    bonuses
+}
+
+fn reason_from_component(component: &ScoreComponent) -> String {
+    match component.feature.as_str() {
+        "tag" => format!("matched tag '{}'", component.signal),
+        "scope" => format!("matched scope '{}'", component.signal),
+        "name" => format!("matched name token '{}'", component.signal),
+        "id" => format!("matched id token '{}'", component.signal),
+        "description" => format!("matched description token '{}'", component.signal),
+        "coverage" => component.signal.clone(),
+        _ => format!("matched '{}'", component.signal),
+    }
+}
+
+fn recommend_skills(manifest: &Manifest, signals: &[RecommendSignal], limit: usize) -> Vec<Recommendation> {
     let mut recommendations = Vec::new();
 
     for skill in &manifest.skills {
-        let mut score = 0i64;
+        let profile = SkillProfile::from_skill(skill);
+        let mut components = Vec::new();
+        let mut matched_values = HashSet::new();
+        let mut matched_kinds = HashSet::new();
+        let mut strong_matches = 0usize;
+
+        for signal in signals {
+            if let Some(component) = match_skill_signal(&profile, signal) {
+                if matches!(component.feature.as_str(), "tag" | "scope" | "name" | "id") {
+                    strong_matches += 1;
+                }
+                matched_values.insert(signal.value.clone());
+                matched_kinds.insert(signal.kind.to_string());
+                components.push(component);
+            }
+        }
+
+        if matched_values.is_empty() {
+            continue;
+        }
+
+        components.extend(coverage_bonus(&matched_values, &matched_kinds));
+        components.sort_by(|left, right| {
+            right
+                .weight
+                .cmp(&left.weight)
+                .then_with(|| left.feature.cmp(&right.feature))
+                .then_with(|| left.signal.cmp(&right.signal))
+        });
+
+        let score = components.iter().map(|component| component.weight).sum();
         let mut reasons = Vec::new();
-
-        let name_tokens = tokenize(&skill.name);
-        let id_tokens = tokenize(&skill.id);
-        let description_tokens = tokenize(&skill.description);
-        let tag_set: HashSet<String> = skill
-            .tags
-            .iter()
-            .map(|tag| tag.to_ascii_lowercase())
-            .collect();
-        let category = skill.category.to_ascii_lowercase();
-        let subcategory = skill
-            .subcategory
-            .as_ref()
-            .map(|value| value.to_ascii_lowercase());
-
-        for token in &token_set {
-            if tag_set.contains(token) {
-                score += 30;
-                reasons.push(format!("matched tag '{token}'"));
-                continue;
-            }
-
-            if token == &category || subcategory.as_ref() == Some(token) {
-                score += 18;
-                reasons.push(format!("matched scope '{token}'"));
-            }
-
-            if name_tokens.iter().any(|candidate| candidate == token) {
-                score += 24;
-                reasons.push(format!("matched name token '{token}'"));
-            } else if id_tokens.iter().any(|candidate| candidate == token) {
-                score += 20;
-                reasons.push(format!("matched id token '{token}'"));
-            } else if description_tokens
-                .iter()
-                .any(|candidate| candidate == token)
-            {
-                score += 8;
-                reasons.push(format!("matched description token '{token}'"));
-            } else if skill
-                .tags
-                .iter()
-                .any(|tag| tag.to_ascii_lowercase().contains(token))
-            {
-                score += 10;
-                reasons.push(format!("matched tag fragment '{token}'"));
+        for component in &components {
+            let reason = reason_from_component(component);
+            if !reasons.contains(&reason) {
+                reasons.push(reason);
             }
         }
 
-        if score > 0 {
-            reasons.sort();
-            reasons.dedup();
-            recommendations.push(Recommendation {
-                skill: skill.clone(),
-                score,
-                reasons,
-            });
-        }
+        recommendations.push(Recommendation {
+            skill: skill.clone(),
+            score,
+            reasons,
+            score_breakdown: ScoreBreakdown {
+                total: score,
+                components,
+            },
+            matched_signals: matched_values.len(),
+            strong_matches,
+        });
     }
 
     recommendations.sort_by(|left, right| {
         right
             .score
             .cmp(&left.score)
+            .then_with(|| right.matched_signals.cmp(&left.matched_signals))
+            .then_with(|| right.strong_matches.cmp(&left.strong_matches))
             .then_with(|| left.skill.id.cmp(&right.skill.id))
     });
     recommendations.truncate(limit);
@@ -1821,6 +2272,7 @@ fn recommendation_json(recommendation: &Recommendation, installed_paths: Vec<Str
     json!({
         "score": recommendation.score,
         "reasons": recommendation.reasons,
+        "score_breakdown": recommendation.score_breakdown,
         "skill": skill_summary_json(&recommendation.skill, installed_paths),
     })
 }
@@ -2202,6 +2654,16 @@ fn cmd_catalog_search(ctx: &AppContext, args: CatalogSearchArgs) -> AppResult<Ou
                 skill: skill.clone(),
                 score,
                 reasons: vec![format!("matched query '{}'", args.query)],
+                score_breakdown: ScoreBreakdown {
+                    total: score,
+                    components: vec![ScoreComponent {
+                        feature: "fuzzy".to_string(),
+                        signal: args.query.clone(),
+                        weight: score,
+                    }],
+                },
+                matched_signals: 1,
+                strong_matches: 0,
             });
         }
     }
@@ -2452,8 +2914,11 @@ fn cmd_recommend_from_text(ctx: &AppContext, args: RecommendTextArgs) -> AppResu
     let manifest = load_manifest(ctx)?;
     let paths = environment_paths()?;
     let description = resolve_recommend_text_input(&args)?;
-    let tokens = tokenize(&description);
-    let recommendations = recommend_skills(&manifest, &tokens, args.read.limit);
+    let signals = build_text_signals(&description);
+    let mut tokens: Vec<String> = signals.iter().map(|signal| signal.value.clone()).collect();
+    tokens.sort();
+    tokens.dedup();
+    let recommendations = recommend_skills(&manifest, &signals, args.read.limit);
 
     let items: Vec<Value> = recommendations
         .iter()
@@ -2506,7 +2971,7 @@ fn cmd_recommend_from_path(ctx: &AppContext, args: RecommendPathArgs) -> AppResu
     let manifest = load_manifest(ctx)?;
     let paths = environment_paths()?;
     let analysis = analyze_project(&args.path)?;
-    let recommendations = recommend_skills(&manifest, &analysis.tokens, args.read.limit);
+    let recommendations = recommend_skills(&manifest, &analysis.signals, args.read.limit);
 
     let items: Vec<Value> = recommendations
         .iter()
@@ -2993,6 +3458,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
 
     fn unique_test_dir(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -3002,6 +3468,41 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sk1llz-{name}-{}-{nonce}", process::id()));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    fn test_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn sample_skill(
+        id: &str,
+        description: &str,
+        category: &str,
+        subcategory: Option<&str>,
+        tags: &[&str],
+    ) -> Skill {
+        Skill {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: description.to_string(),
+            category: category.to_string(),
+            subcategory: subcategory.map(|value| value.to_string()),
+            path: format!("{category}/{id}"),
+            files: vec!["SKILL.md".to_string()],
+            tags: tags.iter().map(|tag| tag.to_string()).collect(),
+        }
+    }
+
+    fn sample_manifest(skills: Vec<Skill>) -> Manifest {
+        Manifest {
+            version: "1.0.0".to_string(),
+            generated_at: "2026-04-10T00:00:00Z".to_string(),
+            repository: "https://example.test/sk1llz".to_string(),
+            raw_base_url: "https://example.test/raw".to_string(),
+            skill_count: skills.len(),
+            skills,
+        }
     }
 
     #[test]
@@ -3070,6 +3571,16 @@ mod tests {
                 },
                 score: 42,
                 reasons: vec!["matched query".to_string()],
+                score_breakdown: ScoreBreakdown {
+                    total: 42,
+                    components: vec![ScoreComponent {
+                        feature: "tag".to_string(),
+                        signal: "cli".to_string(),
+                        weight: 42,
+                    }],
+                },
+                matched_signals: 1,
+                strong_matches: 1,
             },
             Vec::new(),
         );
@@ -3125,6 +3636,315 @@ mod tests {
 
         assert_eq!(analysis.total_files, PROJECT_SCAN_MAX_DEPTH + 1);
         assert!(analysis.frameworks.contains(&"rust".to_string()));
+    }
+
+    #[test]
+    fn project_analysis_filters_short_extension_tokens() {
+        let root = unique_test_dir("scan-tokens");
+        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(root.join("scripts").join("dev.sh"), "#!/usr/bin/env bash\n").unwrap();
+        fs::write(root.join("helper.py"), "print('ok')\n").unwrap();
+
+        let analysis = analyze_project(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(!analysis.tokens.contains(&"rs".to_string()));
+        assert!(!analysis.tokens.contains(&"sh".to_string()));
+        assert!(!analysis.tokens.contains(&"py".to_string()));
+        assert!(analysis.tokens.contains(&"rust".to_string()));
+        assert!(analysis.tokens.contains(&"cargo".to_string()));
+    }
+
+    #[test]
+    fn project_analysis_ignores_catalog_namespace_tokens() {
+        let root = unique_test_dir("scan-catalog");
+        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::create_dir_all(root.join("cli").join("src")).unwrap();
+        fs::write(root.join("cli").join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::create_dir_all(root.join("languages").join("rust").join("klabnik-teaching-rust")).unwrap();
+        fs::write(
+            root.join("languages")
+                .join("rust")
+                .join("klabnik-teaching-rust")
+                .join("SKILL.md"),
+            "# rust\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("languages").join("python").join("beazley-deep-python")).unwrap();
+        fs::write(
+            root.join("languages")
+                .join("python")
+                .join("beazley-deep-python")
+                .join("SKILL.md"),
+            "# python\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("domains").join("cli-design").join("hashimoto-cli-ux")).unwrap();
+        fs::write(
+            root.join("domains")
+                .join("cli-design")
+                .join("hashimoto-cli-ux")
+                .join("SKILL.md"),
+            "# cli\n",
+        )
+        .unwrap();
+
+        let analysis = analyze_project(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(analysis.tokens.contains(&"rust".to_string()));
+        assert!(analysis.tokens.contains(&"cargo".to_string()));
+        assert!(analysis.tokens.contains(&"cli".to_string()));
+        assert!(!analysis.tokens.contains(&"klabnik".to_string()));
+        assert!(!analysis.tokens.contains(&"beazley".to_string()));
+        assert!(!analysis.tokens.contains(&"languages".to_string()));
+        assert!(!analysis.tokens.contains(&"python".to_string()));
+    }
+
+    #[test]
+    fn text_recommendation_prefers_cli_ux_over_generic_rust() {
+        let manifest = sample_manifest(vec![
+            sample_skill(
+                "hashimoto-cli-ux",
+                "Design operator-grade CLIs with machine-readable output and terminal UX.",
+                "domains",
+                Some("cli-design"),
+                &["domains", "cli_design", "hashimoto"],
+            ),
+            sample_skill(
+                "bos-concurrency-rust",
+                "Design Rust concurrency with atomics and locks.",
+                "languages",
+                Some("rust"),
+                &["languages", "rust", "bos", "concurrency"],
+            ),
+            sample_skill(
+                "klabnik-teaching-rust",
+                "Write clear Rust code and documentation for others to learn from.",
+                "languages",
+                Some("rust"),
+                &["languages", "rust", "klabnik", "documentation"],
+            ),
+        ]);
+
+        let signals = build_text_signals("rust cli ux");
+        let recommendations = recommend_skills(&manifest, &signals, 3);
+
+        assert_eq!(recommendations.first().map(|item| item.skill.id.as_str()), Some("hashimoto-cli-ux"));
+        assert!(recommendations[0].score > recommendations[1].score);
+    }
+
+    #[test]
+    fn path_recommendation_does_not_promote_python_for_rust_cli_repo() {
+        let root = unique_test_dir("recommend-path");
+        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::create_dir_all(root.join("cli")).unwrap();
+        fs::write(root.join("cli").join("guide.md"), "# cli\n").unwrap();
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(root.join("scripts").join("helper.py"), "print('ok')\n").unwrap();
+
+        let analysis = analyze_project(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        let manifest = sample_manifest(vec![
+            sample_skill(
+                "beazley-deep-python",
+                "Protocol-first guidance for advanced Python generators and descriptors.",
+                "languages",
+                Some("python"),
+                &["languages", "python", "beazley", "streaming"],
+            ),
+            sample_skill(
+                "hashimoto-cli-ux",
+                "Design operator-grade CLIs with machine-readable output and terminal UX.",
+                "domains",
+                Some("cli-design"),
+                &["domains", "cli_design", "hashimoto"],
+            ),
+            sample_skill(
+                "klabnik-teaching-rust",
+                "Write clear Rust code and documentation for others to learn from.",
+                "languages",
+                Some("rust"),
+                &["languages", "rust", "klabnik", "documentation", "cargo"],
+            ),
+        ]);
+
+        let recommendations = recommend_skills(&manifest, &analysis.signals, 3);
+        let ids: Vec<&str> = recommendations.iter().map(|item| item.skill.id.as_str()).collect();
+
+        assert_eq!(ids.first().copied(), Some("klabnik-teaching-rust"));
+        assert!(ids.iter().position(|id| *id == "beazley-deep-python").unwrap() > ids.iter().position(|id| *id == "hashimoto-cli-ux").unwrap());
+    }
+
+    #[test]
+    fn path_recommendation_uses_readme_intent_for_cli_repo() {
+        let root = unique_test_dir("recommend-docs");
+        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::write(
+            root.join("README.md"),
+            "# demo\nA command-line tool for AI agents with machine-readable output.\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("cli")).unwrap();
+        fs::write(
+            root.join("cli").join("README.md"),
+            "## CLI\nOutput contract: stdout, stderr, --json, shell completions, terminal UX.\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(root.join("scripts").join("helper.py"), "print('ok')\n").unwrap();
+
+        let analysis = analyze_project(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(analysis.tokens.contains(&"cli".to_string()));
+        assert!(analysis.tokens.contains(&"automation".to_string()));
+        assert!(analysis.tokens.contains(&"terminal".to_string()));
+        assert!(analysis.tokens.contains(&"agents".to_string()));
+
+        let manifest = sample_manifest(vec![
+            sample_skill(
+                "beazley-deep-python",
+                "Protocol-first guidance for advanced Python generators and descriptors.",
+                "languages",
+                Some("python"),
+                &["languages", "python", "beazley", "streaming"],
+            ),
+            sample_skill(
+                "hashimoto-cli-ux",
+                "Design operator-grade CLIs with machine-readable output, automation-safe JSON, and terminal UX for AI agents.",
+                "domains",
+                Some("cli-design"),
+                &["domains", "cli_design", "hashimoto"],
+            ),
+            sample_skill(
+                "klabnik-teaching-rust",
+                "Write clear Rust code and documentation for others to learn from.",
+                "languages",
+                Some("rust"),
+                &["languages", "rust", "klabnik", "documentation", "cargo"],
+            ),
+        ]);
+
+        let recommendations = recommend_skills(&manifest, &analysis.signals, 3);
+        assert_eq!(
+            recommendations.first().map(|item| item.skill.id.as_str()),
+            Some("hashimoto-cli-ux")
+        );
+    }
+
+    #[test]
+    fn recommend_from_path_json_smoke_covers_field_mask_and_score_breakdown() {
+        let _guard = test_env_lock().lock().unwrap();
+        let repo_root = unique_test_dir("recommend-json");
+        fs::write(repo_root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::create_dir_all(repo_root.join("src")).unwrap();
+        fs::write(repo_root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        fs::write(
+            repo_root.join("README.md"),
+            "# demo\nAn agent-first CLI with machine-readable output.\n",
+        )
+        .unwrap();
+        fs::create_dir_all(repo_root.join("cli")).unwrap();
+        fs::write(
+            repo_root.join("cli").join("README.md"),
+            "## CLI\nOutput contract: stdout, stderr, --json, dry-run, terminal UX.\n",
+        )
+        .unwrap();
+
+        let manifest = sample_manifest(vec![
+            sample_skill(
+                "hashimoto-cli-ux",
+                "Design operator-grade CLIs with machine-readable output, automation-safe JSON, and terminal UX for AI agents.",
+                "domains",
+                Some("cli-design"),
+                &["domains", "cli_design", "hashimoto"],
+            ),
+            sample_skill(
+                "klabnik-teaching-rust",
+                "Write clear Rust code and documentation for others to learn from.",
+                "languages",
+                Some("rust"),
+                &["languages", "rust", "klabnik", "documentation", "cargo"],
+            ),
+        ]);
+
+        let original_dir = std::env::current_dir().unwrap();
+        let old_cache = std::env::var_os("XDG_CACHE_HOME");
+        let old_home = std::env::var_os("HOME");
+        let cache_root = repo_root.join("cache");
+        fs::create_dir_all(cache_root.join("sk1llz")).unwrap();
+        fs::write(
+            cache_root.join("sk1llz").join("skills.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        std::env::set_current_dir(&repo_root).unwrap();
+        std::env::set_var("XDG_CACHE_HOME", &cache_root);
+        std::env::set_var("HOME", repo_root.join("home"));
+
+        let ctx = AppContext {
+            format: OutputFormat::Json,
+            quiet: false,
+            verbose: 0,
+            color_enabled: false,
+            explicit_json: true,
+        };
+        let outcome = cmd_recommend_from_path(
+            &ctx,
+            RecommendPathArgs {
+                path: repo_root.clone(),
+                read: RecommendReadArgs {
+                    limit: 3,
+                    fields: Some("score,reasons,score_breakdown,id,name".to_string()),
+                },
+            },
+        )
+        .unwrap();
+
+        std::env::set_current_dir(original_dir).unwrap();
+        match old_cache {
+            Some(value) => std::env::set_var("XDG_CACHE_HOME", value),
+            None => std::env::remove_var("XDG_CACHE_HOME"),
+        }
+        match old_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+
+        let _ = fs::remove_dir_all(&repo_root);
+
+        let encoded = serde_json::to_string_pretty(&outcome.response.value).unwrap();
+        let parsed: Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(parsed.get("source").and_then(Value::as_str), Some("path"));
+
+        let first = parsed
+            .get("items")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(Value::as_object)
+            .unwrap();
+        let keys: HashSet<&str> = first.keys().map(|key| key.as_str()).collect();
+        assert_eq!(
+            keys,
+            HashSet::from(["score", "reasons", "score_breakdown", "id", "name"])
+        );
+        assert_eq!(first.get("id").and_then(Value::as_str), Some("hashimoto-cli-ux"));
+        assert_eq!(
+            first.get("score").and_then(Value::as_i64),
+            first.get("score_breakdown")
+                .and_then(|value| value.get("total"))
+                .and_then(Value::as_i64)
+        );
     }
 
     #[test]
