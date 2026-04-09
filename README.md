@@ -92,22 +92,53 @@ engineer-name/
 
 ---
 
+## Install
+
+### CLI (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh | bash
+```
+
+Customize the install:
+
+```bash
+# Specific version
+VERSION=v0.1.0 bash <(curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh)
+
+# Custom directory
+INSTALL_DIR=~/.local/bin bash <(curl -fsSL https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/scripts/install.sh)
+```
+
+Supports macOS and Linux on x86_64 and aarch64.
+
+### From source
+
+```bash
+git clone https://github.com/sammyjoyce/sk1llz.git
+cd sk1llz/cli
+cargo build --release
+cp target/release/sk1llz ~/.local/bin/
+```
+
+---
+
 ## Usage
 
 ### With Claude/Windsurf/Cursor
 ```bash
 # Clone to your skills directory
-git clone https://github.com/copyleftdev/sk1llz ~/.claude/skills/sk1llz
+git clone https://github.com/sammyjoyce/sk1llz ~/.claude/skills/sk1llz
 
 # Or for project-specific
-git clone https://github.com/copyleftdev/sk1llz .claude/skills/sk1llz
+git clone https://github.com/sammyjoyce/sk1llz .claude/skills/sk1llz
 ```
 
 ### Programmatic Access
 ```bash
 # skills.json is the source of truth for all skills
-curl -s https://raw.githubusercontent.com/copyleftdev/sk1llz/master/skills.json | jq '.skill_count'
-curl -s https://raw.githubusercontent.com/copyleftdev/sk1llz/master/skills.json | jq '.skills[].id'
+curl -s https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/skills.json | jq '.skill_count'
+curl -s https://raw.githubusercontent.com/sammyjoyce/sk1llz/master/skills.json | jq '.skills[].id'
 ```
 
 ### Direct Invocation
