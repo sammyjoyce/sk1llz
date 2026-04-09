@@ -1805,11 +1805,11 @@ impl ProjectScanAccumulator {
                 continue;
             }
 
-            let Ok(content) = fs::read_to_string(&candidate) else {
+            let Ok(content) = read_bounded_utf8_prefix(&candidate, PROJECT_DOC_SIGNAL_MAX_CHARS)
+            else {
                 continue;
             };
-            let sample: String = content.chars().take(PROJECT_DOC_SIGNAL_MAX_CHARS).collect();
-            self.ingest_doc_signal_content(&sample);
+            self.ingest_doc_signal_content(&content);
         }
     }
 
@@ -1822,7 +1822,7 @@ impl ProjectScanAccumulator {
     ) {
         let hits = markers
             .iter()
-            .map(|marker| haystack.matches(marker).count())
+            .map(|marker| count_bounded_marker_matches(haystack, marker))
             .sum::<usize>()
             .min(max_hits);
 
@@ -1871,6 +1871,46 @@ impl ProjectScanAccumulator {
             2,
         );
     }
+}
+
+fn read_bounded_utf8_prefix(path: &Path, max_chars: usize) -> io::Result<String> {
+    let file = fs::File::open(path)?;
+    let mut reader = file.take((max_chars.saturating_mul(4)) as u64);
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer)?;
+    let content = String::from_utf8_lossy(&buffer);
+    Ok(content.chars().take(max_chars).collect())
+}
+
+fn is_marker_boundary(character: Option<char>) -> bool {
+    match character {
+        None => true,
+        Some(character) => !character.is_ascii_alphanumeric(),
+    }
+}
+
+fn count_bounded_marker_matches(haystack: &str, marker: &str) -> usize {
+    if marker.is_empty() {
+        return 0;
+    }
+
+    let mut count = 0usize;
+    let mut search_start = 0usize;
+
+    while let Some(offset) = haystack[search_start..].find(marker) {
+        let start = search_start + offset;
+        let end = start + marker.len();
+        let previous = haystack[..start].chars().next_back();
+        let next = haystack[end..].chars().next();
+
+        if is_marker_boundary(previous) && is_marker_boundary(next) {
+            count += 1;
+        }
+
+        search_start = end;
+    }
+
+    count
 }
 
 fn tokenize(text: &str) -> Vec<String> {
@@ -3612,6 +3652,17 @@ mod tests {
     }
 
     #[test]
+    fn doc_marker_matching_requires_boundaries() {
+        let mut scan = ProjectScanAccumulator::default();
+        scan.ingest_doc_signal_content(
+            "This client library has pretty rendering and guided workflows.",
+        );
+
+        assert!(!scan.keyword_counts.contains_key("cli"));
+        assert!(!scan.keyword_counts.contains_key("terminal"));
+    }
+
+    #[test]
     fn field_masks_filter_objects() {
         let value = json!({
             "id": "hashimoto-cli-ux",
@@ -3976,6 +4027,24 @@ mod tests {
             recommendations.first().map(|item| item.skill.id.as_str()),
             Some("hashimoto-cli-ux")
         );
+    }
+
+    #[test]
+    fn project_analysis_ignores_doc_markers_beyond_bounded_prefix() {
+        let root = unique_test_dir("recommend-doc-prefix");
+        let filler = "a".repeat(PROJECT_DOC_SIGNAL_MAX_CHARS + 64);
+        fs::write(
+            root.join("README.md"),
+            format!("{filler} --json stdout tty cli"),
+        )
+        .unwrap();
+
+        let analysis = analyze_project(&root).unwrap();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(!analysis.tokens.contains(&"automation".to_string()));
+        assert!(!analysis.tokens.contains(&"terminal".to_string()));
+        assert!(!analysis.tokens.contains(&"cli".to_string()));
     }
 
     #[test]
