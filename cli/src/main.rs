@@ -2142,7 +2142,6 @@ fn build_project_signals(
             }
             "go.mod" => {
                 insert_signal(&mut signal_map, "language", "go", 22);
-                insert_signal(&mut signal_map, "tool", "go", 18);
             }
             "flake.nix" | "shell.nix" => insert_signal(&mut signal_map, "tool", "nix", 18),
             "dockerfile" | "compose.yaml" | "compose.yml" => {
@@ -3907,6 +3906,27 @@ mod tests {
             Some("hashimoto-cli-ux")
         );
         assert!(recommendations[0].score > recommendations[1].score);
+    }
+
+    #[test]
+    fn go_mod_recommendation_counts_go_signal_once() {
+        let manifest = sample_manifest(vec![sample_skill(
+            "ajmani-go-pipelines",
+            "Build Go pipelines with clean cancellation and composable concurrency.",
+            "languages",
+            Some("go"),
+            &["go", "concurrency"],
+        )]);
+        let signals = build_project_signals(
+            &Vec::new(),
+            &vec!["go.mod".to_string()],
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let recommendations = recommend_skills(&manifest, &signals, 1);
+
+        assert_eq!(signals.iter().filter(|signal| signal.value == "go").count(), 1);
+        assert_eq!(recommendations[0].score, 32);
     }
 
     #[test]
