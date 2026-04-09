@@ -127,7 +127,14 @@ install() {
   info "From: ${url}"
 
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  # Bake the concrete path into the trap command string at registration
+  # time. Using the deferred form `trap 'rm -rf "$tmpdir"' EXIT` would
+  # break here because `tmpdir` is function-local: once install() returns,
+  # the trap fires in global scope where `$tmpdir` is unset, and `set -u`
+  # aborts the script with "unbound variable" on the success path (also
+  # skipping temp cleanup). printf %q keeps it safe against any weird
+  # characters mktemp might ever pick.
+  trap "rm -rf $(printf '%q' "$tmpdir")" EXIT
 
   curl -fsSL --retry 3 "$url" -o "${tmpdir}/${archive_name}" \
     || die "Download failed — check that release ${version} exists for ${target}"
