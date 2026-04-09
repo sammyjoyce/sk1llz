@@ -34,11 +34,41 @@ const STOP_WORDS: &[&str] = &[
     "their", "them", "your", "into", "over", "under", "through",
 ];
 
-const SHORT_TOKENS: &[&str] = &["ai", "api", "c", "c++", "ci", "db", "go", "io", "js", "llm", "ml", "qa", "ts", "ui", "ux"];
+const SHORT_TOKENS: &[&str] = &[
+    "ai", "api", "c", "c++", "ci", "db", "go", "io", "js", "llm", "ml", "qa", "ts", "ui", "ux",
+];
 const PATH_TOKEN_STOP_WORDS: &[&str] = &[
-    "docs", "doc", "file", "files", "guide", "guides", "index", "main", "manifest", "meta", "note",
-    "notes", "pattern", "patterns", "readme", "reference", "references", "src", "template", "templates",
-    "test", "tests", "tmp", "toml", "json", "yaml", "yml", "lock", "troubleshooting", "workflow", "workflows",
+    "docs",
+    "doc",
+    "file",
+    "files",
+    "guide",
+    "guides",
+    "index",
+    "main",
+    "manifest",
+    "meta",
+    "note",
+    "notes",
+    "pattern",
+    "patterns",
+    "readme",
+    "reference",
+    "references",
+    "src",
+    "template",
+    "templates",
+    "test",
+    "tests",
+    "tmp",
+    "toml",
+    "json",
+    "yaml",
+    "yml",
+    "lock",
+    "troubleshooting",
+    "workflow",
+    "workflows",
 ];
 
 const PROJECT_SCAN_MAX_DEPTH: usize = 4;
@@ -643,6 +673,15 @@ struct ProjectAnalysis {
     extension_counts: Vec<(String, usize)>,
     tokens: Vec<String>,
     signals: Vec<RecommendSignal>,
+}
+
+#[derive(Debug, Default)]
+struct ProjectScanAccumulator {
+    total_files: usize,
+    extension_counts: HashMap<String, usize>,
+    frameworks: HashSet<String>,
+    config_files: HashSet<String>,
+    keyword_counts: HashMap<String, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -1574,33 +1613,24 @@ fn analyze_project(path: &Path) -> AppResult<ProjectAnalysis> {
         ));
     }
 
-    let mut total_files = 0usize;
-    let mut extension_counts: HashMap<String, usize> = HashMap::new();
-    let mut frameworks = HashSet::new();
-    let mut config_files = HashSet::new();
-    let mut keyword_counts: HashMap<String, usize> = HashMap::new();
+    let mut scan = ProjectScanAccumulator::default();
+    scan.scan_directory(path, 0, false)?;
+    scan.ingest_project_doc_signals(path);
 
-    scan_directory(
-        path,
-        0,
-        false,
-        &mut total_files,
-        &mut extension_counts,
-        &mut frameworks,
-        &mut config_files,
-        &mut keyword_counts,
-    )?;
-    ingest_project_doc_signals(path, &mut keyword_counts);
-
-    let mut frameworks: Vec<String> = frameworks.into_iter().collect();
+    let mut frameworks: Vec<String> = scan.frameworks.into_iter().collect();
     frameworks.sort();
 
-    let mut config_files: Vec<String> = config_files.into_iter().collect();
+    let mut config_files: Vec<String> = scan.config_files.into_iter().collect();
     config_files.sort();
 
-    let signals = build_project_signals(&frameworks, &config_files, &keyword_counts, &extension_counts);
+    let signals = build_project_signals(
+        &frameworks,
+        &config_files,
+        &scan.keyword_counts,
+        &scan.extension_counts,
+    );
 
-    let mut extension_counts: Vec<(String, usize)> = extension_counts.into_iter().collect();
+    let mut extension_counts: Vec<(String, usize)> = scan.extension_counts.into_iter().collect();
     extension_counts.sort_by(|left, right| right.1.cmp(&left.1));
 
     let mut tokens: Vec<String> = signals.iter().map(|signal| signal.value.clone()).collect();
@@ -1608,7 +1638,7 @@ fn analyze_project(path: &Path) -> AppResult<ProjectAnalysis> {
     tokens.dedup();
 
     Ok(ProjectAnalysis {
-        total_files,
+        total_files: scan.total_files,
         frameworks,
         config_files,
         extension_counts,
@@ -1617,245 +1647,230 @@ fn analyze_project(path: &Path) -> AppResult<ProjectAnalysis> {
     })
 }
 
-fn scan_directory(
-    path: &Path,
-    depth: usize,
-    suppress_keywords: bool,
-    total_files: &mut usize,
-    extension_counts: &mut HashMap<String, usize>,
-    frameworks: &mut HashSet<String>,
-    config_files: &mut HashSet<String>,
-    keyword_counts: &mut HashMap<String, usize>,
-) -> AppResult<()> {
-    if depth > PROJECT_SCAN_MAX_DEPTH {
-        return Ok(());
-    }
+impl ProjectScanAccumulator {
+    fn scan_directory(
+        &mut self,
+        path: &Path,
+        depth: usize,
+        suppress_keywords: bool,
+    ) -> AppResult<()> {
+        if depth > PROJECT_SCAN_MAX_DEPTH {
+            return Ok(());
+        }
 
-    let entries = fs::read_dir(path).map_err(|error| {
-        CliError::internal(
-            format!("failed to read {}", path.display()),
-            error.to_string(),
-        )
-    })?;
-
-    for entry in entries {
-        let entry = entry.map_err(|error| {
-            CliError::internal("failed to read a directory entry", error.to_string())
+        let entries = fs::read_dir(path).map_err(|error| {
+            CliError::internal(
+                format!("failed to read {}", path.display()),
+                error.to_string(),
+            )
         })?;
-        let entry_path = entry.path();
-        let file_name = entry.file_name();
-        let file_name = file_name.to_string_lossy();
 
-        if entry_path.is_dir() {
-            if file_name.starts_with('.')
-                || PROJECT_SCAN_IGNORED_DIRS
-                    .iter()
-                    .any(|candidate| candidate == &file_name.as_ref())
-            {
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                CliError::internal("failed to read a directory entry", error.to_string())
+            })?;
+            let entry_path = entry.path();
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+
+            if entry_path.is_dir() {
+                if file_name.starts_with('.')
+                    || PROJECT_SCAN_IGNORED_DIRS
+                        .iter()
+                        .any(|candidate| candidate == &file_name.as_ref())
+                {
+                    continue;
+                }
+
+                let suppress_entry_keywords = suppress_keywords
+                    || PROJECT_SIGNAL_IGNORED_DIRS
+                        .iter()
+                        .any(|candidate| candidate == &file_name.as_ref());
+                if !suppress_entry_keywords {
+                    self.ingest_directory_signal(file_name.as_ref(), depth);
+                }
+                self.scan_directory(&entry_path, depth + 1, suppress_entry_keywords)?;
                 continue;
             }
 
-            let suppress_entry_keywords = suppress_keywords
-                || PROJECT_SIGNAL_IGNORED_DIRS
-                    .iter()
-                    .any(|candidate| candidate == &file_name.as_ref());
-            if !suppress_entry_keywords {
-                ingest_directory_signal(file_name.as_ref(), depth, keyword_counts);
-            }
-            scan_directory(
-                &entry_path,
-                depth + 1,
-                suppress_entry_keywords,
-                total_files,
-                extension_counts,
-                frameworks,
-                config_files,
-                keyword_counts,
-            )?;
-            continue;
+            self.total_files += 1;
+            self.ingest_file_signal(&entry_path, &file_name, depth, suppress_keywords);
         }
 
-        *total_files += 1;
-        ingest_file_signal(
-            &entry_path,
-            &file_name,
-            depth,
-            suppress_keywords,
-            extension_counts,
-            frameworks,
-            config_files,
-            keyword_counts,
-        );
+        Ok(())
     }
 
-    Ok(())
-}
+    fn ingest_directory_signal(&mut self, name: &str, depth: usize) {
+        if depth > PROJECT_TOKEN_MAX_DEPTH {
+            return;
+        }
 
-fn ingest_directory_signal(name: &str, depth: usize, keyword_counts: &mut HashMap<String, usize>) {
-    if depth > PROJECT_TOKEN_MAX_DEPTH {
-        return;
-    }
-
-    for token in tokenize(name) {
-        if should_keep_path_token(&token) {
-            *keyword_counts.entry(token).or_insert(0) += 1;
+        for token in tokenize(name) {
+            if should_keep_path_token(&token) {
+                *self.keyword_counts.entry(token).or_insert(0) += 1;
+            }
         }
     }
-}
 
-fn ingest_file_signal(
-    path: &Path,
-    file_name: &str,
-    depth: usize,
-    suppress_keywords: bool,
-    extension_counts: &mut HashMap<String, usize>,
-    frameworks: &mut HashSet<String>,
-    config_files: &mut HashSet<String>,
-    keyword_counts: &mut HashMap<String, usize>,
-) {
-    if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
-        let extension = extension.to_ascii_lowercase();
-        *extension_counts.entry(extension.clone()).or_insert(0) += 1;
+    fn ingest_file_signal(
+        &mut self,
+        path: &Path,
+        file_name: &str,
+        depth: usize,
+        suppress_keywords: bool,
+    ) {
+        if let Some(extension) = path.extension().and_then(|value| value.to_str()) {
+            let extension = extension.to_ascii_lowercase();
+            *self.extension_counts.entry(extension.clone()).or_insert(0) += 1;
 
-        match extension.as_str() {
-            "rs" => {
-                frameworks.insert("rust".to_string());
+            match extension.as_str() {
+                "rs" => {
+                    self.frameworks.insert("rust".to_string());
+                }
+                "py" => {
+                    self.frameworks.insert("python".to_string());
+                }
+                "go" => {
+                    self.frameworks.insert("go".to_string());
+                }
+                "zig" => {
+                    self.frameworks.insert("zig".to_string());
+                }
+                "ts" | "tsx" => {
+                    self.frameworks.insert("typescript".to_string());
+                    self.frameworks.insert("javascript".to_string());
+                }
+                "js" | "jsx" => {
+                    self.frameworks.insert("javascript".to_string());
+                }
+                "c" | "h" => {
+                    self.frameworks.insert("c".to_string());
+                }
+                "cc" | "cpp" | "cxx" | "hpp" => {
+                    self.frameworks.insert("cpp".to_string());
+                }
+                _ => {}
             }
-            "py" => {
-                frameworks.insert("python".to_string());
+        }
+
+        let lower = file_name.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "cargo.toml"
+                | "package.json"
+                | "go.mod"
+                | "flake.nix"
+                | "shell.nix"
+                | "dockerfile"
+                | "compose.yaml"
+                | "compose.yml"
+        ) {
+            self.config_files.insert(file_name.to_string());
+        }
+
+        match lower.as_str() {
+            "cargo.toml" => {
+                self.frameworks.insert("rust".to_string());
             }
-            "go" => {
-                frameworks.insert("go".to_string());
+            "package.json" => {
+                self.frameworks.insert("javascript".to_string());
+                self.frameworks.insert("typescript".to_string());
             }
-            "zig" => {
-                frameworks.insert("zig".to_string());
-            }
-            "ts" | "tsx" => {
-                frameworks.insert("typescript".to_string());
-                frameworks.insert("javascript".to_string());
-            }
-            "js" | "jsx" => {
-                frameworks.insert("javascript".to_string());
-            }
-            "c" | "h" => {
-                frameworks.insert("c".to_string());
-            }
-            "cc" | "cpp" | "cxx" | "hpp" => {
-                frameworks.insert("cpp".to_string());
+            "go.mod" => {
+                self.frameworks.insert("go".to_string());
             }
             _ => {}
         }
-    }
 
-    let lower = file_name.to_ascii_lowercase();
-    if matches!(
-        lower.as_str(),
-        "cargo.toml"
-            | "package.json"
-            | "go.mod"
-            | "flake.nix"
-            | "shell.nix"
-            | "dockerfile"
-            | "compose.yaml"
-            | "compose.yml"
-    ) {
-        config_files.insert(file_name.to_string());
-    }
-
-    match lower.as_str() {
-        "cargo.toml" => {
-            frameworks.insert("rust".to_string());
-        }
-        "package.json" => {
-            frameworks.insert("javascript".to_string());
-            frameworks.insert("typescript".to_string());
-        }
-        "go.mod" => {
-            frameworks.insert("go".to_string());
-        }
-        _ => {}
-    }
-
-    if !suppress_keywords && depth <= PROJECT_TOKEN_MAX_DEPTH {
-        for token in tokenize(file_name) {
-            if should_keep_path_token(&token) {
-                *keyword_counts.entry(token).or_insert(0) += 1;
+        if !suppress_keywords && depth <= PROJECT_TOKEN_MAX_DEPTH {
+            for token in tokenize(file_name) {
+                if should_keep_path_token(&token) {
+                    *self.keyword_counts.entry(token).or_insert(0) += 1;
+                }
             }
         }
     }
-}
 
-fn ingest_project_doc_signals(root: &Path, keyword_counts: &mut HashMap<String, usize>) {
-    let mut candidates = vec![root.join("README.md"), root.join("README")];
-    for dir in PROJECT_DOC_SIGNAL_DIRS {
-        candidates.push(root.join(dir).join("README.md"));
-    }
-
-    for candidate in candidates {
-        let Ok(metadata) = fs::metadata(&candidate) else {
-            continue;
-        };
-        if !metadata.is_file() {
-            continue;
+    fn ingest_project_doc_signals(&mut self, root: &Path) {
+        let mut candidates = vec![root.join("README.md"), root.join("README")];
+        for dir in PROJECT_DOC_SIGNAL_DIRS {
+            candidates.push(root.join(dir).join("README.md"));
         }
 
-        let Ok(content) = fs::read_to_string(&candidate) else {
-            continue;
-        };
-        let sample: String = content.chars().take(PROJECT_DOC_SIGNAL_MAX_CHARS).collect();
-        ingest_doc_signal_content(&sample, keyword_counts);
+        for candidate in candidates {
+            let Ok(metadata) = fs::metadata(&candidate) else {
+                continue;
+            };
+            if !metadata.is_file() {
+                continue;
+            }
+
+            let Ok(content) = fs::read_to_string(&candidate) else {
+                continue;
+            };
+            let sample: String = content.chars().take(PROJECT_DOC_SIGNAL_MAX_CHARS).collect();
+            self.ingest_doc_signal_content(&sample);
+        }
     }
-}
 
-fn boost_signal_from_markers(
-    keyword_counts: &mut HashMap<String, usize>,
-    signal: &str,
-    haystack: &str,
-    markers: &[&str],
-    max_hits: usize,
-) {
-    let hits = markers
-        .iter()
-        .map(|marker| haystack.matches(marker).count())
-        .sum::<usize>()
-        .min(max_hits);
+    fn boost_signal_from_markers(
+        &mut self,
+        signal: &str,
+        haystack: &str,
+        markers: &[&str],
+        max_hits: usize,
+    ) {
+        let hits = markers
+            .iter()
+            .map(|marker| haystack.matches(marker).count())
+            .sum::<usize>()
+            .min(max_hits);
 
-    if hits > 0 {
-        *keyword_counts.entry(signal.to_string()).or_insert(0) += hits;
+        if hits > 0 {
+            *self.keyword_counts.entry(signal.to_string()).or_insert(0) += hits;
+        }
     }
-}
 
-fn ingest_doc_signal_content(content: &str, keyword_counts: &mut HashMap<String, usize>) {
-    let lower = content.to_ascii_lowercase();
+    fn ingest_doc_signal_content(&mut self, content: &str) {
+        let lower = content.to_ascii_lowercase();
 
-    boost_signal_from_markers(
-        keyword_counts,
-        "cli",
-        &lower,
-        &["cli", "command-line", "subcommand", "command tree", "output contract"],
-        4,
-    );
-    boost_signal_from_markers(
-        keyword_counts,
-        "automation",
-        &lower,
-        &["--json", "machine-readable", "stdout", "stderr", "dry-run"],
-        3,
-    );
-    boost_signal_from_markers(
-        keyword_counts,
-        "terminal",
-        &lower,
-        &["terminal", "tty", "shell", "completion"],
-        2,
-    );
-    boost_signal_from_markers(
-        keyword_counts,
-        "agents",
-        &lower,
-        &["agent-first", "agent surface", "agent surfaces", "ai coding skills", "ai agents"],
-        2,
-    );
+        self.boost_signal_from_markers(
+            "cli",
+            &lower,
+            &[
+                "cli",
+                "command-line",
+                "subcommand",
+                "command tree",
+                "output contract",
+            ],
+            4,
+        );
+        self.boost_signal_from_markers(
+            "automation",
+            &lower,
+            &["--json", "machine-readable", "stdout", "stderr", "dry-run"],
+            3,
+        );
+        self.boost_signal_from_markers(
+            "terminal",
+            &lower,
+            &["terminal", "tty", "shell", "completion"],
+            2,
+        );
+        self.boost_signal_from_markers(
+            "agents",
+            &lower,
+            &[
+                "agent-first",
+                "agent surface",
+                "agent surfaces",
+                "ai coding skills",
+                "ai agents",
+            ],
+            2,
+        );
+    }
 }
 
 fn tokenize(text: &str) -> Vec<String> {
@@ -1911,7 +1926,9 @@ fn should_keep_query_token(token: &str) -> bool {
 
 fn should_keep_path_token(token: &str) -> bool {
     (token.len() >= 4 || matches!(token, "api" | "cli" | "ops" | "qa" | "ui" | "ux"))
-        && !PATH_TOKEN_STOP_WORDS.iter().any(|candidate| candidate == &token)
+        && !PATH_TOKEN_STOP_WORDS
+            .iter()
+            .any(|candidate| candidate == &token)
 }
 
 fn classify_signal_kind(token: &str) -> &'static str {
@@ -1922,16 +1939,52 @@ fn classify_signal_kind(token: &str) -> &'static str {
         "language"
     } else if matches!(
         token,
-        "bazel" | "cargo" | "clap" | "cmake" | "docker" | "flake" | "gradle" | "jest" | "kubernetes"
-            | "nix" | "npm" | "pip" | "pnpm" | "pytest" | "terraform" | "yarn"
+        "bazel"
+            | "cargo"
+            | "clap"
+            | "cmake"
+            | "docker"
+            | "flake"
+            | "gradle"
+            | "jest"
+            | "kubernetes"
+            | "nix"
+            | "npm"
+            | "pip"
+            | "pnpm"
+            | "pytest"
+            | "terraform"
+            | "yarn"
     ) {
         "tool"
     } else if matches!(
         token,
-        "agent" | "agents" | "api" | "architecture" | "automation" | "backend" | "cli" | "concurrency"
-            | "database" | "databases" | "deployment" | "design" | "distributed" | "docs" | "documentation"
-            | "frontend" | "networking" | "performance" | "reliability" | "search" | "security" | "systems"
-            | "terminal" | "testing" | "ui" | "ux"
+        "agent"
+            | "agents"
+            | "api"
+            | "architecture"
+            | "automation"
+            | "backend"
+            | "cli"
+            | "concurrency"
+            | "database"
+            | "databases"
+            | "deployment"
+            | "design"
+            | "distributed"
+            | "docs"
+            | "documentation"
+            | "frontend"
+            | "networking"
+            | "performance"
+            | "reliability"
+            | "search"
+            | "security"
+            | "systems"
+            | "terminal"
+            | "testing"
+            | "ui"
+            | "ux"
     ) {
         "topic"
     } else {
@@ -2177,7 +2230,9 @@ fn coverage_bonus(
     }
 
     if matched_kinds.contains("language")
-        && (matched_kinds.contains("topic") || matched_kinds.contains("tool") || matched_kinds.contains("keyword"))
+        && (matched_kinds.contains("topic")
+            || matched_kinds.contains("tool")
+            || matched_kinds.contains("keyword"))
     {
         bonuses.push(ScoreComponent {
             feature: "coverage".to_string(),
@@ -2201,7 +2256,11 @@ fn reason_from_component(component: &ScoreComponent) -> String {
     }
 }
 
-fn recommend_skills(manifest: &Manifest, signals: &[RecommendSignal], limit: usize) -> Vec<Recommendation> {
+fn recommend_skills(
+    manifest: &Manifest,
+    signals: &[RecommendSignal],
+    limit: usize,
+) -> Vec<Recommendation> {
     let mut recommendations = Vec::new();
 
     for skill in &manifest.skills {
@@ -3654,7 +3713,11 @@ mod tests {
     #[test]
     fn project_analysis_filters_short_extension_tokens() {
         let root = unique_test_dir("scan-tokens");
-        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
         fs::create_dir_all(root.join("src")).unwrap();
         fs::write(root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
         fs::create_dir_all(root.join("scripts")).unwrap();
@@ -3686,10 +3749,23 @@ mod tests {
     #[test]
     fn project_analysis_ignores_catalog_namespace_tokens() {
         let root = unique_test_dir("scan-catalog");
-        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
         fs::create_dir_all(root.join("cli").join("src")).unwrap();
-        fs::write(root.join("cli").join("src").join("main.rs"), "fn main() {}\n").unwrap();
-        fs::create_dir_all(root.join("languages").join("rust").join("klabnik-teaching-rust")).unwrap();
+        fs::write(
+            root.join("cli").join("src").join("main.rs"),
+            "fn main() {}\n",
+        )
+        .unwrap();
+        fs::create_dir_all(
+            root.join("languages")
+                .join("rust")
+                .join("klabnik-teaching-rust"),
+        )
+        .unwrap();
         fs::write(
             root.join("languages")
                 .join("rust")
@@ -3698,7 +3774,12 @@ mod tests {
             "# rust\n",
         )
         .unwrap();
-        fs::create_dir_all(root.join("languages").join("python").join("beazley-deep-python")).unwrap();
+        fs::create_dir_all(
+            root.join("languages")
+                .join("python")
+                .join("beazley-deep-python"),
+        )
+        .unwrap();
         fs::write(
             root.join("languages")
                 .join("python")
@@ -3707,7 +3788,12 @@ mod tests {
             "# python\n",
         )
         .unwrap();
-        fs::create_dir_all(root.join("domains").join("cli-design").join("hashimoto-cli-ux")).unwrap();
+        fs::create_dir_all(
+            root.join("domains")
+                .join("cli-design")
+                .join("hashimoto-cli-ux"),
+        )
+        .unwrap();
         fs::write(
             root.join("domains")
                 .join("cli-design")
@@ -3758,14 +3844,21 @@ mod tests {
         let signals = build_text_signals("rust cli ux");
         let recommendations = recommend_skills(&manifest, &signals, 3);
 
-        assert_eq!(recommendations.first().map(|item| item.skill.id.as_str()), Some("hashimoto-cli-ux"));
+        assert_eq!(
+            recommendations.first().map(|item| item.skill.id.as_str()),
+            Some("hashimoto-cli-ux")
+        );
         assert!(recommendations[0].score > recommendations[1].score);
     }
 
     #[test]
     fn path_recommendation_does_not_promote_python_for_rust_cli_repo() {
         let root = unique_test_dir("recommend-path");
-        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
         fs::create_dir_all(root.join("src")).unwrap();
         fs::write(root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
         fs::create_dir_all(root.join("cli")).unwrap();
@@ -3801,16 +3894,28 @@ mod tests {
         ]);
 
         let recommendations = recommend_skills(&manifest, &analysis.signals, 3);
-        let ids: Vec<&str> = recommendations.iter().map(|item| item.skill.id.as_str()).collect();
+        let ids: Vec<&str> = recommendations
+            .iter()
+            .map(|item| item.skill.id.as_str())
+            .collect();
 
         assert_eq!(ids.first().copied(), Some("klabnik-teaching-rust"));
-        assert!(ids.iter().position(|id| *id == "beazley-deep-python").unwrap() > ids.iter().position(|id| *id == "hashimoto-cli-ux").unwrap());
+        assert!(
+            ids.iter()
+                .position(|id| *id == "beazley-deep-python")
+                .unwrap()
+                > ids.iter().position(|id| *id == "hashimoto-cli-ux").unwrap()
+        );
     }
 
     #[test]
     fn path_recommendation_uses_readme_intent_for_cli_repo() {
         let root = unique_test_dir("recommend-docs");
-        fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
         fs::create_dir_all(root.join("src")).unwrap();
         fs::write(root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
         fs::write(
@@ -3870,7 +3975,11 @@ mod tests {
     fn recommend_from_path_json_smoke_covers_field_mask_and_score_breakdown() {
         let _guard = test_env_lock().lock().unwrap();
         let repo_root = unique_test_dir("recommend-json");
-        fs::write(repo_root.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n").unwrap();
+        fs::write(
+            repo_root.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
         fs::create_dir_all(repo_root.join("src")).unwrap();
         fs::write(repo_root.join("src").join("main.rs"), "fn main() {}\n").unwrap();
         fs::write(
@@ -3963,10 +4072,14 @@ mod tests {
             keys,
             HashSet::from(["score", "reasons", "score_breakdown", "id", "name"])
         );
-        assert_eq!(first.get("id").and_then(Value::as_str), Some("hashimoto-cli-ux"));
+        assert_eq!(
+            first.get("id").and_then(Value::as_str),
+            Some("hashimoto-cli-ux")
+        );
         assert_eq!(
             first.get("score").and_then(Value::as_i64),
-            first.get("score_breakdown")
+            first
+                .get("score_breakdown")
                 .and_then(|value| value.get("total"))
                 .and_then(Value::as_i64)
         );
