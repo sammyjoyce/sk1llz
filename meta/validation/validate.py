@@ -8,7 +8,7 @@ from pathlib import Path
 # Configuration
 ROOT_DIR = Path(__file__).parent.parent.parent
 SKILLS_JSON_PATH = ROOT_DIR / "skills.json"
-SKILL_ROOTS = ["languages", "domains", "paradigms", "organizations"]
+SKILL_ROOTS = ["languages", "domains", "paradigms", "organizations", "specialists"]
 REQUIRED_FIELDS = ["name", "description"]
 
 def parse_frontmatter(content):

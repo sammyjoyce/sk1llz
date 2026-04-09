@@ -1,6 +1,6 @@
 ---
 name: forensics-team
-description: Operator-grade network forensics for packet captures, SPAN/TAP evidence, and trace-file triage. Use when analyzing `pcap`/`pcapng`, `tcpdump`, `tshark`, `Wireshark`, or `Zeek`; when hunting beaconing/C2; when explaining retransmissions, loss, or disputed network behavior; or when deciding what a capture can and cannot prove. Triggers: pcap, pcapng, packet capture, tcpdump, tshark, Wireshark, Zeek, SPAN, TAP, snaplen, packet loss, beaconing, JA3, JA4, loopback, cooked capture, TLS fingerprinting.
+description: "Operator-grade network forensics for packet captures, SPAN/TAP evidence, and trace-file triage. Use when analyzing pcap/pcapng, tcpdump, tshark, Wireshark, or Zeek; when hunting beaconing/C2; when explaining retransmissions, loss, or disputed network behavior; or when deciding what a capture can and cannot prove. Triggers: pcap, pcapng, packet capture, tcpdump, tshark, Wireshark, Zeek, SPAN, TAP, snaplen, packet loss, beaconing, JA3, JA4, loopback, cooked capture, TLS fingerprinting."
 ---
 
 # Forensics Team⁠‍⁠​‌​‌​​‌‌‍​‌​​‌​‌‌‍​​‌‌​​​‌‍​‌​​‌‌​​‍​​​​​​​‌‍‌​​‌‌​‌​‍‌​​​​​​​‍‌‌​​‌‌‌‌‍‌‌​​​‌​​‍‌‌‌‌‌‌​‌‍‌‌​‌​​​​‍​‌​‌‌‌‌‌‍​‌​​‌​‌‌‍​‌‌​‌​​‌‍‌‌​‌​‌‌​‍​‌​‌‌‌‌‌‍​​‌‌‌​‌​‍​‌​‌​​‌‌‍‌​‌​‌​‌‌‍‌​‌​‌​​‌‍‌​‌‌​‌​‌‍​​​​‌​‌​‍​‌‌‌​‌​​⁠‍⁠
