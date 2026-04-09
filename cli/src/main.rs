@@ -1240,17 +1240,17 @@ fn count_installed_skills(path: &Path) -> usize {
         .unwrap_or(0)
 }
 
-fn installed_paths_for_skill(paths: &EnvironmentPaths, skill_name: &str) -> Vec<String> {
+fn installed_paths_for_skill(paths: &EnvironmentPaths, skill_id: &str) -> Vec<String> {
     let mut installed = Vec::new();
 
     if let Some(project_path) = &paths.project_skills_dir {
-        let candidate = project_path.join(skill_name);
+        let candidate = project_path.join(skill_id);
         if candidate.exists() {
             installed.push(candidate.display().to_string());
         }
     }
 
-    let global_candidate = paths.global_skills_dir.join(skill_name);
+    let global_candidate = paths.global_skills_dir.join(skill_id);
     if global_candidate.exists() {
         installed.push(global_candidate.display().to_string());
     }
@@ -1339,16 +1339,13 @@ fn build_install_plan(
     validate_install_scope(request.global, request.target.as_deref())?;
     let skill = find_skill(manifest, &request.skill)?.clone();
     let (scope, target_dir) = if let Some(target) = &request.target {
-        (
-            Scope::Custom,
-            validate_target_path(target)?.join(&skill.name),
-        )
+        (Scope::Custom, validate_target_path(target)?.join(&skill.id))
     } else if request.global {
-        (Scope::Global, paths.global_skills_dir.join(&skill.name))
+        (Scope::Global, paths.global_skills_dir.join(&skill.id))
     } else if let Some(project_path) = &paths.project_skills_dir {
-        (Scope::Project, project_path.join(&skill.name))
+        (Scope::Project, project_path.join(&skill.id))
     } else {
-        (Scope::Global, paths.global_skills_dir.join(&skill.name))
+        (Scope::Global, paths.global_skills_dir.join(&skill.id))
     };
 
     let mut file_plans = Vec::new();
@@ -2138,21 +2135,27 @@ fn cmd_catalog_list(ctx: &AppContext, args: CatalogListArgs) -> AppResult<Outcom
 
     let mut skills = catalog_filter(&manifest.skills, &args.category, &args.tag);
     skills.sort_by(|left, right| left.id.cmp(&right.id));
+    let total = skills.len();
+    let truncated = total > args.limit;
     skills.truncate(args.limit);
 
     let items: Vec<Value> = skills
         .iter()
-        .map(|skill| skill_summary_json(skill, installed_paths_for_skill(&paths, &skill.name)))
+        .map(|skill| skill_summary_json(skill, installed_paths_for_skill(&paths, &skill.id)))
         .collect();
 
     let value = if let Some(fields) = &fields {
         json!({
+            "total": total,
             "count": items.len(),
+            "limit": args.limit,
             "items": items.iter().map(|item| filter_object_fields(item, fields)).collect::<Vec<_>>(),
         })
     } else {
         json!({
+            "total": total,
             "count": items.len(),
+            "limit": args.limit,
             "items": items,
         })
     };
@@ -2160,7 +2163,15 @@ fn cmd_catalog_list(ctx: &AppContext, args: CatalogListArgs) -> AppResult<Outcom
     let text = if fields.is_some() {
         render_filtered_text(&value["items"])
     } else {
-        render_catalog_list_text(&skills)
+        let mut out = render_catalog_list_text(&skills);
+        if truncated {
+            out.push_str(&format!(
+                "\nShowing {} of {} results. Use --limit to see more.",
+                items.len(),
+                total
+            ));
+        }
+        out
     };
 
     Ok(Outcome::ok(value, text))
@@ -2204,7 +2215,7 @@ fn cmd_catalog_search(ctx: &AppContext, args: CatalogSearchArgs) -> AppResult<Ou
         .map(|recommendation| {
             recommendation_json(
                 recommendation,
-                installed_paths_for_skill(&paths, &recommendation.skill.name),
+                installed_paths_for_skill(&paths, &recommendation.skill.id),
             )
         })
         .collect();
@@ -2241,7 +2252,7 @@ fn cmd_catalog_show(ctx: &AppContext, args: CatalogShowArgs) -> AppResult<Outcom
     let item = skill_detail_json(
         skill,
         &manifest,
-        installed_paths_for_skill(&paths, &skill.name),
+        installed_paths_for_skill(&paths, &skill.id),
     );
 
     let value = if let Some(fields) = &fields {
@@ -2256,7 +2267,7 @@ fn cmd_catalog_show(ctx: &AppContext, args: CatalogShowArgs) -> AppResult<Outcom
         render_catalog_show_text(
             skill,
             &manifest,
-            &installed_paths_for_skill(&paths, &skill.name),
+            &installed_paths_for_skill(&paths, &skill.id),
         )
     };
 
@@ -2450,7 +2461,7 @@ fn cmd_recommend_from_text(ctx: &AppContext, args: RecommendTextArgs) -> AppResu
         .map(|recommendation| {
             recommendation_json(
                 recommendation,
-                installed_paths_for_skill(&paths, &recommendation.skill.name),
+                installed_paths_for_skill(&paths, &recommendation.skill.id),
             )
         })
         .collect();
@@ -2503,7 +2514,7 @@ fn cmd_recommend_from_path(ctx: &AppContext, args: RecommendPathArgs) -> AppResu
         .map(|recommendation| {
             recommendation_json(
                 recommendation,
-                installed_paths_for_skill(&paths, &recommendation.skill.name),
+                installed_paths_for_skill(&paths, &recommendation.skill.id),
             )
         })
         .collect();
