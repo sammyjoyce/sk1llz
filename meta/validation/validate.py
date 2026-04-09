@@ -39,6 +39,7 @@ def load_skills_json():
 
 def validate_skill_file(file_path):
     issues = []
+    frontmatter = None
     try:
         with open(file_path, "r") as f:
             content = f.read()
@@ -46,7 +47,7 @@ def validate_skill_file(file_path):
         try:
             frontmatter = parse_frontmatter(content)
         except ValueError as e:
-            return [str(e)]
+            return [str(e)], None
 
         for field in REQUIRED_FIELDS:
             if field not in frontmatter:
@@ -55,7 +56,7 @@ def validate_skill_file(file_path):
     except Exception as e:
         issues.append(f"Error reading file: {e}")
         
-    return issues
+    return issues, frontmatter
 
 def main():
     print(f"Validating skills in {ROOT_DIR}...")
@@ -86,7 +87,7 @@ def main():
                 skills_found += 1
                 
                 # Check 1: Structure validation
-                file_issues = validate_skill_file(skill_path / "SKILL.md")
+                file_issues, frontmatter = validate_skill_file(skill_path / "SKILL.md")
                 if file_issues:
                     print(f"\n[FAIL] {rel_path}")
                     for issue in file_issues:
@@ -99,17 +100,10 @@ def main():
                 str_path = str(rel_path).replace("\\", "/")
 
                 # Check 1b: Skill ID (frontmatter name) uniqueness
-                try:
-                    with open(skill_path / "SKILL.md", "r") as f:
-                        frontmatter = parse_frontmatter(f.read())
+                if frontmatter:
                     skill_name = frontmatter.get("name")
                     if isinstance(skill_name, str) and skill_name:
                         skill_name_to_paths.setdefault(skill_name, []).append(str_path)
-                except Exception as e:
-                    print(f"\n[FAIL] {rel_path}")
-                    print(f"  - Unable to parse frontmatter name: {e}")
-                    errors += 1
-                    continue
 
                 # Check 2: Manifest consistency
                 if str_path not in manifest_paths:

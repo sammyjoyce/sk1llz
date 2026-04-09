@@ -1382,11 +1382,11 @@ fn build_remove_plan(
 ) -> AppResult<RemovePlanData> {
     let skill = find_skill(manifest, &request.skill)?.clone();
     let (scope, target_dir) = if request.global {
-        (Scope::Global, paths.global_skills_dir.join(&skill.name))
+        (Scope::Global, paths.global_skills_dir.join(&skill.id))
     } else if let Some(project_path) = &paths.project_skills_dir {
-        (Scope::Project, project_path.join(&skill.name))
+        (Scope::Project, project_path.join(&skill.id))
     } else {
-        (Scope::Global, paths.global_skills_dir.join(&skill.name))
+        (Scope::Global, paths.global_skills_dir.join(&skill.id))
     };
 
     if !target_dir.exists() {
@@ -2160,19 +2160,18 @@ fn cmd_catalog_list(ctx: &AppContext, args: CatalogListArgs) -> AppResult<Outcom
         })
     };
 
-    let text = if fields.is_some() {
+    let mut text = if fields.is_some() {
         render_filtered_text(&value["items"])
     } else {
-        let mut out = render_catalog_list_text(&skills);
-        if truncated {
-            out.push_str(&format!(
-                "\nShowing {} of {} results. Use --limit to see more.",
-                items.len(),
-                total
-            ));
-        }
-        out
+        render_catalog_list_text(&skills)
     };
+    if truncated {
+        text.push_str(&format!(
+            "\nShowing {} of {} results. Use --limit to see more.",
+            items.len(),
+            total
+        ));
+    }
 
     Ok(Outcome::ok(value, text))
 }
