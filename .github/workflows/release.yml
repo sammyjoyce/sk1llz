@@ -125,6 +125,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install dependencies
+        run: pip install pyyaml
+
       - name: Regenerate manifest
         run: python3 scripts/generate_manifest.py
 
