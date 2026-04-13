@@ -1363,17 +1363,16 @@ fn find_skill<'a>(manifest: &'a Manifest, value: &str) -> AppResult<&'a Skill> {
         .filter(|skill| skill.name.eq_ignore_ascii_case(value))
         .collect();
 
-    match name_matches.len() {
-        1 => return Ok(name_matches[0]),
-        count if count > 1 => {
-            let mut ids: Vec<&str> = name_matches.iter().map(|skill| skill.id.as_str()).collect();
-            ids.sort_unstable();
-            return Err(CliError::usage(
-                format!("skill name '{value}' is ambiguous"),
-                format!("use one of the full skill ids: {}", ids.join(", ")),
-            ));
-        }
-        _ => {}
+    if name_matches.len() == 1 {
+        return Ok(name_matches[0]);
+    }
+    if name_matches.len() > 1 {
+        let mut ids: Vec<&str> = name_matches.iter().map(|skill| skill.id.as_str()).collect();
+        ids.sort_unstable();
+        return Err(CliError::usage(
+            format!("skill name '{value}' is ambiguous"),
+            format!("use one of the full skill ids: {}", ids.join(", ")),
+        ));
     }
 
     let suggestions = find_similar_skills(value, &manifest.skills);
@@ -3810,6 +3809,32 @@ mod tests {
         architecture_skill.name = "hashimoto".to_string();
 
         let manifest = sample_manifest(vec![cli_skill, architecture_skill]);
+        let resolved = find_skill(&manifest, "hashimoto-cli-ux").unwrap();
+
+        assert_eq!(resolved.id, "hashimoto-cli-ux");
+    }
+
+    #[test]
+    fn find_skill_prefers_exact_id_over_other_skill_name() {
+        let mut cli_skill = sample_skill(
+            "hashimoto-cli-ux",
+            "Design operator-grade CLIs with machine-readable output and terminal UX.",
+            "domains",
+            Some("cli-design"),
+            &["domains", "cli_design", "hashimoto"],
+        );
+        cli_skill.name = "hashimoto".to_string();
+
+        let mut alias_skill = sample_skill(
+            "cli-patterns",
+            "Broader CLI patterns and conventions.",
+            "domains",
+            Some("cli-design"),
+            &["domains", "cli_design", "patterns"],
+        );
+        alias_skill.name = "hashimoto-cli-ux".to_string();
+
+        let manifest = sample_manifest(vec![cli_skill, alias_skill]);
         let resolved = find_skill(&manifest, "hashimoto-cli-ux").unwrap();
 
         assert_eq!(resolved.id, "hashimoto-cli-ux");
