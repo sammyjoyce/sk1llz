@@ -26,8 +26,8 @@ and tool-using agents can build the long tail on top.
 
 When this skill is active:
 
-- Help the user decide what belongs in the **primitive/core**,
-  **mainline**, and **downstreams**.
+- Help the user decide what belongs in **core**, **mainline**, and
+  **downstreams**.
 - Separate **mechanism** from **policy**.
 - Recommend the **narrowest stable contract** that unlocks reuse.
 - Treat downstream experimentation as **signal and outsourced R&D**, not as an
@@ -42,10 +42,6 @@ When this skill is active:
 The smallest load-bearing capability others should reuse: engine, runtime,
 renderer, planner, protocol, or format. It must stay correct under many
 different wrappers.
-
-**Core**  
-Shorthand for the primitive plus the invariants and compatibility obligations
-owned by the first-party team.
 
 **Mainline**  
 The first-party product experience you actively optimize for and support.
@@ -67,10 +63,6 @@ Core capability, correctness, performance, security, and invariants.
 
 **Policy**  
 Defaults, workflow, taste, local rules, and integration choices.
-
-**Downstreams**  
-External wrappers, embeds, forks, plugins, SDK consumers, agents, or vertical
-products that build on the exposed seam.
 
 ## Core Stance
 
@@ -167,8 +159,8 @@ Prefer out-of-process seams until deep embedding is a proven need.
 
 ### 4) Define what stays where
 
-- **Primitive/core owns:** correctness, invariants, performance, security,
-  compatibility, and capability.
+- **Core owns:** correctness, invariants, performance, security, compatibility,
+  and capability.
 - **Mainline/reference app owns:** defaults, UX taste, batteries-included
   workflow, opinionated packaging.
 - **Downstreams own:** niche policy, local workflow, custom integrations,
@@ -329,7 +321,3 @@ clearer?
 - Did I keep monetization separate from the architecture decision?
 - Did I give a concrete recommendation, not just a framework recap?
 
-## Additional Resources
-
-- Mitchell Hashimoto, ["The Building Block Economy"](https://mitchellh.com/writing/building-block-economy)
-- Mitchell Hashimoto, ["Libghostty Is Coming"](https://mitchellh.com/writing/libghostty-is-coming)
