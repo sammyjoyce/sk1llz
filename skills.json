@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "generated_at": "2026-04-13T07:38:21.539569+00:00",
+  "generated_at": "2026-04-16T12:08:43.007214+00:00",
   "repository": "https://github.com/copyleftdev/sk1llz",
   "raw_base_url": "https://raw.githubusercontent.com/copyleftdev/sk1llz/master",
   "skill_count": 102,
@@ -392,7 +392,7 @@
     {
       "id": "hashimoto-building-block-economy",
       "name": "hashimoto",
-      "description": "Design software for the building-block economy: ship a robust primitive, keep the mainline app opinionated, and let forks, agents, plugins, and downstream wrappers explore the long tail. Use when deciding whether a feature belongs in core or in an extension seam, whether to split out a library, headless mode, stable CLI, or API, or how to structure a product so downstream composition creates adoption and R&D leverage. Triggers: building block economy, embeddable, headless core, plugin API, extension seam, SDK, reusable primitive, reference app, fork-friendly, stable contract, open format, composable product, agentic factory, outsourced R&D, mainline vs forks.",
+      "description": "Decide whether a capability belongs in the opinionated mainline product, a reusable primitive, or a narrow extension seam. Build for composability: ship one robust, versioned primitive plus a reference app, then let wrappers, forks, plugins, and agents explore the long tail without bloating core. Use for platform-vs-product decisions, library extraction, headless mode, stable CLI/API/file-format design, plugin seams, and downstream composition. Triggers: building block economy, embeddable, headless core, plugin API, extension seam, SDK, reusable primitive, reference app, stable contract, open format, composable product, outsourced R&D, mainline vs forks, Hashimoto, Ghostty, libghostty, platform design.",
       "category": "domains",
       "subcategory": "systems-architecture",
       "path": "domains/systems-architecture/hashimoto",
